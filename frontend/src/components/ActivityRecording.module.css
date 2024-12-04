@@ -1,0 +1,138 @@
+/* ActivityRecording.module.css */
+
+.container {
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 20px;
+  font-family: Arial, sans-serif;
+  box-sizing: border-box;
+}
+
+.title {
+  font-size: 1.8rem;
+  text-align: center;
+  color: #333;
+  margin-bottom: 20px;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+}
+
+.formGroup {
+  margin-bottom: 20px;
+}
+
+.subtitle {
+  font-size: 1.4rem;
+  margin-bottom: 10px;
+  color: #555;
+}
+
+.activityItem {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 10px;
+}
+
+.select, .input {
+  padding: 8px;
+  font-size: 1rem;
+  margin-bottom: 10px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.iconButton {
+  background: #e74c3c;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  padding: 10px;
+  font-size: 1.2rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  transition: background 0.3s ease;
+  width: 100%;
+}
+
+.iconButton:hover {
+  background: #c0392b;
+}
+
+.addButton {
+  background: #2ecc71;
+  color: white;
+  border: none;
+  padding: 10px;
+  font-size: 1rem;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 0.3s ease;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.addButton:hover {
+  background: #27ae60;
+}
+
+.submitButton {
+  background: #3498db;
+  color: white;
+  border: none;
+  padding: 15px;
+  font-size: 1.2rem;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 0.3s ease;
+  width: 100%;
+}
+
+.submitButton:hover {
+  background: #2980b9;
+}
+
+.activityHistory {
+  margin-top: 20px;
+}
+
+.message {
+  font-size: 1rem;
+  color: #e74c3c;
+  text-align: center;
+}
+
+@media (min-width: 768px) {
+  .activityItem {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .select, .input, .iconButton {
+    margin-right: 10px;
+    flex: 1;
+    width: auto;
+  }
+
+  .iconButton {
+    flex: 0 0 40px;
+  }
+
+  .addButton {
+    flex: 0 0 200px;
+    align-self: flex-end;
+  }
+
+  .submitButton {
+    flex: 0 0 200px;
+    align-self: center;
+  }
+}
