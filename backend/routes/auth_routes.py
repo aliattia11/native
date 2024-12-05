@@ -3,8 +3,10 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import jwt
 from datetime import datetime, timedelta, timezone
 from bson.objectid import ObjectId
+from utils.auth import token_required
 
 auth_routes = Blueprint('auth_routes', __name__)
+
 
 
 @auth_routes.route('/login', methods=['POST'])
@@ -124,3 +126,4 @@ def register():
     except Exception as e:
         logger.error(f"Registration error: {str(e)}")
         return jsonify({"error": "Registration failed", "details": str(e)}), 500
+

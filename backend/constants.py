@@ -102,15 +102,36 @@ class Constants:
         """
         try:
             from config import mongo
+            print(f"Loading constants for patient: {self.patient_id}")  # Debug log
             patient = mongo.db.users.find_one({'_id': ObjectId(self.patient_id)})
 
-            if patient and 'patient_constants' in patient:
-                # Merge patient constants with defaults
-                patient_constants = patient['patient_constants']
-                self.patient_config = dataclasses.replace(
-                    self.default_config,
-                    **{k: v for k, v in patient_constants.items() if hasattr(self.default_config, k)}
-                )
+            if patient:
+                # First try patient_constants field
+                constants_data = patient.get('patient_constants')
+                if not constants_data:
+                    # If not found, try individual fields
+                    constants_data = {
+                        'insulin_to_carb_ratio': patient.get('insulin_to_carb_ratio'),
+                        'correction_factor': patient.get('correction_factor'),
+                        'target_glucose': patient.get('target_glucose'),
+                        'protein_factor': patient.get('protein_factor'),
+                        'fat_factor': patient.get('fat_factor'),
+                        'activity_coefficients': patient.get('activity_coefficients'),
+                        'absorption_modifiers': patient.get('absorption_modifiers'),
+                        'insulin_timing_guidelines': patient.get('insulin_timing_guidelines')
+                    }
+
+                # Remove None values
+                constants_data = {k: v for k, v in constants_data.items() if v is not None}
+
+                if constants_data:
+                    print(f"Found patient constants: {constants_data}")  # Debug log
+                    self.patient_config = dataclasses.replace(
+                        self.default_config,
+                        **constants_data
+                    )
+                else:
+                    print("No patient constants found, using defaults")  # Debug log
         except Exception as e:
             print(f"Error loading patient constants: {e}")
 

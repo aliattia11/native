@@ -80,16 +80,18 @@ export const calculateInsulinDose = ({
   patientConstants,
   absorptionType = 'medium'
 }) => {
+  // Use patient constants with fallback to defaults
+  const constants = patientConstants || DEFAULT_PATIENT_CONSTANTS;
+
   // Calculate base insulin from carbs
-  const carbInsulin = carbs / patientConstants.insulin_to_carb_ratio;
+  const carbInsulin = carbs / constants.insulin_to_carb_ratio;
 
   // Calculate protein and fat contributions
-  const proteinContribution = (protein * patientConstants.protein_factor) / patientConstants.insulin_to_carb_ratio;
-  const fatContribution = (fat * patientConstants.fat_factor) / patientConstants.insulin_to_carb_ratio;
+  const proteinContribution = (protein * constants.protein_factor) / constants.insulin_to_carb_ratio;
+  const fatContribution = (fat * constants.fat_factor) / constants.insulin_to_carb_ratio;
 
   // Get absorption factor based on food type
-  const absorptionFactor = patientConstants.absorption_modifiers[absorptionType] || 1.0;
-
+  const absorptionFactor = constants.absorption_modifiers[absorptionType] || 1.0;
   // Calculate base insulin with absorption factor
   const baseInsulin = (carbInsulin + proteinContribution + fatContribution) * absorptionFactor;
 

@@ -30,7 +30,10 @@ def create_app():
         from routes.food_routes import food_routes
         from routes.auth_routes import auth_routes
         from routes.doctor_routes import doctor_routes
+        from routes.patient_routes import patient_routes
+
         from routes.test_routes import test_routes
+
         from meal_insulin import meal_insulin_bp
         from activity import activity_bp
         from blood_sugar import blood_sugar_bp

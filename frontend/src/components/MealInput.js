@@ -50,45 +50,60 @@ const MealInput = () => {
   const [patientConstants, setPatientConstants] = useState(DEFAULT_PATIENT_CONSTANTS);
 
 
-  const calculateInsulinNeeds = useCallback(() => {
+ const calculateInsulinNeeds = useCallback(() => {
     if (selectedFoods.length === 0) {
-      setSuggestedInsulin('');
-      setInsulinBreakdown(null);
-      return;
+        setSuggestedInsulin('');
+        setInsulinBreakdown(null);
+        return;
     }
 
+    console.log('Using patient constants:', patientConstants); // Debug log
+
     const totalNutrition = calculateTotalNutrients(selectedFoods);
+    console.log('Total nutrition:', totalNutrition); // Debug log
 
-    const insulinCalculation = calculateInsulinDose({
-      ...totalNutrition,
-      bloodSugar: parseFloat(bloodSugar),
-      activities,
-      patientConstants
-    });
-
-    setSuggestedInsulin(insulinCalculation.total);
-    setInsulinBreakdown(insulinCalculation.breakdown);
-    setActivityImpact(insulinCalculation.breakdown.activityImpact || 0);
-  }, [selectedFoods, bloodSugar, activities, patientConstants]);
-
-  useEffect(() => {
-    const fetchPatientConstants = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        const response = await axios.get('http://localhost:5000/api/patient/constants', {
-          headers: { Authorization: `Bearer ${token}` }
+    try {
+        const insulinCalculation = calculateInsulinDose({
+            ...totalNutrition,
+            bloodSugar: parseFloat(bloodSugar),
+            activities,
+            patientConstants
         });
-        if (response.data.constants) {
-          setPatientConstants(response.data.constants);
+
+        console.log('Insulin calculation result:', insulinCalculation); // Debug log
+
+        setSuggestedInsulin(insulinCalculation.total);
+        setInsulinBreakdown(insulinCalculation.breakdown);
+        setActivityImpact(insulinCalculation.breakdown.activityImpact || 0);
+    } catch (error) {
+        console.error('Error calculating insulin:', error);
+        setMessage('Error calculating insulin needs');
+    }
+}, [selectedFoods, bloodSugar, activities, patientConstants]);
+
+useEffect(() => {
+    const fetchPatientConstants = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await axios.get('http://localhost:5000/api/patient/constants', {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (response.data.constants) {
+                console.log('Received patient constants:', response.data.constants); // Debug log
+                setPatientConstants(prev => ({
+                    ...prev,
+                    ...response.data.constants
+                }));
+            }
+        } catch (error) {
+            console.error('Error fetching patient constants:', error);
+            // Only use default constants if there's an error
+            setPatientConstants(DEFAULT_PATIENT_CONSTANTS);
         }
-      } catch (error) {
-        console.error('Error fetching patient constants:', error);
-        setPatientConstants(DEFAULT_PATIENT_CONSTANTS);
-      }
     };
 
     fetchPatientConstants();
-  }, []);
+}, []); // Run once on component mount
 
   useEffect(() => {
     if (selectedFoods.length > 0 || activities.length > 0 || bloodSugar) {

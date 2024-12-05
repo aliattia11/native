@@ -33,8 +33,9 @@ PatientConstants: Likely contains predefined constants specific to patient data 
 
 Other Constants: Include files like activityConstants.js and conversionConstants.js to hold values or mappings that remain constant across sessions, simplifying data consistency in the app.
 
+i have created app  with the following structure
+for using reinforment learning and machine learning in adjusting patients insulin dose
 
-app with the following structure
 FrontEnd
 src
 ├── Components

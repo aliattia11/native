@@ -139,19 +139,15 @@ def calculate_meal_nutrition(food_items):
 
 
 def calculate_suggested_insulin(user_id, nutrition, activities, blood_glucose=None, meal_type='normal'):
-    """
-    Calculate suggested insulin with enhanced features
-    """
     # Initialize Constants with patient ID
-    patient_constants = Constants(user_id)
+    patient_constants = Constants(user_id).get_patient_constants()  # Use get_patient_constants instead
 
     # Get user-specific constants with fallbacks
-    insulin_to_carb_ratio = patient_constants.get_constant('insulin_to_carb_ratio')
-    correction_factor = patient_constants.get_constant('correction_factor')
-    target_glucose = patient_constants.get_constant('target_glucose')
-    protein_factor = patient_constants.get_constant('protein_factor', 0.5)
-    fat_factor = patient_constants.get_constant('fat_factor', 0.2)
-
+    insulin_to_carb_ratio = patient_constants['insulin_to_carb_ratio']
+    correction_factor = patient_constants['correction_factor']
+    target_glucose = patient_constants['target_glucose']
+    protein_factor = patient_constants['protein_factor']
+    fat_factor = patient_constants['fat_factor']
     # Calculate timing factor
     timing_factor = get_meal_timing_factor(meal_type)
 

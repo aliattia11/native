@@ -63,29 +63,34 @@ const EnhancedPatientConstantsUI = ({ patientId }) => {
     }));
   };
 
-  const handleSubmit = async () => {
+ const handleSubmit = async () => {
     try {
-      setLoading(true);
-      const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:5000/api/doctor/patient/${patientId}/constants`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ constants })
-      });
+        setLoading(true);
+        const token = localStorage.getItem('token');
+        const response = await fetch(`http://localhost:5000/api/doctor/patient/${patientId}/constants`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                constants: {
+                    ...constants,
+                    patient_constants: constants // Nest under patient_constants
+                }
+            })
+        });
 
-      if (!response.ok) throw new Error('Failed to update patient constants');
+        if (!response.ok) throw new Error('Failed to update patient constants');
 
-      setMessage('Patient constants updated successfully');
-      setTimeout(() => setMessage(''), 3000);
+        setMessage('Patient constants updated successfully');
+        setTimeout(() => setMessage(''), 3000);
     } catch (err) {
-      setError(err.message);
+        setError(err.message);
     } finally {
-      setLoading(false);
+        setLoading(false);
     }
-  };
+};
 
   const toggleSection = (section) => {
     setExpandedSections(prev => ({
