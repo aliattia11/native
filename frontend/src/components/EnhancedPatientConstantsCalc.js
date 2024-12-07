@@ -71,6 +71,26 @@ export const calculateActivityImpact = (activities, patientConstants) => {
   }, 0);
 };
 
+export const fetchPatientConstants = async () => {
+  try {
+    const token = localStorage.getItem('token');
+    const response = await fetch('http://localhost:5000/api/patient/constants', {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) throw new Error('Failed to fetch patient constants');
+
+    const data = await response.json();
+    return data.constants || DEFAULT_PATIENT_CONSTANTS;
+  } catch (error) {
+    console.error('Error fetching patient constants:', error);
+    return DEFAULT_PATIENT_CONSTANTS;
+  }
+};
+
 export const calculateInsulinDose = ({
   carbs,
   protein,

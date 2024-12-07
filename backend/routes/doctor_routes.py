@@ -39,6 +39,8 @@ def get_doctor_patients(current_user):
 
     return jsonify(patient_list), 200
 
+
+
 @doctor_routes.route('/api/doctor/patient/<patient_id>/constants', methods=['GET'])
 @token_required
 @api_error_handler
@@ -85,6 +87,8 @@ def get_patient_constants(current_user, patient_id):
         logger.error(f"Error fetching patient constants: {str(e)}")
         return jsonify({'message': 'Error fetching patient constants'}), 500
 
+
+
 @doctor_routes.route('/api/doctor/patient/<patient_id>/constants', methods=['PUT'])
 @token_required
 @api_error_handler
@@ -125,3 +129,4 @@ def update_patient_constants(current_user, patient_id):
     except Exception as e:
         logger.error(f"Error updating patient constants: {str(e)}")
         return jsonify({'message': 'Error updating patient constants'}), 500
+

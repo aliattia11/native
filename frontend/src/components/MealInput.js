@@ -3,11 +3,9 @@ import axios from 'axios';
 import { FaPlus, FaMinus } from 'react-icons/fa';
 import DurationInput from './DurationInput';
 import FoodSection from './FoodSection';
-import { calculateTotalNutrients, calculateInsulinDose } from './EnhancedPatientConstantsCalc';
+import { calculateTotalNutrients, calculateInsulinDose, fetchPatientConstants } from './EnhancedPatientConstantsCalc';
 import { DEFAULT_PATIENT_CONSTANTS, MEAL_TYPES } from '../constants';
 import styles from './MealInput.module.css';
-
-
 
 const ActivityItem = ({ index, item, updateItem, removeItem, activityCoefficients }) => (
   <div className={styles.activityItem}>
@@ -47,69 +45,59 @@ const MealInput = () => {
   const [activityImpact, setActivityImpact] = useState(0);
   const [notes, setNotes] = useState('');
   const [message, setMessage] = useState('');
-  const [patientConstants, setPatientConstants] = useState(DEFAULT_PATIENT_CONSTANTS);
+  const [patientConstants, setPatientConstants] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-
- const calculateInsulinNeeds = useCallback(() => {
-    if (selectedFoods.length === 0) {
-        setSuggestedInsulin('');
-        setInsulinBreakdown(null);
-        return;
-    }
-
-    console.log('Using patient constants:', patientConstants); // Debug log
-
-    const totalNutrition = calculateTotalNutrients(selectedFoods);
-    console.log('Total nutrition:', totalNutrition); // Debug log
-
-    try {
-        const insulinCalculation = calculateInsulinDose({
-            ...totalNutrition,
-            bloodSugar: parseFloat(bloodSugar),
-            activities,
-            patientConstants
-        });
-
-        console.log('Insulin calculation result:', insulinCalculation); // Debug log
-
-        setSuggestedInsulin(insulinCalculation.total);
-        setInsulinBreakdown(insulinCalculation.breakdown);
-        setActivityImpact(insulinCalculation.breakdown.activityImpact || 0);
-    } catch (error) {
-        console.error('Error calculating insulin:', error);
-        setMessage('Error calculating insulin needs');
-    }
-}, [selectedFoods, bloodSugar, activities, patientConstants]);
-
-useEffect(() => {
-    const fetchPatientConstants = async () => {
-        try {
-            const token = localStorage.getItem('token');
-            const response = await axios.get('http://localhost:5000/api/patient/constants', {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            if (response.data.constants) {
-                console.log('Received patient constants:', response.data.constants); // Debug log
-                setPatientConstants(prev => ({
-                    ...prev,
-                    ...response.data.constants
-                }));
-            }
-        } catch (error) {
-            console.error('Error fetching patient constants:', error);
-            // Only use default constants if there's an error
-            setPatientConstants(DEFAULT_PATIENT_CONSTANTS);
-        }
+  // Fetch patient constants
+  useEffect(() => {
+    const getConstants = async () => {
+      try {
+        const constants = await fetchPatientConstants();
+        console.log('Fetched patient constants:', constants);
+        setPatientConstants(constants);
+      } catch (error) {
+        console.error('Error fetching patient constants:', error);
+        setPatientConstants(DEFAULT_PATIENT_CONSTANTS);
+      } finally {
+        setLoading(false);
+      }
     };
 
-    fetchPatientConstants();
-}, []); // Run once on component mount
+    getConstants();
+  }, []);
+
+  const calculateInsulinNeeds = useCallback(() => {
+    if (selectedFoods.length === 0 || !patientConstants) {
+      setSuggestedInsulin('');
+      setInsulinBreakdown(null);
+      return;
+    }
+
+    try {
+      const totalNutrition = calculateTotalNutrients(selectedFoods);
+
+      const insulinCalculation = calculateInsulinDose({
+        ...totalNutrition,
+        bloodSugar: parseFloat(bloodSugar) || 0,
+        activities,
+        patientConstants,
+        mealType
+      });
+
+      setSuggestedInsulin(insulinCalculation.total);
+      setInsulinBreakdown(insulinCalculation.breakdown);
+      setActivityImpact(insulinCalculation.breakdown.activityImpact || 0);
+    } catch (error) {
+      console.error('Error calculating insulin:', error);
+      setMessage('Error calculating insulin needs');
+    }
+  }, [selectedFoods, bloodSugar, activities, patientConstants, mealType]);
 
   useEffect(() => {
-    if (selectedFoods.length > 0 || activities.length > 0 || bloodSugar) {
+    if (!loading && (selectedFoods.length > 0 || activities.length > 0 || bloodSugar)) {
       calculateInsulinNeeds();
     }
-  }, [selectedFoods, activities, bloodSugar, mealType, patientConstants, calculateInsulinNeeds]);
+  }, [selectedFoods, activities, bloodSugar, mealType, patientConstants, loading, calculateInsulinNeeds]);
 
   const handleFoodSelect = useCallback((food) => {
     const foodWithPortion = {
@@ -158,6 +146,11 @@ useEffect(() => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!patientConstants) {
+      setMessage('Error: Patient constants not loaded');
+      return;
+    }
+
     setMessage('Submitting meal...');
 
     try {
@@ -196,7 +189,8 @@ useEffect(() => {
         bloodSugar: bloodSugar ? parseFloat(bloodSugar) : null,
         intendedInsulin: intendedInsulin ? parseFloat(intendedInsulin) : null,
         suggestedInsulin: suggestedInsulin ? parseFloat(suggestedInsulin) : null,
-        notes
+        notes,
+        patientConstants // Include current constants used for calculations
       };
 
       await axios.post(
@@ -224,6 +218,10 @@ useEffect(() => {
       setMessage(`Error: ${error.response?.data?.error || error.message}`);
     }
   };
+
+  if (loading) {
+    return <div>Loading patient constants...</div>;
+  }
 
   return (
     <div className={styles.container}>
@@ -313,7 +311,7 @@ useEffect(() => {
           </div>
         </div>
 
-        {selectedFoods.length > 0 && insulinBreakdown && (
+{selectedFoods.length > 0 && insulinBreakdown && (
           <div className={styles.insulinBreakdown}>
             <h4>Insulin Calculation Breakdown</h4>
             <ul>
@@ -327,7 +325,7 @@ useEffect(() => {
           </div>
         )}
 
-        {selectedFoods.length > 0 && (
+        {selectedFoods.length > 0 && patientConstants && (
           <div className={styles.timingGuidelines}>
             <h4>Insulin Timing Guidelines</h4>
             {selectedFoods.map(food => {
@@ -335,7 +333,7 @@ useEffect(() => {
               const guideline = patientConstants.insulin_timing_guidelines[absorptionType];
               return (
                 <p key={food.id}>
-                  {food.name}: {guideline.description}
+                  {food.name}: {guideline?.description || 'Take insulin as usual'}
                 </p>
               );
             })}
@@ -353,12 +351,20 @@ useEffect(() => {
           </div>
         </div>
 
-        <button className={styles.submitButton} type="submit">
-          Log Meal
+        <button
+          className={styles.submitButton}
+          type="submit"
+          disabled={loading || !patientConstants}
+        >
+          {loading ? 'Loading...' : 'Log Meal'}
         </button>
       </form>
 
-      {message && <p className={styles.message}>{message}</p>}
+      {message && (
+        <div className={`${styles.message} ${message.includes('Error') ? styles.error : styles.success}`}>
+          {message}
+        </div>
+      )}
     </div>
   );
 };

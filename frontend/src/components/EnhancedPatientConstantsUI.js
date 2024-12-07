@@ -63,7 +63,7 @@ const EnhancedPatientConstantsUI = ({ patientId }) => {
     }));
   };
 
- const handleSubmit = async () => {
+const handleSubmit = async () => {
     try {
         setLoading(true);
         const token = localStorage.getItem('token');
@@ -74,14 +74,17 @@ const EnhancedPatientConstantsUI = ({ patientId }) => {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                constants: {
-                    ...constants,
-                    patient_constants: constants // Nest under patient_constants
-                }
+                constants: constants // Remove the nesting
             })
         });
 
         if (!response.ok) throw new Error('Failed to update patient constants');
+
+        // Emit an event to notify other components
+        const event = new CustomEvent('patientConstantsUpdated', {
+            detail: { patientId, constants }
+        });
+        window.dispatchEvent(event);
 
         setMessage('Patient constants updated successfully');
         setTimeout(() => setMessage(''), 3000);

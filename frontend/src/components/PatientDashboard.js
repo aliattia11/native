@@ -7,7 +7,7 @@ import BloodSugarChart from './BloodSugarChart';
 import ActivityRecording from './ActivityRecording';
 import ActivityDataTable from './ActivityDataTable';
 import FoodDatabase from './FoodDatabase';
-import EnhancedMealInsulin from './EnhancedMealInsulin';
+import PatientConstants from './PatientConstants';
 import styles from './PatientDashboard.module.css';
 
 const PatientDashboard = ({ handleLogout }) => {
@@ -24,8 +24,8 @@ const PatientDashboard = ({ handleLogout }) => {
     switch (activeComponent) {
       case 'MealInput':
         return <MealInput />;
-      case 'EnhancedMealInsulin':
-        return <EnhancedMealInsulin />;
+      case 'PatientConstants':
+        return <PatientConstants />;
       case 'FoodDatabase':
         return <FoodDatabase />;
       case 'mealHistory':
@@ -78,10 +78,10 @@ const PatientDashboard = ({ handleLogout }) => {
           </button>
 
           <button
-              onClick={() => setActiveComponent('EnhancedMealInsulin')}
-              className={`${styles.quickAccessButton} ${activeComponent === 'EnhancedMealInsulin' ? styles.active : ''}`}
+              onClick={() => setActiveComponent('PatientConstants')}
+              className={`${styles.quickAccessButton} ${activeComponent === 'PatientConstants' ? styles.active : ''}`}
           >
-            Enhanced Meal Insulin
+            PatientConstants
           </button>
 
           <button
