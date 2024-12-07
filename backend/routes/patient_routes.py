@@ -9,13 +9,14 @@ patient_routes = Blueprint('patient_routes', __name__)
 @token_required
 def get_patient_constants(current_user):
     try:
-        print(f"Fetching constants for user: {current_user['_id']}")  # Debug log
+        print(f"Fetching constants for user: {current_user['_id']}")
         constants = Constants(str(current_user['_id']))
         patient_constants = constants.get_patient_constants()
-        print(f"Retrieved constants: {patient_constants}")  # Debug log
+        # Add debug logging
+        print(f"Retrieved constants: {patient_constants}")
         return jsonify({
             'constants': patient_constants
         }), 200
     except Exception as e:
-        print(f"Error getting patient constants: {str(e)}")  # Debug log
+        print(f"Error getting patient constants: {str(e)}")
         return jsonify({'error': str(e)}), 500

@@ -103,23 +103,10 @@ def update_patient_constants(current_user, patient_id):
         if not constants:
             return jsonify({'message': 'Missing required constants data'}), 400
 
-        update_data = {
-            'insulin_to_carb_ratio': constants.get('insulin_to_carb_ratio'),
-            'correction_factor': constants.get('correction_factor'),
-            'target_glucose': constants.get('target_glucose'),
-            'protein_factor': constants.get('protein_factor'),
-            'fat_factor': constants.get('fat_factor'),
-            'activity_coefficients': constants.get('activity_coefficients'),
-            'absorption_modifiers': constants.get('absorption_modifiers'),
-            'insulin_timing_guidelines': constants.get('insulin_timing_guidelines')
-        }
-
-        # Remove None values from update_data
-        update_data = {k: v for k, v in update_data.items() if v is not None}
-
+        # Update using single field
         result = mongo.db.users.update_one(
             {"_id": ObjectId(patient_id)},
-            {"$set": update_data}
+            {"$set": {'patient_constants': constants}}
         )
 
         if result.matched_count == 0:
@@ -129,4 +116,3 @@ def update_patient_constants(current_user, patient_id):
     except Exception as e:
         logger.error(f"Error updating patient constants: {str(e)}")
         return jsonify({'message': 'Error updating patient constants'}), 500
-

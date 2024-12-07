@@ -141,37 +141,7 @@ class Constants:
         """
         return asdict(self.patient_config)
 
-    def update_patient_constants(self, new_constants: Dict[str, Any]) -> bool:
-        """
-        Update patient-specific constants in MongoDB
-        """
-        if not self.patient_id:
-            return False
 
-        try:
-            # Validate and filter constants
-            valid_constants = {
-                k: v for k, v in new_constants.items()
-                if hasattr(self.default_config, k)
-            }
-
-            result = mongo.db.users.update_one(
-                {'_id': ObjectId(self.patient_id)},
-                {'$set': {'patient_constants': valid_constants}}
-            )
-
-            if result.modified_count > 0:
-                # Update in-memory configuration
-                self.patient_config = dataclasses.replace(
-                    self.patient_config,
-                    **valid_constants
-                )
-                return True
-
-            return False
-        except Exception as e:
-            print(f"Error updating patient constants: {e}")
-            return False
 
   
 
@@ -224,16 +194,18 @@ class Constants:
             return False
 
         try:
-            valid_constants = {k: v for k, v in new_constants.items()
-                               if k in self.DEFAULT_PATIENT_CONSTANTS}
-
+            # Store all constants in a single field
             result = mongo.db.users.update_one(
                 {'_id': ObjectId(self.patient_id)},
-                {'$set': valid_constants}
+                {'$set': {'patient_constants': new_constants}}
             )
 
             if result.modified_count > 0:
-                self.constants.update(valid_constants)
+                # Update in-memory configuration
+                self.patient_config = dataclasses.replace(
+                    self.patient_config,
+                    **new_constants
+                )
                 return True
 
             return False
