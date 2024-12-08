@@ -41,7 +41,9 @@ src
 ├── Components
 │   ├── Main Components
 │   │   ├── PatientDashboard
+│   │   │   └── PatientConstants
 │   │   └── DoctorDashboard
+│   │       └── EnhancedPatientConstantsUI
 │   │
 │   ├── Supporting Components
 │   │   ├── Activity Components
@@ -72,7 +74,6 @@ src
 └── Constants
     ├── SharedConstants
     └── index.js
-
 
 Project Structure
 backend/
