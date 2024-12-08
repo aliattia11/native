@@ -4,18 +4,19 @@ from flask_cors import CORS
 import logging
 from datetime import timezone, timedelta
 
-
-
 # Initialize Flask app
 app = Flask(__name__)
 
 # Configure logging
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)  # Changed from DEBUG to INFO
 logger = logging.getLogger(__name__)
+
+# Specifically set PyMongo logging to WARNING level
+logging.getLogger('pymongo').setLevel(logging.WARNING)
+logging.getLogger('mongodb').setLevel(logging.WARNING)
 
 # Initialize MongoDB
 mongo = PyMongo()
-
 
 def create_app_config(app):
     # Configure CORS
@@ -45,11 +46,9 @@ def create_app_config(app):
 
     return app, mongo, logger
 
-
 # Export these for backward compatibility
 def get_mongo():
     return mongo
-
 
 def get_logger():
     return logger

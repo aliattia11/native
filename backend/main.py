@@ -9,6 +9,11 @@ def create_app():
     # Create Flask app
     app = Flask(__name__)
 
+    # Set logging levels
+    app.logger.setLevel(logging.INFO)  # Changed from DEBUG to INFO
+    logging.getLogger('werkzeug').setLevel(logging.WARNING)  # Reduce Flask debug output
+    logging.getLogger('pymongo').setLevel(logging.WARNING)  # Reduce MongoDB debug output
+
     # Initialize app with config
     app, _, logger = create_app_config(app)
     # Initialize Constants
@@ -61,4 +66,4 @@ def create_app():
 if __name__ == '__main__':
     app = create_app()
     app.logger.info("Starting Flask application...")
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=False, host='0.0.0.0', port=5000)

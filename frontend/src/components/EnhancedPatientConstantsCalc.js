@@ -1,9 +1,10 @@
-import {   MEASUREMENT_SYSTEMS,
+import {
+  MEASUREMENT_SYSTEMS,
   VOLUME_MEASUREMENTS,
   WEIGHT_MEASUREMENTS,
   ACTIVITY_LEVELS,
-  MEAL_TYPES,
-  DEFAULT_PATIENT_CONSTANTS } from '../constants';
+  MEAL_TYPES
+} from '../constants';
 
 
 // Calculation functions
@@ -61,6 +62,8 @@ export const calculateTotalNutrients = (selectedFoods) => {
 };
 
 export const calculateActivityImpact = (activities, patientConstants) => {
+  if (!activities || !patientConstants?.activity_coefficients) return 0;
+
   return activities.reduce((total, activity) => {
     const coefficient = patientConstants.activity_coefficients[activity.level] || 0;
     const duration = typeof activity.duration === 'string'
@@ -69,26 +72,6 @@ export const calculateActivityImpact = (activities, patientConstants) => {
     const durationFactor = Math.min(duration / 2, 1);
     return total + (coefficient * durationFactor);
   }, 0);
-};
-
-export const fetchPatientConstants = async () => {
-  try {
-    const token = localStorage.getItem('token');
-    const response = await fetch('http://localhost:5000/api/patient/constants', {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
-    });
-
-    if (!response.ok) throw new Error('Failed to fetch patient constants');
-
-    const data = await response.json();
-    return data.constants || DEFAULT_PATIENT_CONSTANTS;
-  } catch (error) {
-    console.error('Error fetching patient constants:', error);
-    return DEFAULT_PATIENT_CONSTANTS;
-  }
 };
 
 export const calculateInsulinDose = ({
@@ -100,18 +83,20 @@ export const calculateInsulinDose = ({
   patientConstants,
   absorptionType = 'medium'
 }) => {
-  // Use patient constants with fallback to defaults
-  const constants = patientConstants || DEFAULT_PATIENT_CONSTANTS;
+  if (!patientConstants) {
+    throw new Error('Patient constants are required for insulin calculation');
+  }
 
   // Calculate base insulin from carbs
-  const carbInsulin = carbs / constants.insulin_to_carb_ratio;
+  const carbInsulin = carbs / patientConstants.insulin_to_carb_ratio;
 
   // Calculate protein and fat contributions
-  const proteinContribution = (protein * constants.protein_factor) / constants.insulin_to_carb_ratio;
-  const fatContribution = (fat * constants.fat_factor) / constants.insulin_to_carb_ratio;
+  const proteinContribution = (protein * patientConstants.protein_factor) / patientConstants.insulin_to_carb_ratio;
+  const fatContribution = (fat * patientConstants.fat_factor) / patientConstants.insulin_to_carb_ratio;
 
   // Get absorption factor based on food type
-  const absorptionFactor = constants.absorption_modifiers[absorptionType] || 1.0;
+  const absorptionFactor = patientConstants.absorption_modifiers[absorptionType] || 1.0;
+
   // Calculate base insulin with absorption factor
   const baseInsulin = (carbInsulin + proteinContribution + fatContribution) * absorptionFactor;
 
@@ -121,7 +106,7 @@ export const calculateInsulinDose = ({
 
   // Calculate correction insulin if needed
   let correctionInsulin = 0;
-  if (bloodSugar) {
+  if (bloodSugar && patientConstants.target_glucose && patientConstants.correction_factor) {
     const glucoseDifference = bloodSugar - patientConstants.target_glucose;
     correctionInsulin = glucoseDifference / patientConstants.correction_factor;
   }

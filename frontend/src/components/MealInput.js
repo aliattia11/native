@@ -15,7 +15,7 @@ const ActivityItem = ({ index, item, updateItem, removeItem, activityCoefficient
       onChange={(e) => updateItem(index, { ...item, level: parseInt(e.target.value) })}
       required
     >
-      {Object.entries(activityCoefficients).map(([value, _]) => (
+      {Object.entries(activityCoefficients || {}).map(([value, _]) => (
         <option key={value} value={value}>
           {value === "-2" ? "Sleep" :
            value === "-1" ? "Very Low Activity" :
@@ -29,7 +29,12 @@ const ActivityItem = ({ index, item, updateItem, removeItem, activityCoefficient
       value={item.duration}
       onChange={(newDuration) => updateItem(index, { ...item, duration: newDuration })}
     />
-    <button type="button" onClick={() => removeItem(index)} className={styles.removeButton}>
+    <button
+      type="button"
+      onClick={() => removeItem(index)}
+      className={styles.removeButton}
+      aria-label="Remove activity"
+    >
       <FaMinus />
     </button>
   </div>
@@ -47,14 +52,12 @@ const MealInput = () => {
   const [activityImpact, setActivityImpact] = useState(0);
   const [notes, setNotes] = useState('');
   const [message, setMessage] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-
-   useEffect(() => {
-    refreshConstants();
-  }, [refreshConstants]);
-
-  // Add constants update listener
+  // Refresh constants on mount and setup listener
   useEffect(() => {
+    refreshConstants();
+
     const handleConstantsUpdate = () => {
       refreshConstants();
     };
@@ -65,6 +68,7 @@ const MealInput = () => {
     };
   }, [refreshConstants]);
 
+  // Calculate insulin needs whenever relevant inputs change
   const calculateInsulinNeeds = useCallback(() => {
     if (selectedFoods.length === 0 || !patientConstants) {
       setSuggestedInsulin('');
@@ -75,13 +79,11 @@ const MealInput = () => {
     try {
       const totalNutrition = calculateTotalNutrients(selectedFoods);
 
-      console.log('Calculating insulin with constants:', patientConstants); // Debug log
-
       const insulinCalculation = calculateInsulinDose({
         ...totalNutrition,
         bloodSugar: parseFloat(bloodSugar) || 0,
         activities,
-        patientConstants, // Make sure we're using the latest constants
+        patientConstants,
         mealType
       });
 
@@ -90,16 +92,17 @@ const MealInput = () => {
       setActivityImpact(insulinCalculation.breakdown.activityImpact || 0);
     } catch (error) {
       console.error('Error calculating insulin:', error);
-      setMessage('Error calculating insulin needs');
+      setMessage('Error calculating insulin needs: ' + error.message);
     }
   }, [selectedFoods, bloodSugar, activities, patientConstants, mealType]);
 
   useEffect(() => {
-    if (!loading && (selectedFoods.length > 0 || activities.length > 0 || bloodSugar)) {
+    if (!loading && patientConstants && (selectedFoods.length > 0 || bloodSugar)) {
       calculateInsulinNeeds();
     }
   }, [selectedFoods, activities, bloodSugar, mealType, patientConstants, loading, calculateInsulinNeeds]);
 
+  // Food handling functions
   const handleFoodSelect = useCallback((food) => {
     const foodWithPortion = {
       ...food,
@@ -129,6 +132,7 @@ const MealInput = () => {
     setSelectedFoods(prev => prev.filter(item => item.id !== foodId));
   }, []);
 
+  // Activity handling functions
   const addActivity = useCallback(() => {
     setActivities(prev => [...prev, { level: 0, duration: 0 }]);
   }, []);
@@ -145,6 +149,7 @@ const MealInput = () => {
     setActivities(prev => prev.filter((_, i) => i !== index));
   }, []);
 
+  // Form submission handler
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!patientConstants) {
@@ -152,46 +157,47 @@ const MealInput = () => {
       return;
     }
 
+    setIsSubmitting(true);
     setMessage('Submitting meal...');
 
     try {
       const token = localStorage.getItem('token');
-
-      const formattedFoodItems = selectedFoods.map(food => ({
-        name: food.name,
-        portion: food.portion.activeMeasurement === 'weight' ? food.portion.w_amount : food.portion.amount,
-        measurement: food.portion.activeMeasurement === 'weight' ? food.portion.w_unit : food.portion.unit,
-        measurement_type: food.portion.activeMeasurement,
-        details: {
-          carbs: food.details.carbs,
-          protein: food.details.protein,
-          fat: food.details.fat,
-          absorption_type: food.details.absorption_type || 'medium',
-          serving_size: {
-            amount: food.details.serving_size?.amount || 1,
-            unit: food.details.serving_size?.unit || 'serving',
-            w_amount: food.details.serving_size?.w_amount,
-            w_unit: food.details.serving_size?.w_unit
-          }
-        }
-      }));
-
-      const formattedActivities = activities.map(activity => ({
-        level: parseInt(activity.level),
-        duration: typeof activity.duration === 'string'
-          ? activity.duration
-          : `${Math.floor(activity.duration)}:${Math.round((activity.duration % 1) * 60).toString().padStart(2, '0')}`
-      }));
+      if (!token) {
+        throw new Error('Authentication token not found');
+      }
 
       const mealData = {
         mealType,
-        foodItems: formattedFoodItems,
-        activities: formattedActivities,
+        foodItems: selectedFoods.map(food => ({
+          name: food.name,
+          portion: food.portion.activeMeasurement === 'weight' ? food.portion.w_amount : food.portion.amount,
+          measurement: food.portion.activeMeasurement === 'weight' ? food.portion.w_unit : food.portion.unit,
+          measurement_type: food.portion.activeMeasurement,
+          details: {
+            carbs: food.details.carbs,
+            protein: food.details.protein,
+            fat: food.details.fat,
+            absorption_type: food.details.absorption_type || 'medium',
+            serving_size: {
+              amount: food.details.serving_size?.amount || 1,
+              unit: food.details.serving_size?.unit || 'serving',
+              w_amount: food.details.serving_size?.w_amount,
+              w_unit: food.details.serving_size?.w_unit
+            }
+          }
+        })),
+        activities: activities.map(activity => ({
+          level: parseInt(activity.level),
+          duration: typeof activity.duration === 'string'
+            ? activity.duration
+            : `${Math.floor(activity.duration)}:${Math.round((activity.duration % 1) * 60).toString().padStart(2, '0')}`
+        })),
         bloodSugar: bloodSugar ? parseFloat(bloodSugar) : null,
         intendedInsulin: intendedInsulin ? parseFloat(intendedInsulin) : null,
         suggestedInsulin: suggestedInsulin ? parseFloat(suggestedInsulin) : null,
         notes,
-        patientConstants // Include current constants used for calculations
+        constants: patientConstants,
+        timestamp: new Date().toISOString()
       };
 
       await axios.post(
@@ -206,6 +212,7 @@ const MealInput = () => {
       );
 
       setMessage('Meal logged successfully!');
+
       // Reset form
       setMealType('');
       setSelectedFoods([]);
@@ -213,24 +220,35 @@ const MealInput = () => {
       setBloodSugar('');
       setIntendedInsulin('');
       setSuggestedInsulin('');
+      setInsulinBreakdown(null);
+      setActivityImpact(0);
       setNotes('');
+
     } catch (error) {
       console.error('Error submitting meal:', error);
       setMessage(`Error: ${error.response?.data?.error || error.message}`);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   if (loading) {
-    return <div>Loading patient constants...</div>;
+    return <div className={styles.loading}>Loading patient constants...</div>;
+  }
+
+  if (error) {
+    return <div className={styles.error}>Error loading patient data: {error}</div>;
   }
 
   return (
     <div className={styles.container}>
       <h2 className={styles.title}>Log Your Meal</h2>
+
       <form className={styles.form} onSubmit={handleSubmit}>
         <div className={styles.formField}>
-          <label>Meal Type</label>
+          <label htmlFor="mealType">Meal Type</label>
           <select
+            id="mealType"
             value={mealType}
             onChange={(e) => setMealType(e.target.value)}
             required
@@ -261,7 +279,7 @@ const MealInput = () => {
               item={activity}
               updateItem={updateActivity}
               removeItem={removeActivity}
-              activityCoefficients={patientConstants.activity_coefficients}
+              activityCoefficients={patientConstants?.activity_coefficients}
             />
           ))}
           <button
@@ -280,9 +298,12 @@ const MealInput = () => {
 
         <div className={styles.measurementSection}>
           <div className={styles.formField}>
-            <label>Blood Sugar Level (mg/dL)</label>
+            <label htmlFor="bloodSugar">Blood Sugar Level (mg/dL)</label>
             <input
+              id="bloodSugar"
               type="number"
+              min="0"
+              max="1000"
               value={bloodSugar}
               onChange={(e) => setBloodSugar(e.target.value)}
               placeholder="Enter blood sugar level"
@@ -291,9 +312,12 @@ const MealInput = () => {
           </div>
 
           <div className={styles.formField}>
-            <label>Intended Insulin Intake (units)</label>
+            <label htmlFor="intendedInsulin">Intended Insulin Intake (units)</label>
             <input
+              id="intendedInsulin"
               type="number"
+              min="0"
+              step="0.1"
               value={intendedInsulin}
               onChange={(e) => setIntendedInsulin(e.target.value)}
               placeholder="Enter intended insulin intake"
@@ -302,8 +326,9 @@ const MealInput = () => {
           </div>
 
           <div className={`${styles.formField} ${styles.readOnlyField}`}>
-            <label>Suggested Insulin Intake (units)</label>
+            <label htmlFor="suggestedInsulin">Suggested Insulin Intake (units)</label>
             <input
+              id="suggestedInsulin"
               type="number"
               value={suggestedInsulin}
               readOnly
