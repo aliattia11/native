@@ -1,11 +1,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
-import BloodSugarChart from './BloodSugarChart';
+import BloodSugarChart from './Charts/BloodSugarChart';
 import BloodSugarTable from './BloodSugarTable';
 import MealHistory from './MealHistory';
 import EnhancedPatientConstantsUI from './EnhancedPatientConstantsUI';
 import ActivityDataTable from './ActivityDataTable';
+import BloodGlucoseAnalytics from './Charts/BloodGlucoseAnalytics';
+
+
 import styles from './DoctorDashboard.module.css';
+
+
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend } from 'chart.js';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
@@ -139,7 +144,7 @@ const DoctorDashboard = () => {
                 />
                 <div className={styles.dataCharts}>
 
-
+<BloodGlucoseAnalytics isDoctor={true} patientId={selectedPatient.id} />
                   <BloodSugarChart isDoctor={true} patientId={selectedPatient.id} />
                   <BloodSugarTable isDoctor={true} patientId={selectedPatient.id} />
                 </div>

@@ -3,7 +3,7 @@ import MealInput from './MealInput';
 import MealHistory from './MealHistory';
 import BloodSugarInput from './BloodSugarInput';
 import BloodSugarTable from './BloodSugarTable';
-import BloodSugarChart from './BloodSugarChart';
+import BloodSugarChart from './Charts/BloodSugarChart';
 import ActivityRecording from './ActivityRecording';
 import ActivityDataTable from './ActivityDataTable';
 import FoodDatabase from './FoodDatabase';
