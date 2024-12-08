@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import styles from './EnhancedPatientConstants.module.css';
 import { DEFAULT_PATIENT_CONSTANTS } from '../constants';
-import { useConstants } from '../contexts/ConstantsContext';
 
 const EnhancedPatientConstantsUI = ({ patientId }) => {
   const [constants, setConstants] = useState(DEFAULT_PATIENT_CONSTANTS);

@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { fetchPatientConstants } from './EnhancedPatientConstantsCalc';
-import { useConstants } from '../contexts/ConstantsContext';
-
 import styles from './PatientConstants.module.css';
 
 const PatientConstants = () => {
@@ -22,6 +20,17 @@ const PatientConstants = () => {
     };
 
     getConstants();
+
+    // Listen for constants updates
+    const handleConstantsUpdate = (event) => {
+      const { constants } = event.detail;
+      setConstants(constants);
+    };
+    window.addEventListener('patientConstantsUpdated', handleConstantsUpdate);
+
+    return () => {
+      window.removeEventListener('patientConstantsUpdated', handleConstantsUpdate);
+    };
   }, []);
 
   if (loading) return <div>Loading constants...</div>;

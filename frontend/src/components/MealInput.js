@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useConstants } from '../contexts/ConstantsContext';
-
 import axios from 'axios';
 import { FaPlus, FaMinus } from 'react-icons/fa';
 import DurationInput from './DurationInput';
 import FoodSection from './FoodSection';
-import { calculateTotalNutrients, calculateInsulinDose, fetchPatientConstants } from './EnhancedPatientConstantsCalc';
-import { DEFAULT_PATIENT_CONSTANTS, MEAL_TYPES } from '../constants';
+import { calculateTotalNutrients, calculateInsulinDose } from './EnhancedPatientConstantsCalc';
+import { MEAL_TYPES } from '../constants';
 import styles from './MealInput.module.css';
 
 const ActivityItem = ({ index, item, updateItem, removeItem, activityCoefficients }) => (
@@ -37,7 +36,7 @@ const ActivityItem = ({ index, item, updateItem, removeItem, activityCoefficient
 );
 
 const MealInput = () => {
-  const { patientConstants, loading, error } = useConstants();
+  const { patientConstants, loading, error, refreshConstants } = useConstants();
   const [mealType, setMealType] = useState('');
   const [selectedFoods, setSelectedFoods] = useState([]);
   const [activities, setActivities] = useState([{ level: 0, duration: 0 }]);
@@ -49,9 +48,22 @@ const MealInput = () => {
   const [notes, setNotes] = useState('');
   const [message, setMessage] = useState('');
 
- useEffect(() => {
-    console.log('MealInput constants:', { patientConstants, loading, error });
-  }, [patientConstants, loading, error]);
+
+   useEffect(() => {
+    refreshConstants();
+  }, [refreshConstants]);
+
+  // Add constants update listener
+  useEffect(() => {
+    const handleConstantsUpdate = () => {
+      refreshConstants();
+    };
+
+    window.addEventListener('patientConstantsUpdated', handleConstantsUpdate);
+    return () => {
+      window.removeEventListener('patientConstantsUpdated', handleConstantsUpdate);
+    };
+  }, [refreshConstants]);
 
   const calculateInsulinNeeds = useCallback(() => {
     if (selectedFoods.length === 0 || !patientConstants) {
@@ -63,11 +75,13 @@ const MealInput = () => {
     try {
       const totalNutrition = calculateTotalNutrients(selectedFoods);
 
+      console.log('Calculating insulin with constants:', patientConstants); // Debug log
+
       const insulinCalculation = calculateInsulinDose({
         ...totalNutrition,
         bloodSugar: parseFloat(bloodSugar) || 0,
         activities,
-        patientConstants,
+        patientConstants, // Make sure we're using the latest constants
         mealType
       });
 

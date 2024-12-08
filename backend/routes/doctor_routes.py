@@ -103,19 +103,25 @@ def update_patient_constants(current_user, patient_id):
         if not constants:
             return jsonify({'message': 'Missing required constants data'}), 400
 
-        update_data = {
-            'insulin_to_carb_ratio': constants.get('insulin_to_carb_ratio'),
-            'correction_factor': constants.get('correction_factor'),
-            'target_glucose': constants.get('target_glucose'),
-            'protein_factor': constants.get('protein_factor'),
-            'fat_factor': constants.get('fat_factor'),
-            'activity_coefficients': constants.get('activity_coefficients'),
-            'absorption_modifiers': constants.get('absorption_modifiers'),
-            'insulin_timing_guidelines': constants.get('insulin_timing_guidelines')
-        }
+        # Validate the data structure
+        required_fields = [
+            'insulin_to_carb_ratio',
+            'correction_factor',
+            'target_glucose',
+            'protein_factor',
+            'fat_factor',
+            'activity_coefficients',
+            'absorption_modifiers',
+            'insulin_timing_guidelines'
+        ]
 
-        # Remove None values from update_data
-        update_data = {k: v for k, v in update_data.items() if v is not None}
+        update_data = {}
+        for field in required_fields:
+            if field in constants:
+                update_data[field] = constants[field]
+
+        if not update_data:
+            return jsonify({'message': 'No valid constants provided'}), 400
 
         result = mongo.db.users.update_one(
             {"_id": ObjectId(patient_id)},
@@ -125,8 +131,16 @@ def update_patient_constants(current_user, patient_id):
         if result.matched_count == 0:
             return jsonify({'message': 'Patient not found'}), 404
 
-        return jsonify({'message': 'Constants updated successfully'}), 200
+        # Return the updated constants
+        updated_user = mongo.db.users.find_one({"_id": ObjectId(patient_id)})
+        updated_constants = {
+            field: updated_user.get(field) for field in required_fields
+        }
+
+        return jsonify({
+            'message': 'Constants updated successfully',
+            'constants': updated_constants
+        }), 200
     except Exception as e:
         logger.error(f"Error updating patient constants: {str(e)}")
         return jsonify({'message': 'Error updating patient constants'}), 500
-
