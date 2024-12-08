@@ -36,69 +36,76 @@ Other Constants: Include files like activityConstants.js and conversionConstants
 i have created app  with the following structure
 for using reinforment learning and machine learning in adjusting patients insulin dose
 
-FrontEnd
-src
-├── Components
-│   ├── Main Components
-│   │   ├── PatientDashboard
-│   │   │   └── PatientConstants
-│   │   └── DoctorDashboard
-│   │       └── EnhancedPatientConstantsUI
-│   │
-│   ├── Supporting Components
-│   │   ├── Activity Components
-│   │   │   ├── ActivityRecording
-│   │   │   └── ActivityDataTable
-│   │   │
-│   │   ├── Blood Sugar Components
-│   │   │   ├── BloodSugarInput
-│   │   │   ├── BloodSugarTable
-│   │   │   └── BloodSugarChart
-│   │   │
-│   │   ├── Insulin and Meal Management
-│   │   │   ├── EnhancedMealInsulin
-│   │   │   ├── MealInput
-│   │   │   │   └── FoodSection (subcomponent)
-│   │   │   └── MealHistory
-│   │   │
-│   │   ├── Food and Duration Management
-│   │   │   ├── FoodDatabase
-│   │   │   └── DurationInput
-│   │   │
-│   │   ├── Authentication Components
-│   │   │   ├── Register
-│   │   │   └── Signin
-│   │   │
-│   │   └── EnhancedPatientConstantsCalc (calculations)
+native3/
+├── frontend/
+│   └── src
+│       ├── Components
+│       │   ├── Main Components
+│       │   │   ├── PatientDashboard
+│       │   │   │   └── PatientConstants
+│       │   │   └── DoctorDashboard
+│       │   │       └── EnhancedPatientConstantsUI
+│       │   │
+│       │   ├── Supporting Components
+│       │   │   ├── Activity Components
+│       │   │   │   ├── ActivityRecording
+│       │   │   │   └── ActivityDataTable
+│       │   │   │
+│       │   │   ├── Blood Sugar Components
+│       │   │   │   ├── BloodSugarInput
+│       │   │   │   ├── BloodSugarTable
+│       │   │   │   └── BloodSugarChart
+│       │   │   │
+│       │   │   ├── Insulin and Meal Management
+│       │   │   │   ├── EnhancedMealInsulin
+│       │   │   │   ├── MealInput
+│       │   │   │   │   └── FoodSection (subcomponent)
+│       │   │   │   └── MealHistory
+│       │   │   │
+│       │   │   ├── Food and Duration Management
+│       │   │   │   ├── FoodDatabase
+│       │   │   │   └── DurationInput
+│       │   │   │
+│       │   │   ├── Authentication Components
+│       │   │   │   ├── Register
+│       │   │   │   └── Signin
+│       │   │   │
+│       │   │   └── EnhancedPatientConstantsCalc (calculations)
+│       │
+│       ├── contexts
+│       │   └── ConstantsContext.js
+│       │
+│       └── Constants
+│           ├── SharedConstants
+│           └── index.js
 │
-└── Constants
-    ├── SharedConstants
-    └── index.js
-
-Project Structure
-backend/
-├── main.py
-├── config.py
-├── activity.py
-├── blood_sugar.py
-├── constants.py
-├── enhanced_meal_insulin.py
-├── meal_insulin.py
-├── models/
-│   ├── __init__.py
-│   ├── food_data.py
-├── routes/
-│   ├── __init__.py
-│   ├── auth_routes.py
-│   ├── doctor_routes.py
-│   ├── food_routes.py
-│   └── test_routes.py
-├── services/
-│   └── food_service.py
-└── utils/
-    ├── __init__.py
-    ├── auth.py
-    └── error_handler.py
+├── backend/
+│   ├── main.py
+│   ├── config.py
+│   ├── activity.py
+│   ├── blood_sugar.py
+│   ├── constants.py
+│   ├── enhanced_meal_insulin.py
+│   ├── meal_insulin.py
+│   ├── models/
+│   │   ├── __init__.py
+│   │   ├── food_data.py
+│   │
+│   ├── routes/
+│   │   ├── __init__.py
+│   │   ├── auth_routes.py
+│   │   ├── doctor_routes.py
+│   │   ├── food_routes.py
+│   │   ├── patient_routes.py
+│   │   └── test_routes.py
+│   │
+│   ├── services/
+│   │   └── food_service.py
+│   │
+│   └── utils/
+│       ├── __init__.py
+│       ├── auth.py
+│       └── error_handler.py
 
 Key Features
 1.	Diabetes Management System: 

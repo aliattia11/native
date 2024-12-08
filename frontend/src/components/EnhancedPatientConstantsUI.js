@@ -42,6 +42,37 @@ const EnhancedPatientConstantsUI = ({ patientId }) => {
       [key]: parseFloat(value) || 0
     }));
   };
+const resetToDefaults = async () => {
+    try {
+      setLoading(true);
+      const token = localStorage.getItem('token');
+      const response = await fetch(`http://localhost:5000/api/doctor/patient/${patientId}/constants/reset`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) throw new Error('Failed to reset patient constants');
+
+      const data = await response.json();
+      setConstants(data.constants);
+
+      // Emit an event to notify other components
+      const event = new CustomEvent('patientConstantsUpdated', {
+        detail: { patientId, constants: data.constants }
+      });
+      window.dispatchEvent(event);
+
+      setMessage('Patient constants reset to defaults successfully');
+      setTimeout(() => setMessage(''), 3000);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleActivityCoefficientChange = (level, value) => {
     setConstants(prev => ({
@@ -223,21 +254,21 @@ const handleSubmit = async () => {
           </div>
         )}
 
-        <div className={styles.buttonGroup}>
-          <button
-            onClick={fetchPatientConstants}
-            className={styles.resetButton}
-          >
-            Reset
-          </button>
-          <button
-            onClick={handleSubmit}
-            className={styles.submitButton}
-            disabled={loading}
-          >
-            Save Changes
-          </button>
-        </div>
+          <div className={styles.buttonGroup}>
+              <button
+                  onClick={resetToDefaults}  // Changed from fetchPatientConstants to resetToDefaults
+                  className={styles.resetButton}
+              >
+                  Reset to Defaults
+              </button>
+              <button
+                  onClick={handleSubmit}
+                  className={styles.submitButton}
+                  disabled={loading}
+              >
+                  Save Changes
+              </button>
+          </div>
       </div>
     </div>
   );

@@ -20,17 +20,6 @@ const PatientConstants = () => {
     };
 
     getConstants();
-
-    // Listen for constants updates
-    const handleConstantsUpdate = (event) => {
-      const { constants } = event.detail;
-      setConstants(constants);
-    };
-    window.addEventListener('patientConstantsUpdated', handleConstantsUpdate);
-
-    return () => {
-      window.removeEventListener('patientConstantsUpdated', handleConstantsUpdate);
-    };
   }, []);
 
   if (loading) return <div>Loading constants...</div>;

@@ -71,14 +71,10 @@ export const calculateActivityImpact = (activities, patientConstants) => {
   }, 0);
 };
 
-export const fetchPatientConstants = async (patientId) => {
+export const fetchPatientConstants = async () => {
   try {
     const token = localStorage.getItem('token');
-    const url = patientId
-      ? `http://localhost:5000/api/doctor/patient/${patientId}/constants`
-      : 'http://localhost:5000/api/patient/constants';
-
-    const response = await fetch(url, {
+    const response = await fetch('http://localhost:5000/api/patient/constants', {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'

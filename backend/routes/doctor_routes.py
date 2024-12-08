@@ -87,7 +87,44 @@ def get_patient_constants(current_user, patient_id):
         logger.error(f"Error fetching patient constants: {str(e)}")
         return jsonify({'message': 'Error fetching patient constants'}), 500
 
+@doctor_routes.route('/api/doctor/patient/<patient_id>/constants/reset', methods=['POST'])
+@token_required
+@api_error_handler
+def reset_patient_constants(current_user, patient_id):
+    if current_user.get('user_type') != 'doctor':
+        return jsonify({'message': 'Unauthorized access'}), 403
 
+    try:
+        # Get default constants from ConstantConfig
+        from constants import ConstantConfig
+        default_config = ConstantConfig()
+        default_constants = {
+            'insulin_to_carb_ratio': default_config.insulin_to_carb_ratio,
+            'correction_factor': default_config.correction_factor,
+            'target_glucose': default_config.target_glucose,
+            'protein_factor': default_config.protein_factor,
+            'fat_factor': default_config.fat_factor,
+            'activity_coefficients': default_config.activity_coefficients,
+            'absorption_modifiers': default_config.absorption_modifiers,
+            'insulin_timing_guidelines': default_config.insulin_timing_guidelines
+        }
+
+        # Update patient with default constants
+        result = mongo.db.users.update_one(
+            {"_id": ObjectId(patient_id)},
+            {"$set": default_constants}
+        )
+
+        if result.matched_count == 0:
+            return jsonify({'message': 'Patient not found'}), 404
+
+        return jsonify({
+            'message': 'Constants reset to defaults successfully',
+            'constants': default_constants
+        }), 200
+    except Exception as e:
+        logger.error(f"Error resetting patient constants: {str(e)}")
+        return jsonify({'message': 'Error resetting patient constants'}), 500
 
 @doctor_routes.route('/api/doctor/patient/<patient_id>/constants', methods=['PUT'])
 @token_required
@@ -144,3 +181,4 @@ def update_patient_constants(current_user, patient_id):
     except Exception as e:
         logger.error(f"Error updating patient constants: {str(e)}")
         return jsonify({'message': 'Error updating patient constants'}), 500
+

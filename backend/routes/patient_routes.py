@@ -14,12 +14,12 @@ def get_patient_constants(current_user):
         user_id = str(current_user['_id'])
         print(f"Fetching constants for user: {user_id}")
 
-        # Get user from database to ensure we have latest constants
+        # Get user from database
         user = mongo.db.users.find_one({"_id": ObjectId(user_id)})
         if not user:
             return jsonify({'error': 'User not found'}), 404
 
-        # Get patient constants from user document
+        # Initialize constants with stored values
         constants = {
             'insulin_to_carb_ratio': user.get('insulin_to_carb_ratio'),
             'correction_factor': user.get('correction_factor'),
@@ -31,15 +31,16 @@ def get_patient_constants(current_user):
             'insulin_timing_guidelines': user.get('insulin_timing_guidelines')
         }
 
-        # Get default constants
+        # Get default constants for fallback
         default_constants = Constants().default_config
 
-        # Merge with defaults, preferring user values when they exist
+        # Only use default values if the stored value is None (not if it's 0 or other valid values)
         for key, value in constants.items():
             if value is None:
-                constants[key] = getattr(default_constants, key)
+                if hasattr(default_constants, key):
+                    constants[key] = getattr(default_constants, key)
 
-        print(f"Retrieved constants: {constants}")
+        print(f"Retrieved patient-specific constants: {constants}")
         return jsonify({'constants': constants}), 200
     except Exception as e:
         print(f"Error getting patient constants: {str(e)}")
