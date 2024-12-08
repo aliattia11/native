@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useConstants } from '../contexts/ConstantsContext';
+
 import axios from 'axios';
 import { FaPlus, FaMinus } from 'react-icons/fa';
 import DurationInput from './DurationInput';
@@ -35,6 +37,7 @@ const ActivityItem = ({ index, item, updateItem, removeItem, activityCoefficient
 );
 
 const MealInput = () => {
+  const { patientConstants, loading, error } = useConstants();
   const [mealType, setMealType] = useState('');
   const [selectedFoods, setSelectedFoods] = useState([]);
   const [activities, setActivities] = useState([{ level: 0, duration: 0 }]);
@@ -45,26 +48,10 @@ const MealInput = () => {
   const [activityImpact, setActivityImpact] = useState(0);
   const [notes, setNotes] = useState('');
   const [message, setMessage] = useState('');
-  const [patientConstants, setPatientConstants] = useState(null);
-  const [loading, setLoading] = useState(true);
 
-  // Fetch patient constants
-  useEffect(() => {
-    const getConstants = async () => {
-      try {
-        const constants = await fetchPatientConstants();
-        console.log('Fetched patient constants:', constants);
-        setPatientConstants(constants);
-      } catch (error) {
-        console.error('Error fetching patient constants:', error);
-        setPatientConstants(DEFAULT_PATIENT_CONSTANTS);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    getConstants();
-  }, []);
+ useEffect(() => {
+    console.log('MealInput constants:', { patientConstants, loading, error });
+  }, [patientConstants, loading, error]);
 
   const calculateInsulinNeeds = useCallback(() => {
     if (selectedFoods.length === 0 || !patientConstants) {

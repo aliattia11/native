@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { fetchPatientConstants } from './EnhancedPatientConstantsCalc';
+import { useConstants } from '../contexts/ConstantsContext';
+
 import styles from './PatientConstants.module.css';
 
 const PatientConstants = () => {
