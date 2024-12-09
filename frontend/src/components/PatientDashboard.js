@@ -4,6 +4,7 @@ import MealHistory from './MealHistory';
 import BloodSugarInput from './BloodSugarInput';
 import BloodSugarTable from './BloodSugarTable';
 import BloodSugarChart from './Charts/BloodSugarChart';
+import BloodGlucoseAnalytics from './Charts/BloodGlucoseAnalytics';
 import ActivityRecording from './ActivityRecording';
 import ActivityDataTable from './ActivityDataTable';
 import FoodDatabase from './FoodDatabase';
@@ -32,6 +33,8 @@ const PatientDashboard = ({ handleLogout }) => {
         return <MealHistory />;
       case 'bloodSugarTable':
         return <BloodSugarTable />;
+        case 'BloodGlucoseAnalytics':
+        return <BloodGlucoseAnalytics />;
       case 'bloodSugarChart':
         return <BloodSugarChart />;
       case 'activityRecording':
@@ -104,7 +107,12 @@ const PatientDashboard = ({ handleLogout }) => {
           >
             Blood Sugar Table
           </button>
-
+          <button
+              onClick={() => setActiveComponent('BloodGlucoseAnalytics')}
+              className={`${styles.quickAccessButton} ${activeComponent === 'BloodGlucoseAnalytics' ? styles.active : ''}`}
+          >
+            Blood Glucose Analytics
+          </button>
           <button
               onClick={() => setActiveComponent('bloodSugarChart')}
               className={`${styles.quickAccessButton} ${activeComponent === 'bloodSugarChart' ? styles.active : ''}`}

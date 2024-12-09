@@ -1,179 +1,256 @@
+// frontend/src/components/Charts/BloodGlucoseAnalytics.js
+
 import React, { useState, useEffect } from 'react';
-import { Line, Scatter } from 'react-chartjs-2';
+import { Line } from 'react-chartjs-2';
 import axios from 'axios';
 import { CHART_COLORS, commonOptions, timeFormats } from './chartConfig';
 import './charts.css';
 
 const API_BASE_URL = 'http://localhost:5000';
 
-// Chart options configurations
-const getTimeSeriesOptions = (dateRange) => ({
-  ...commonOptions,
-  plugins: {
-    ...commonOptions.plugins,
-    title: {
-      display: true,
-      text: 'Blood Glucose Trends'
-    }
-  },
-  scales: {
-    x: {
-      type: 'time',
-      time: timeFormats[dateRange],
-      title: {
-        display: true,
-        text: 'Time'
-      }
-    },
-    y: {
-      title: {
-        display: true,
-        text: 'Blood Glucose (mg/dL)'
-      }
-    }
-  }
-});
-
-const scatterOptions = {
-  ...commonOptions,
-  plugins: {
-    ...commonOptions.plugins,
-    title: {
-      display: true,
-      text: 'Meal Impact Analysis'
-    }
-  },
-  scales: {
-    x: {
-      title: {
-        display: true,
-        text: 'Pre-meal Glucose (mg/dL)'
-      }
-    },
-    y: {
-      title: {
-        display: true,
-        text: 'Post-meal Glucose (mg/dL)'
-      }
-    }
-  }
-};
-
 const BloodGlucoseAnalytics = ({ patientId }) => {
-  const [bloodGlucoseData, setBloodGlucoseData] = useState([]);
-  const [mealData, setMealData] = useState([]);
+  const [chartData, setChartData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [dateRange, setDateRange] = useState('week');
-  const [targetRange] = useState({ min: 70, max: 180 });
+  const [targetRange] = useState({ min: 70, max: 180 }); // Standard target range
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        setError(null);
+    fetchData();
+  }, [patientId, dateRange]);
+  const formatDateForAPI = (date) => {
+    return date.toISOString().split('T')[0]; // Returns YYYY-MM-DD format
+  };
 
-        const token = localStorage.getItem('token');
-        if (!token) {
-          throw new Error('No authentication token found');
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      };
+
+      // Calculate date range with proper formatting
+      const endDate = new Date();
+      let startDate = new Date();
+      switch (dateRange) {
+        case 'day':
+          startDate.setDate(endDate.getDate() - 1);
+          break;
+        case 'week':
+          startDate.setDate(endDate.getDate() - 7);
+          break;
+        case 'month':
+          startDate.setDate(endDate.getDate() - 30);
+          break;
+        default:
+          startDate.setDate(endDate.getDate() - 7);
+      }
+
+      // Format dates for API
+      const formattedStartDate = formatDateForAPI(startDate);
+      const formattedEndDate = formatDateForAPI(endDate);
+
+      // Fetch blood glucose data
+      const glucoseResponse = await axios.get(
+        `${API_BASE_URL}/api/blood-sugar`,
+        {
+          headers,
+          params: {
+            start_date: formattedStartDate,
+            end_date: formattedEndDate,
+            unit: 'mg/dL',
+            ...(patientId && { patient_id: patientId })
+          }
         }
+      );
 
-        const headers = {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        };
-
-        // Fetch blood glucose data
-        const glucoseResponse = await axios.get(
-          `${API_BASE_URL}/api/blood-sugar/${patientId}`,
-          {
-            headers,
-            params: { range: dateRange },
-            timeout: 5000
+      // Fetch meal data
+      const mealResponse = await axios.get(
+        `${API_BASE_URL}/api/meals`,
+        {
+          headers,
+          params: {
+            start_date: formattedStartDate,
+            end_date: formattedEndDate,
+            ...(patientId && { patient_id: patientId })
           }
-        );
+        }
+      );
 
-        // Fetch meal data
-        const mealResponse = await axios.get(
-          `${API_BASE_URL}/api/meals/${patientId}`,
-          {
-            headers,
-            params: { range: dateRange },
-            timeout: 5000
-          }
-        );
+      const processedData = processData(
+        glucoseResponse.data || [],
+        mealResponse.data?.meals || []
+      );
+      setChartData(processedData);
+      setLoading(false);
 
-        setBloodGlucoseData(glucoseResponse.data);
-        setMealData(mealResponse.data);
-        setLoading(false);
+    } catch (err) {
+      console.error('Error fetching data:', err);
+      setError(err.response?.data?.error || err.message || 'Failed to fetch data');
+      setLoading(false);
+    }
+  };
 
-      } catch (err) {
-        console.error('Error fetching data:', err);
-        setError(
-          err.response?.data?.error ||
-          err.message ||
-          'An error occurred while fetching data'
-        );
-        setLoading(false);
+  const processData = (glucoseData, mealsData) => {
+    // Safely parse dates and ensure valid data
+    const parseDate = (dateString) => {
+      try {
+        return new Date(dateString);
+      } catch (e) {
+        console.error('Invalid date:', dateString);
+        return null;
       }
     };
 
-    if (patientId) {
-      fetchData();
-    }
-  }, [patientId, dateRange]);
+    // Process glucose readings with safe date parsing
+    const readings = (Array.isArray(glucoseData) ? glucoseData : [])
+      .map(reading => {
+        const date = parseDate(reading.timestamp);
+        if (!date) return null;
 
-  // Prepare time series data
-  const timeSeriesData = {
-    labels: bloodGlucoseData.map(d => new Date(d.timestamp)),
-    datasets: [
-      {
-        label: 'Blood Glucose',
-        data: bloodGlucoseData.map(d => ({
-          x: new Date(d.timestamp),
-          y: d.bloodSugar
-        })),
-        borderColor: CHART_COLORS.primary,
-        tension: 0.1
-      },
-      // Target range lines
-      {
-        label: 'Target Range Min',
-        data: bloodGlucoseData.map(d => ({
-          x: new Date(d.timestamp),
-          y: targetRange.min
-        })),
-        borderColor: CHART_COLORS.danger,
-        borderDash: [5, 5],
-        fill: false
-      },
-      {
-        label: 'Target Range Max',
-        data: bloodGlucoseData.map(d => ({
-          x: new Date(d.timestamp),
-          y: targetRange.max
-        })),
-        borderColor: CHART_COLORS.danger,
-        borderDash: [5, 5],
-        fill: false
-      }
-    ]
+        return {
+          x: date,
+          y: reading.bloodSugar,
+          status: reading.status || 'unknown'
+        };
+      })
+      .filter(reading => reading !== null)
+      .sort((a, b) => a.x - b.x);
+
+    // Process meals with safe date parsing
+    const meals = (Array.isArray(mealsData) ? mealsData : [])
+      .map(meal => {
+        const date = parseDate(meal.timestamp);
+        if (!date) return null;
+
+        return {
+          x: date,
+          y: meal.bloodSugar || null,
+          mealType: meal.mealType,
+          insulin: meal.intendedInsulin,
+          suggestedInsulin: meal.suggestedInsulin,
+          foodItems: meal.foodItems
+        };
+      })
+      .filter(meal => meal !== null)
+      .sort((a, b) => a.x - b.x);
+
+    const timePoints = [...readings.map(r => r.x)];
+
+    return {
+      labels: timePoints,
+      datasets: [
+        // Blood Glucose Line
+        {
+          label: 'Blood Glucose',
+          data: readings,
+          borderColor: CHART_COLORS.primary,
+          backgroundColor: 'rgba(75, 192, 192, 0.1)',
+          fill: false,
+          tension: 0.4,
+          yAxisID: 'glucose'
+        },
+        // Target Range - Minimum
+        {
+          label: 'Target Range Min',
+          data: timePoints.map(x => ({ x, y: targetRange.min })),
+          borderColor: CHART_COLORS.danger,
+          borderDash: [5, 5],
+          fill: false,
+          yAxisID: 'glucose'
+        },
+        // Target Range - Maximum
+        {
+          label: 'Target Range Max',
+          data: timePoints.map(x => ({ x, y: targetRange.max })),
+          borderColor: CHART_COLORS.danger,
+          borderDash: [5, 5],
+          fill: '+1',
+          backgroundColor: 'rgba(255, 99, 132, 0.1)',
+          yAxisID: 'glucose'
+        },
+        // Meal Markers
+        {
+          label: 'Meals',
+          data: meals,
+          backgroundColor: CHART_COLORS.warning,
+          pointStyle: 'triangle',
+          pointRadius: 8,
+          showLine: false,
+          yAxisID: 'glucose'
+        }
+      ]
+    };
   };
 
-  // Prepare meal impact data
-  const mealImpactData = {
-    datasets: mealData.map(meal => ({
-      label: meal.mealType,
-      data: [{
-        x: meal.preMealGlucose,
-        y: meal.postMealGlucose,
-        r: meal.totalCarbs / 10 // Size based on carb intake
-      }],
-      backgroundColor:
-        meal.mealType === 'breakfast' ? CHART_COLORS.danger :
-        meal.mealType === 'lunch' ? CHART_COLORS.secondary :
-        CHART_COLORS.primary
-    }))
+  const chartOptions = {
+    ...commonOptions,
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      tooltip: {
+        mode: 'index',
+        intersect: false,
+        callbacks: {
+          label: (context) => {
+            const dataset = context.dataset;
+            const point = dataset.data[context.dataIndex];
+
+            if (dataset.label === 'Meals') {
+              const labels = [
+                `${point.mealType}`,
+                `Blood Sugar: ${point.y || 'N/A'} mg/dL`,
+                `Insulin Taken: ${point.insulin || 'N/A'} units`,
+                `Suggested Insulin: ${point.suggestedInsulin || 'N/A'} units`
+              ];
+              if (point.foodItems?.length > 0) {
+                labels.push(`Foods: ${point.foodItems.map(f => f.name).join(', ')}`);
+              }
+              return labels;
+            }
+            return `${dataset.label}: ${point.y} mg/dL`;
+          }
+        }
+      },
+      legend: {
+        position: 'top'
+      },
+      title: {
+        display: true,
+        text: 'Blood Glucose Trends'
+      }
+    },
+    scales: {
+      x: {
+        type: 'time',
+        time: timeFormats[dateRange],
+        title: {
+          display: true,
+          text: 'Time'
+        }
+      },
+      glucose: {
+        type: 'linear',
+        position: 'left',
+        title: {
+          display: true,
+          text: 'Blood Glucose (mg/dL)'
+        },
+        suggestedMin: 40,
+        suggestedMax: 250,
+        grid: {
+          color: 'rgba(0, 0, 0, 0.1)'
+        }
+      }
+    }
   };
 
   if (loading) {
@@ -188,12 +265,17 @@ const BloodGlucoseAnalytics = ({ patientId }) => {
     return (
       <div className="chart-error">
         <p>Error: {error}</p>
-        <button
-          onClick={() => setDateRange(dateRange)}
-          className="refresh-button"
-        >
+        <button onClick={fetchData} className="retry-button">
           Retry
         </button>
+      </div>
+    );
+  }
+
+  if (!chartData || !chartData.datasets[0].data.length) {
+    return (
+      <div className="chart-error">
+        <p>No data available for the selected time range</p>
       </div>
     );
   }
@@ -206,6 +288,7 @@ const BloodGlucoseAnalytics = ({ patientId }) => {
           <select
             value={dateRange}
             onChange={(e) => setDateRange(e.target.value)}
+            className="date-range-select"
           >
             <option value="day">Last 24 Hours</option>
             <option value="week">Last Week</option>
@@ -214,22 +297,24 @@ const BloodGlucoseAnalytics = ({ patientId }) => {
         </div>
       </div>
 
-      {bloodGlucoseData.length === 0 ? (
-        <div className="no-data-message">
-          No blood glucose data available for the selected time range
+      <div className="chart-container">
+        <Line data={chartData} options={chartOptions} />
+      </div>
+
+      <div className="chart-legend">
+        <div className="legend-item">
+          <span className="legend-color" style={{ backgroundColor: CHART_COLORS.primary }}></span>
+          <span>Blood Glucose</span>
         </div>
-      ) : (
-        <div className="chart-grid">
-          <div className="chart-container">
-            <Line data={timeSeriesData} options={getTimeSeriesOptions(dateRange)} />
-          </div>
-          {mealData.length > 0 && (
-            <div className="chart-container">
-              <Scatter data={mealImpactData} options={scatterOptions} />
-            </div>
-          )}
+        <div className="legend-item">
+          <span className="legend-color" style={{ backgroundColor: CHART_COLORS.danger }}></span>
+          <span>Target Range</span>
         </div>
-      )}
+        <div className="legend-item">
+          <span className="legend-color" style={{ backgroundColor: CHART_COLORS.warning }}></span>
+          <span>Meals</span>
+        </div>
+      </div>
     </div>
   );
 };

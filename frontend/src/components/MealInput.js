@@ -169,10 +169,10 @@ const MealInput = () => {
       const mealData = {
         mealType,
         foodItems: selectedFoods.map(food => ({
-          name: food.name,
-          portion: food.portion.activeMeasurement === 'weight' ? food.portion.w_amount : food.portion.amount,
-          measurement: food.portion.activeMeasurement === 'weight' ? food.portion.w_unit : food.portion.unit,
-          measurement_type: food.portion.activeMeasurement,
+    name: food.name,
+    portion: food.portion.activeMeasurement === 'weight' ? food.portion.w_amount : food.portion.amount,
+    measurement: food.portion.activeMeasurement === 'weight' ? food.portion.w_unit : food.portion.unit,
+    measurement_type: food.portion.activeMeasurement,
           details: {
             carbs: food.details.carbs,
             protein: food.details.protein,
@@ -377,17 +377,17 @@ const MealInput = () => {
           </div>
         </div>
 
-        <button
-          className={styles.submitButton}
-          type="submit"
-          disabled={loading || !patientConstants}
-        >
-          {loading ? 'Loading...' : 'Log Meal'}
-        </button>
+<button
+  className={styles.submitButton}
+  type="submit"
+  disabled={loading || !patientConstants || isSubmitting}
+>
+  {isSubmitting ? 'Submitting...' : 'Log Meal'}
+</button>
       </form>
 
       {message && (
-        <div className={`${styles.message} ${message.includes('Error') ? styles.error : styles.success}`}>
+          <div className={`${styles.message} ${message.includes('Error') ? styles.error : styles.success}`}>
           {message}
         </div>
       )}
