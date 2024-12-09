@@ -7,7 +7,9 @@ import EnhancedPatientConstantsUI from './EnhancedPatientConstantsUI';
 import ActivityDataTable from './ActivityDataTable';
 import BloodGlucoseAnalytics from './Charts/BloodGlucoseAnalytics';
 
+
 import styles from './DoctorDashboard.module.css';
+
 
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend } from 'chart.js';
 
@@ -141,7 +143,8 @@ const DoctorDashboard = () => {
                   patientId={selectedPatient.id}
                 />
                 <div className={styles.dataCharts}>
-                  <BloodGlucoseAnalytics isDoctor={true} patientId={selectedPatient.id} />
+
+<BloodGlucoseAnalytics isDoctor={true} patientId={selectedPatient.id} />
                   <BloodSugarChart isDoctor={true} patientId={selectedPatient.id} />
                   <BloodSugarTable isDoctor={true} patientId={selectedPatient.id} />
                 </div>
