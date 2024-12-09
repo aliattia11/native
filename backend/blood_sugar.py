@@ -1,11 +1,12 @@
 from flask import Blueprint, request, jsonify
 from bson.objectid import ObjectId
-from datetime import datetime
+from datetime import datetime, timedelta  # Add timedelta to the import
 from config import mongo
 from utils.auth import token_required
 from utils.error_handler import api_error_handler
 from constants import Constants
 import logging
+
 
 logger = logging.getLogger(__name__)
 blood_sugar_bp = Blueprint('blood_sugar', __name__)
@@ -67,6 +68,7 @@ def add_blood_sugar(current_user):
         logger.error(f"Error recording blood sugar: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+
 @blood_sugar_bp.route('/api/blood-sugar', methods=['GET'])
 @token_required
 def get_blood_sugar(current_user):
@@ -76,18 +78,27 @@ def get_blood_sugar(current_user):
         end_date = request.args.get('end_date')
         unit = request.args.get('unit', 'mg/dL')
 
-        # Convert dates to datetime objects
-        start = datetime.strptime(start_date, '%Y-%m-%d') if start_date else None
-        end = datetime.strptime(end_date, '%Y-%m-%d') if end_date else None
+        # Convert dates to datetime objects with better error handling
+        try:
+            if start_date:
+                start = datetime.strptime(start_date, '%Y-%m-%d')
+            else:
+                start = datetime.utcnow() - timedelta(days=30)  # Default to last 30 days
+
+            if end_date:
+                end = datetime.strptime(end_date, '%Y-%m-%d')
+            else:
+                end = datetime.utcnow()
+        except ValueError as e:
+            logger.error(f"Date parsing error: {str(e)}")
+            return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
 
         # Build query
         query = {'user_id': str(current_user['_id'])}
-        if start or end:
-            query['timestamp'] = {}
-            if start:
-                query['timestamp']['$gte'] = start
-            if end:
-                query['timestamp']['$lte'] = end
+        query['timestamp'] = {
+            '$gte': start,
+            '$lte': end + timedelta(days=1)  # Include the full end date
+        }
 
         readings = list(mongo.db.blood_sugar.find(query).sort('timestamp', -1))
         target_glucose = user_constants.get_constant('target_glucose')
@@ -125,18 +136,27 @@ def get_patient_blood_sugar(current_user, patient_id):
         end_date = request.args.get('end_date')
         unit = request.args.get('unit', 'mg/dL')
 
-        # Convert dates to datetime objects
-        start = datetime.strptime(start_date, '%Y-%m-%d') if start_date else None
-        end = datetime.strptime(end_date, '%Y-%m-%d') if end_date else None
+        # Convert dates to datetime objects with better error handling
+        try:
+            if start_date:
+                start = datetime.strptime(start_date, '%Y-%m-%d')
+            else:
+                start = datetime.utcnow() - timedelta(days=30)  # Default to last 30 days
+
+            if end_date:
+                end = datetime.strptime(end_date, '%Y-%m-%d')
+            else:
+                end = datetime.utcnow()
+        except ValueError as e:
+            logger.error(f"Date parsing error: {str(e)}")
+            return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
 
         # Build query
         query = {'user_id': patient_id}
-        if start or end:
-            query['timestamp'] = {}
-            if start:
-                query['timestamp']['$gte'] = start
-            if end:
-                query['timestamp']['$lte'] = end
+        query['timestamp'] = {
+            '$gte': start,
+            '$lte': end + timedelta(days=1)  # Include the full end date
+        }
 
         readings = list(mongo.db.blood_sugar.find(query).sort('timestamp', -1))
         target_glucose = patient_constants.get_constant('target_glucose')
@@ -161,3 +181,23 @@ def get_patient_blood_sugar(current_user, patient_id):
     except Exception as e:
         logger.error(f"Error fetching patient blood sugar data: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+
+@blood_sugar_bp.route('/api/blood-sugar/<patient_id>')
+def get_blood_sugar_data(patient_id):
+    range_param = request.args.get('range', 'week')
+    # Calculate date range based on parameter
+    if range_param == 'day':
+        start_date = datetime.now() - timedelta(days=1)
+    elif range_param == 'week':
+        start_date = datetime.now() - timedelta(weeks=1)
+    else:
+        start_date = datetime.now() - timedelta(days=30)
+
+    # Fetch and return blood sugar data
+    data = mongo.db.blood_sugar.find({
+        'patient_id': patient_id,
+        'timestamp': {'$gte': start_date}
+    }).sort('timestamp', 1)
+
+    return jsonify(list(data))

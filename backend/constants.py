@@ -35,16 +35,16 @@ class ConstantConfig:
         'very_fast': {'timing_minutes': 20, 'description': 'Take insulin 20 minutes before meal'}
     })
 
+
 class Constants:
     """Enhanced constants management with dataclass support"""
 
-    # Measurement Systems
+    # 1. First define all class-level constants
     MEASUREMENT_SYSTEMS = {
         'VOLUME': 'volume',
         'WEIGHT': 'weight'
     }
 
-    # Volume Measurements
     VOLUME_MEASUREMENTS = {
         'cup': {'ml': 240, 'display_name': 'Cup'},
         'half_cup': {'ml': 120, 'display_name': '½ Cup'},
@@ -57,7 +57,6 @@ class Constants:
         'ml': {'ml': 1, 'display_name': 'Milliliter'}
     }
 
-    # Weight Measurements
     WEIGHT_MEASUREMENTS = {
         'palm': {'grams': 85, 'display_name': 'Palm-sized'},
         'handful': {'grams': 30, 'display_name': 'Handful'},
@@ -68,7 +67,6 @@ class Constants:
         'kg': {'grams': 1000, 'display_name': 'Kilograms'}
     }
 
-    # Activity Levels
     ACTIVITY_LEVELS = [
         {'value': -2, 'label': 'Sleep', 'impact': -0.2},
         {'value': -1, 'label': 'Very Low Activity', 'impact': -0.1},
@@ -77,7 +75,6 @@ class Constants:
         {'value': 2, 'label': 'Vigorous Activity', 'impact': 0.2}
     ]
 
-    # Meal Types
     MEAL_TYPES = [
         {'value': 'breakfast', 'label': 'Breakfast'},
         {'value': 'lunch', 'label': 'Lunch'},
@@ -85,16 +82,114 @@ class Constants:
         {'value': 'snack', 'label': 'Snack'}
     ]
 
+    # Add DEFAULT_PATIENT_CONSTANTS
+    DEFAULT_PATIENT_CONSTANTS = {
+        'insulin_to_carb_ratio': 10,
+        'correction_factor': 50,
+        'target_glucose': 100,
+        'protein_factor': 0.5,
+        'fat_factor': 0.2,
+        'activity_coefficients': {
+            "-2": 0.2,
+            "-1": 0.1,
+            "0": 0,
+            "1": -0.1,
+            "2": -0.2
+        },
+        'absorption_modifiers': {
+            'very_slow': 0.6,
+            'slow': 0.8,
+            'medium': 1.0,
+            'fast': 1.2,
+            'very_fast': 1.4
+        }
+    }
+
     def __init__(self, patient_id: Optional[str] = None):
-        """
-        Initialize constants with optional patient-specific overrides
-        """
+        """Initialize constants with optional patient-specific overrides"""
         self.patient_id = patient_id
         self.default_config = ConstantConfig()
         self.patient_config = self.default_config
+        self._constants_cache = {}  # Add a cache for constants
 
         if patient_id:
             self._load_patient_constants()
+
+    # 2. Define properties after class-level constants but before other methods
+    @property
+    def volume_base(self) -> Dict[str, float]:
+        """Returns a dictionary of volume measurements to their base unit (ml)"""
+        if 'volume_base' not in self._constants_cache:
+            self._constants_cache['volume_base'] = {
+                unit: data['ml'] for unit, data in self.VOLUME_MEASUREMENTS.items()
+            }
+        return self._constants_cache['volume_base']
+
+    @property
+    def weight_base(self) -> Dict[str, float]:
+        """Returns a dictionary of weight measurements to their base unit (grams)"""
+        if 'weight_base' not in self._constants_cache:
+            self._constants_cache['weight_base'] = {
+                unit: data['grams'] for unit, data in self.WEIGHT_MEASUREMENTS.items()
+            }
+        return self._constants_cache['weight_base']
+
+    def get_constant(self, key: str, default: Any = None) -> Any:
+        """
+        Get a constant value from patient-specific or default constants
+
+        Args:
+            key: The constant key to retrieve
+            default: Default value if constant not found
+
+        Returns:
+            The constant value or default if not found
+        """
+        # Check cache first
+        cache_key = f'constant_{key}'
+        if cache_key in self._constants_cache:
+            return self._constants_cache[cache_key]
+
+        value = None
+
+        # Check patient_config first
+        if hasattr(self.patient_config, key):
+            value = getattr(self.patient_config, key)
+        # Then check class-level constants
+        elif hasattr(self, key.upper()):
+            value = getattr(self, key.upper())
+        # Handle nested attributes
+        elif '.' in key:
+            try:
+                parts = key.split('.')
+                current = self.patient_config
+                for part in parts:
+                    if hasattr(current, part):
+                        current = getattr(current, part)
+                    else:
+                        current = None
+                        break
+                value = current
+            except Exception:
+                value = None
+
+        # Cache the result if it's not None
+        if value is not None:
+            self._constants_cache[cache_key] = value
+            return value
+
+        return default
+
+    def convert_to_standard(self, amount: float, from_unit: str) -> Optional[float]:
+        """Convert any measurement to its base unit (ml or g)"""
+        try:
+            if from_unit in self.volume_base:
+                return float(amount) * self.volume_base[from_unit]
+            elif from_unit in self.weight_base:
+                return float(amount) * self.weight_base[from_unit]
+            return None
+        except (TypeError, ValueError):
+            return None
 
     def _load_patient_constants(self) -> None:
         """
@@ -136,15 +231,15 @@ class Constants:
             print(f"Error loading patient constants: {e}")
 
     def get_patient_constants(self) -> Dict[str, Any]:
-        """
-        Get current patient or default constants as a dictionary
-        """
+        """Get current patient or default constants as a dictionary"""
         return asdict(self.patient_config)
 
     def update_patient_constants(self, new_constants: Dict[str, Any]) -> bool:
         """
         Update patient-specific constants in MongoDB
         """
+
+
         if not self.patient_id:
             return False
 
@@ -173,26 +268,8 @@ class Constants:
             print(f"Error updating patient constants: {e}")
             return False
 
-  
 
-    def convert_to_standard(self, amount: float, from_unit: str) -> Optional[float]:
-        """
-        Convert any measurement to its base unit (ml or g)
-
-        Args:
-            amount: The amount to convert
-            from_unit: The unit to convert from
-
-        Returns:
-            Converted amount in base units (ml or g) or None if conversion not possible
-        """
-        if from_unit in self.volume_base:
-            return amount * self.volume_base[from_unit]
-        elif from_unit in self.weight_base:
-            return amount * self.weight_base[from_unit]
-        return None
-
-    def convert_between_units(self, amount: float, from_unit: str, to_unit: str) -> Optional[float]:
+    def convert_between_units(self, amount: float, from_unit: str, to_unit: str) -> float:
         """
         Convert between different units
 
@@ -214,33 +291,6 @@ class Constants:
             return base_amount / self.weight_base[to_unit]
         return None
 
-    def get_constant(self, key: str, default: Any = None) -> Any:
-        """Get a constant value with fallback to default"""
-        return self.constants.get(key, default)
-
-    def update_patient_constants(self, new_constants: Dict[str, Any]) -> bool:
-        """Update patient-specific constants in MongoDB"""
-        if not self.patient_id:
-            return False
-
-        try:
-            valid_constants = {k: v for k, v in new_constants.items()
-                               if k in self.DEFAULT_PATIENT_CONSTANTS}
-
-            result = mongo.db.users.update_one(
-                {'_id': ObjectId(self.patient_id)},
-                {'$set': valid_constants}
-            )
-
-            if result.modified_count > 0:
-                self.constants.update(valid_constants)
-                return True
-
-            return False
-        except Exception as e:
-            print(f"Error updating patient constants: {e}")
-            return False
-
     @classmethod
     def get_supported_measurements(cls) -> Dict[str, Any]:
         """
@@ -261,6 +311,8 @@ class Constants:
                 for k, v in {**cls.VOLUME_MEASUREMENTS, **cls.WEIGHT_MEASUREMENTS}.items()
             }
         }
+
+
 
     @classmethod
     def get_all_constants(cls) -> Dict[str, Any]:

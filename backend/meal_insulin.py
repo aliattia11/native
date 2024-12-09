@@ -70,9 +70,7 @@ def get_meal_timing_factor(meal_type, time=None):
 
 
 def calculate_meal_nutrition(food_items):
-    """
-    Calculate total nutrition for all food items in the meal using dual measurement system
-    """
+    """Calculate total nutrition for all food items in the meal"""
     total_calories = 0
     total_carbs = 0
     total_protein = 0
@@ -90,13 +88,13 @@ def calculate_meal_nutrition(food_items):
         details = food_details['details']
 
         # Convert to standard units using Constants class methods
-        standard_amount = constants.convert_to_standard(portion, measurement)
+        standard_amount = constants.convert_to_standard(float(portion), measurement)
         if standard_amount is None:
             continue
 
         # Calculate ratio based on serving size
         base_amount = constants.convert_to_standard(
-            details['serving_size']['amount'],
+            float(details['serving_size']['amount']),
             details['serving_size']['unit']
         )
         if base_amount is None or base_amount == 0:
@@ -104,30 +102,29 @@ def calculate_meal_nutrition(food_items):
 
         ratio = standard_amount / base_amount
 
-        # Calculate nutrition values using the ratio
-        carbs = details.get('carbs', 0) * ratio
-        protein = details.get('protein', 0) * ratio
-        fat = details.get('fat', 0) * ratio
-
-        total_carbs += carbs
-        total_protein += protein
-        total_fat += fat
-        total_calories += (carbs * 4) + (protein * 4) + (fat * 9)
+        # Calculate nutrition values
+        total_carbs += details.get('carbs', 0) * ratio
+        total_protein += details.get('protein', 0) * ratio
+        total_fat += details.get('fat', 0) * ratio
+        total_calories += ((details.get('carbs', 0) * 4) +
+                           (details.get('protein', 0) * 4) +
+                           (details.get('fat', 0) * 9)) * ratio
         absorption_factors.append(details.get('absorption_type', 'medium'))
 
-    # Get absorption modifiers from constants
-    absorption_types = current_app.constants.get_constant('absorption_modifiers', {
+    # Calculate average absorption factor using get_constant with default values
+    default_absorption_modifiers = {
         'very_fast': 1.4,
         'fast': 1.2,
         'medium': 1.0,
         'slow': 0.8,
         'very_slow': 0.6
-    })
+    }
+    absorption_types = constants.get_constant('absorption_modifiers', default_absorption_modifiers)
 
     avg_absorption = 1.0
     if absorption_factors:
-        avg_absorption = sum(absorption_types.get(factor, 1.0) for factor in absorption_factors) / len(
-            absorption_factors)
+        avg_absorption = sum(absorption_types.get(factor, 1.0)
+                             for factor in absorption_factors) / len(absorption_factors)
 
     return {
         'calories': round(total_calories, 1),
@@ -136,7 +133,6 @@ def calculate_meal_nutrition(food_items):
         'fat': round(total_fat, 1),
         'absorption_factor': round(avg_absorption, 2)
     }
-
 
 def calculate_suggested_insulin(user_id, nutrition, activities, blood_glucose=None, meal_type='normal'):
     # Initialize Constants with patient ID
