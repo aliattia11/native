@@ -181,4 +181,3 @@ def update_patient_constants(current_user, patient_id):
     except Exception as e:
         logger.error(f"Error updating patient constants: {str(e)}")
         return jsonify({'message': 'Error updating patient constants'}), 500
-

@@ -1,5 +1,3 @@
-// frontend/src/components/Charts/BloodGlucoseAnalytics.js
-
 import React, { useState, useEffect } from 'react';
 import { Line } from 'react-chartjs-2';
 import axios from 'axios';
@@ -8,7 +6,7 @@ import './charts.css';
 
 const API_BASE_URL = 'http://localhost:5000';
 
-const BloodGlucoseAnalytics = ({ patientId, isDoctor = false }) => {
+const BloodGlucoseAnalytics = ({ patientId }) => {
   const [chartData, setChartData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -18,7 +16,6 @@ const BloodGlucoseAnalytics = ({ patientId, isDoctor = false }) => {
   useEffect(() => {
     fetchData();
   }, [patientId, dateRange]);
-
   const formatDateForAPI = (date) => {
     return date.toISOString().split('T')[0]; // Returns YYYY-MM-DD format
   };
@@ -59,39 +56,29 @@ const BloodGlucoseAnalytics = ({ patientId, isDoctor = false }) => {
       const formattedStartDate = formatDateForAPI(startDate);
       const formattedEndDate = formatDateForAPI(endDate);
 
-      // Modify base URL based on whether it's a doctor accessing patient data
-      let baseUrl = `${API_BASE_URL}/api/blood-sugar`;
-      if (isDoctor && patientId) {
-        baseUrl = `${API_BASE_URL}/api/doctor/patient/${patientId}/blood-sugar`;
-      }
-
       // Fetch blood glucose data
       const glucoseResponse = await axios.get(
-        baseUrl,
+        `${API_BASE_URL}/api/blood-sugar`,
         {
           headers,
           params: {
             start_date: formattedStartDate,
             end_date: formattedEndDate,
-            unit: 'mg/dL'
+            unit: 'mg/dL',
+            ...(patientId && { patient_id: patientId })
           }
         }
       );
 
-      // Similarly modify meal endpoint for doctor access
-      let mealUrl = `${API_BASE_URL}/api/meals`;
-      if (isDoctor && patientId) {
-        mealUrl = `${API_BASE_URL}/api/doctor/patient/${patientId}/meals`;
-      }
-
       // Fetch meal data
       const mealResponse = await axios.get(
-        mealUrl,
+        `${API_BASE_URL}/api/meals`,
         {
           headers,
           params: {
             start_date: formattedStartDate,
-            end_date: formattedEndDate
+            end_date: formattedEndDate,
+            ...(patientId && { patient_id: patientId })
           }
         }
       );
@@ -276,7 +263,6 @@ const BloodGlucoseAnalytics = ({ patientId, isDoctor = false }) => {
     return (
       <div className="chart-error">
         <p>Error: {error}</p>
-        <p>Debug Info: {patientId ? `Viewing patient ${patientId}` : 'No patient selected'}</p>
         <button onClick={fetchData} className="retry-button">
           Retry
         </button>
@@ -288,8 +274,6 @@ const BloodGlucoseAnalytics = ({ patientId, isDoctor = false }) => {
     return (
       <div className="chart-error">
         <p>No data available for the selected time range</p>
-        <p>Debug Info: {patientId ? `Viewing patient ${patientId}` : 'No patient selected'}</p>
-        <p>Time Range: {dateRange}</p>
       </div>
     );
   }
