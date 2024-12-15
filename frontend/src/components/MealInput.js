@@ -36,7 +36,7 @@ const ActivityItem = ({ index, item, updateItem, removeItem }) => (
 );
 
 const MealInput = () => {
-  const { patientConstants, loading, error, refreshConstants  } = useConstants();
+  const { patientConstants, loading, error, refreshConstants } = useConstants();
   const [mealType, setMealType] = useState('');
   const [selectedFoods, setSelectedFoods] = useState([]);
   const [activities, setActivities] = useState([{ level: 0, duration: 0 }]);
@@ -48,35 +48,6 @@ const MealInput = () => {
   const [notes, setNotes] = useState('');
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showMedicalFactors, setShowMedicalFactors] = useState(false);
-  const [activeMedicalFactors, setActiveMedicalFactors] = useState({
-  conditions: {},
-  medications: {}
-});
-useEffect(() => {
-  if (patientConstants) {
-    const activeConditions = {};
-    const activeMedications = {};
-
-    Object.entries(patientConstants.medical_condition_factors || {}).forEach(([id, condition]) => {
-      if (condition.active) {
-        activeConditions[id] = condition;
-      }
-    });
-
-    Object.entries(patientConstants.medication_factors || {}).forEach(([id, medication]) => {
-      if (medication.active) {
-        activeMedications[id] = medication;
-      }
-    });
-
-    setActiveMedicalFactors({
-      conditions: activeConditions,
-      medications: activeMedications
-    });
-  }
-}, [patientConstants]);
-
 
   // Refresh constants on mount and setup listener
   useEffect(() => {
@@ -93,41 +64,38 @@ useEffect(() => {
   }, [refreshConstants]);
 
   // Calculate insulin needs whenever relevant inputs change
- const calculateInsulinNeeds = useCallback(() => {
-  if (selectedFoods.length === 0 || !patientConstants) {
-    setSuggestedInsulin('');
-    setInsulinBreakdown(null);
-    return;
-  }
+  const calculateInsulinNeeds = useCallback(() => {
+    if (selectedFoods.length === 0 || !patientConstants) {
+      setSuggestedInsulin('');
+      setInsulinBreakdown(null);
+      return;
+    }
 
-  try {
-    const totalNutrition = calculateTotalNutrients(selectedFoods);
+    try {
+      const totalNutrition = calculateTotalNutrients(selectedFoods);
 
-    const insulinCalculation = calculateInsulinDose({
-      ...totalNutrition,
-      bloodSugar: parseFloat(bloodSugar) || 0,
-      activities,
-      patientConstants,
-      mealType,
-      medicalFactors: activeMedicalFactors
-    });
+      const insulinCalculation = calculateInsulinDose({
+        ...totalNutrition,
+        bloodSugar: parseFloat(bloodSugar) || 0,
+        activities,
+        patientConstants,
+        mealType
+      });
 
-    setSuggestedInsulin(insulinCalculation.total);
-    setInsulinBreakdown(insulinCalculation.breakdown);
-    setActivityImpact(insulinCalculation.breakdown.activityImpact || 0);
-  } catch (error) {
-    console.error('Error calculating insulin:', error);
-    setMessage('Error calculating insulin needs: ' + error.message);
-  }
-}, [selectedFoods, bloodSugar, activities, patientConstants, mealType, activeMedicalFactors]);
+      setSuggestedInsulin(insulinCalculation.total);
+      setInsulinBreakdown(insulinCalculation.breakdown);
+      setActivityImpact(insulinCalculation.breakdown.activityImpact || 0);
+    } catch (error) {
+      console.error('Error calculating insulin:', error);
+      setMessage('Error calculating insulin needs: ' + error.message);
+    }
+  }, [selectedFoods, bloodSugar, activities, patientConstants, mealType]);
 
   useEffect(() => {
     if (!loading && patientConstants && (selectedFoods.length > 0 || bloodSugar)) {
       calculateInsulinNeeds();
     }
   }, [selectedFoods, activities, bloodSugar, mealType, patientConstants, loading, calculateInsulinNeeds]);
-
-
 
   // Food handling functions
   const handleFoodSelect = useCallback((food) => {
@@ -175,35 +143,7 @@ useEffect(() => {
   const removeActivity = useCallback((index) => {
     setActivities(prev => prev.filter((_, i) => i !== index));
   }, []);
-useEffect(() => {
-  const handleConstantsUpdate = (event) => {
-    const { medicalFactors } = event.detail;
-    setActiveMedicalFactors(medicalFactors);
-  };
 
-  window.addEventListener('patientConstantsUpdated', handleConstantsUpdate);
-  return () => {
-    window.removeEventListener('patientConstantsUpdated', handleConstantsUpdate);
-  };
-}, []);
-const formatAdjustmentText = (factor) => {
-  if (factor === 1) return ' (no adjustment)';
-  const percentage = ((factor - 1) * 100).toFixed(1);
-  return factor > 1
-    ? ` (+${percentage}% increase)`
-    : ` (${percentage}% decrease)`;
-};
-
-// Helper function to calculate total adjustment
-const calculateTotalAdjustment = (breakdown) => {
-  const baseAdjustment =
-    breakdown.absorptionFactor *
-    breakdown.mealTimingFactor *
-    breakdown.timeOfDayFactor *
-    (1 + breakdown.activityImpact);
-
-  return baseAdjustment * (breakdown.medicalFactors?.total || 1);
-};
   // Form submission handler
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -252,24 +192,8 @@ const calculateTotalAdjustment = (breakdown) => {
         suggestedInsulin: suggestedInsulin ? parseFloat(suggestedInsulin) : null,
         notes,
         constants: patientConstants,
-        timestamp: new Date().toISOString(),
-         medical_factors: {
-    conditions: Object.entries(activeMedicalFactors.conditions)
-      .map(([id, condition]) => ({
-        id,
-        name: condition.name,
-        factor: condition.factor,
-        description: condition.description
-      })),
-    medications: Object.entries(activeMedicalFactors.medications)
-      .map(([id, medication]) => ({
-        id,
-        name: medication.name,
-        factor: medication.factor,
-        description: medication.description
-      }))
-  }
-};
+        timestamp: new Date().toISOString()
+      };
 
       await axios.post(
         'http://localhost:5000/api/meal',
@@ -319,14 +243,14 @@ const calculateTotalAdjustment = (breakdown) => {
         <div className={styles.formField}>
           <label htmlFor="mealType">Meal Type</label>
           <select
-              id="mealType"
-              value={mealType}
-              onChange={(e) => setMealType(e.target.value)}
-              required
+            id="mealType"
+            value={mealType}
+            onChange={(e) => setMealType(e.target.value)}
+            required
           >
             <option value="">Select type</option>
             {MEAL_TYPES.map(type => (
-                <option key={type.value} value={type.value}>{type.label}</option>
+              <option key={type.value} value={type.value}>{type.label}</option>
             ))}
           </select>
         </div>
@@ -334,139 +258,85 @@ const calculateTotalAdjustment = (breakdown) => {
         <div className={styles.formSection}>
           <h3 className={styles.subtitle}>Add Foods</h3>
           <FoodSection
-              selectedFoods={selectedFoods}
-              onFoodSelect={handleFoodSelect}
-              onUpdatePortion={updateFoodPortion}
-              onRemoveFood={removeFood}
+            selectedFoods={selectedFoods}
+            onFoodSelect={handleFoodSelect}
+            onUpdatePortion={updateFoodPortion}
+            onRemoveFood={removeFood}
           />
         </div>
 
         <div className={styles.activitySection}>
           <h3 className={styles.subtitle}>Activities</h3>
           {activities.map((activity, index) => (
-              <ActivityItem
-                  key={index}
-                  index={index}
-                  item={activity}
-                  updateItem={updateActivity}
-                  removeItem={removeActivity}
-                  activityCoefficients={patientConstants?.activity_coefficients}
-              />
+            <ActivityItem
+              key={index}
+              index={index}
+              item={activity}
+              updateItem={updateActivity}
+              removeItem={removeActivity}
+              activityCoefficients={patientConstants?.activity_coefficients}
+            />
           ))}
           <button
-              type="button"
-              onClick={addActivity}
-              className={styles.addButton}
+            type="button"
+            onClick={addActivity}
+            className={styles.addButton}
           >
-            <FaPlus/> Add Activity
+            <FaPlus /> Add Activity
           </button>
           {activityImpact !== 0 && (
-              <div className={styles.activityImpact}>
-                <p>Activity Impact: {(activityImpact * 100).toFixed(1)}% adjustment to insulin needs</p>
-              </div>
+            <div className={styles.activityImpact}>
+              <p>Activity Impact: {(activityImpact * 100).toFixed(1)}% adjustment to insulin needs</p>
+            </div>
           )}
         </div>
-        <div className={styles.medicalFactorsSection}>
-          <button
-              type="button"
-              onClick={() => setShowMedicalFactors(!showMedicalFactors)}
-              className={styles.medicalFactorsButton}
-          >
-            {showMedicalFactors ? 'Hide Disease/Medications' : 'Show Disease/Medications'}
-          </button>
 
-          {showMedicalFactors && (
-              <div className={styles.medicalFactorsContent}>
-                <div className={styles.diseaseSection}>
-                  <h4>Medical Conditions</h4>
-                  {Object.entries(patientConstants?.medical_condition_factors || {}).map(([key, condition]) => (
-                      <div key={key} className={styles.medicalItem}>
-                        <label>
-                          <input
-                              type="checkbox"
-                              checked={condition.active || false}
-                              disabled
-                          />
-                          {condition.name}
-                          {condition.active && (
-                              <span className={styles.factorInfo}>
-                  (Factor: {condition.factor}x - {condition.description})
-                </span>
-                          )}
-                        </label>
-                      </div>
-                  ))}
-                </div>
-
-                <div className={styles.medicationSection}>
-                  <h4>Medications</h4>
-                  {Object.entries(patientConstants?.medication_factors || {}).map(([key, medication]) => (
-                      <div key={key} className={styles.medicalItem}>
-                        <label>
-                          <input
-                              type="checkbox"
-                              checked={medication.active || false}
-                              disabled
-                          />
-                          {medication.name}
-                          {medication.active && (
-                              <span className={styles.factorInfo}>
-                  (Factor: {medication.factor}x - {medication.description})
-                </span>
-                          )}
-                        </label>
-                      </div>
-                  ))}
-                </div>
-              </div>
-          )}
-        </div>
         <div className={styles.measurementSection}>
           <div className={styles.formField}>
             <label htmlFor="bloodSugar">Blood Sugar Level (mg/dL)</label>
             <input
-                id="bloodSugar"
-                type="number"
-                min="0"
-                max="1000"
-                value={bloodSugar}
-                onChange={(e) => setBloodSugar(e.target.value)}
-                placeholder="Enter blood sugar level"
-                required
+              id="bloodSugar"
+              type="number"
+              min="0"
+              max="1000"
+              value={bloodSugar}
+              onChange={(e) => setBloodSugar(e.target.value)}
+              placeholder="Enter blood sugar level"
+              required
             />
           </div>
 
           <div className={styles.formField}>
             <label htmlFor="intendedInsulin">Intended Insulin Intake (units)</label>
             <input
-                id="intendedInsulin"
-                type="number"
-                min="0"
-                step="0.1"
-                value={intendedInsulin}
-                onChange={(e) => setIntendedInsulin(e.target.value)}
-                placeholder="Enter intended insulin intake"
-                required
+              id="intendedInsulin"
+              type="number"
+              min="0"
+              step="0.1"
+              value={intendedInsulin}
+              onChange={(e) => setIntendedInsulin(e.target.value)}
+              placeholder="Enter intended insulin intake"
+              required
             />
           </div>
 
           <div className={`${styles.formField} ${styles.readOnlyField}`}>
             <label htmlFor="suggestedInsulin">Suggested Insulin Intake (units)</label>
             <input
-                id="suggestedInsulin"
-                type="number"
-                value={suggestedInsulin}
-                readOnly
-                placeholder="Calculated based on meal and activities"
+              id="suggestedInsulin"
+              type="number"
+              value={suggestedInsulin}
+              readOnly
+              placeholder="Calculated based on meal and activities"
             />
           </div>
         </div>
 
- {selectedFoods.length > 0 && insulinBreakdown && (
+{selectedFoods.length > 0 && insulinBreakdown && (
   <div className={styles.insulinBreakdown}>
     <h4>Insulin Calculation Breakdown</h4>
     <ul>
-      {/* Base Units Section */}
+      {/* Units Section */}
       <li className={styles.breakdownSection}>
         <strong>Base Units:</strong>
       </li>
@@ -488,118 +358,83 @@ const calculateTotalAdjustment = (breakdown) => {
         <strong>Adjustment Factors:</strong>
       </li>
       <li>• Absorption rate: {((insulinBreakdown.absorptionFactor - 1) * 100).toFixed(1)}%
-        {formatAdjustmentText(insulinBreakdown.absorptionFactor)}
+        {insulinBreakdown.absorptionFactor > 1
+          ? ` (+${((insulinBreakdown.absorptionFactor - 1) * 100).toFixed(1)}% increase)`
+          : insulinBreakdown.absorptionFactor < 1
+          ? ` (${((insulinBreakdown.absorptionFactor - 1) * 100).toFixed(1)}% decrease)`
+          : ' (no adjustment)'}
       </li>
       <li>• Meal timing: {((insulinBreakdown.mealTimingFactor - 1) * 100).toFixed(1)}%
-        {formatAdjustmentText(insulinBreakdown.mealTimingFactor)}
+        {insulinBreakdown.mealTimingFactor > 1
+          ? ` (+${((insulinBreakdown.mealTimingFactor - 1) * 100).toFixed(1)}% increase)`
+          : insulinBreakdown.mealTimingFactor < 1
+          ? ` (${((insulinBreakdown.mealTimingFactor - 1) * 100).toFixed(1)}% decrease)`
+          : ' (no adjustment)'}
       </li>
       <li>• Time of day: {((insulinBreakdown.timeOfDayFactor - 1) * 100).toFixed(1)}%
-        {formatAdjustmentText(insulinBreakdown.timeOfDayFactor)}
+        {insulinBreakdown.timeOfDayFactor > 1
+          ? ` (+${((insulinBreakdown.timeOfDayFactor - 1) * 100).toFixed(1)}% increase)`
+          : insulinBreakdown.timeOfDayFactor < 1
+          ? ` (${((insulinBreakdown.timeOfDayFactor - 1) * 100).toFixed(1)}% decrease)`
+          : ' (no adjustment)'}
       </li>
       <li>• Activity impact: {(insulinBreakdown.activityImpact * 100).toFixed(1)}%
-        {formatAdjustmentText(1 + insulinBreakdown.activityImpact)}
+        {insulinBreakdown.activityImpact > 0
+          ? ` (+${(insulinBreakdown.activityImpact * 100).toFixed(1)}% increase)`
+          : insulinBreakdown.activityImpact < 0
+          ? ` (${(insulinBreakdown.activityImpact * 100).toFixed(1)}% decrease)`
+          : ' (no adjustment)'}
       </li>
-
-      {/* Medical Factors Section */}
-      {insulinBreakdown.medicalFactors && (
-        <>
-          <li className={styles.breakdownSection}>
-            <strong>Medical Factors:</strong>
-          </li>
-
-          {/* Medical Conditions */}
-          {Object.entries(insulinBreakdown.medicalFactors.conditions || {}).length > 0 && (
-            <>
-              <li className={styles.subBreakdownSection}>Medical Conditions:</li>
-              {Object.entries(insulinBreakdown.medicalFactors.conditions).map(([name, factor]) => (
-                <li key={name}>
-                  • {name}: {((factor - 1) * 100).toFixed(1)}%
-                  {formatAdjustmentText(factor)}
-                </li>
-              ))}
-            </>
-          )}
-
-          {/* Medications */}
-          {Object.entries(insulinBreakdown.medicalFactors.medications || {}).length > 0 && (
-            <>
-              <li className={styles.subBreakdownSection}>Medications:</li>
-              {Object.entries(insulinBreakdown.medicalFactors.medications).map(([name, factor]) => (
-                <li key={name}>
-                  • {name}: {((factor - 1) * 100).toFixed(1)}%
-                  {formatAdjustmentText(factor)}
-                </li>
-              ))}
-            </>
-          )}
-
-          {/* Total Medical Impact */}
-          <li className={styles.summaryLine}>
-            <strong>Total Medical Impact: {((insulinBreakdown.medicalFactors.total - 1) * 100).toFixed(1)}%
-              {formatAdjustmentText(insulinBreakdown.medicalFactors.total)}
-            </strong>
-          </li>
-        </>
-      )}
-
-      {/* Final Summary */}
-      <li className={styles.finalSummary}>
-        <strong>Final Adjustments:</strong>
-      </li>
-      <li>• Total Base Units: {(
-        Number(insulinBreakdown.carbInsulin) +
-        Number(insulinBreakdown.proteinContribution) +
-        Number(insulinBreakdown.fatContribution) +
-        Number(insulinBreakdown.correctionInsulin)
-      ).toFixed(2)} units</li>
-      <li>• Total Adjustment Factor: {calculateTotalAdjustment(insulinBreakdown).toFixed(2)}x</li>
-      <li className={styles.finalTotal}>
-        <strong>Final Insulin Dose: {suggestedInsulin} units</strong>
+      <li className={styles.summaryLine}>
+        <strong>Net Adjustment: {(
+          ((insulinBreakdown.absorptionFactor - 1) * 100) +
+          ((insulinBreakdown.mealTimingFactor - 1) * 100) +
+          ((insulinBreakdown.timeOfDayFactor - 1) * 100) +
+          (insulinBreakdown.activityImpact * 100)
+        ).toFixed(1)}%</strong>
       </li>
     </ul>
   </div>
 )}
-
-
         {selectedFoods.length > 0 && patientConstants && (
-            <div className={styles.timingGuidelines}>
-              <h4>Insulin Timing Guidelines</h4>
-              {selectedFoods.map(food => {
-                const absorptionType = food.details.absorption_type || 'medium';
-                const guideline = patientConstants.insulin_timing_guidelines[absorptionType];
-                return (
-                    <p key={food.id}>
-                      {food.name}: {guideline?.description || 'Take insulin as usual'}
-                    </p>
-                );
-              })}
-            </div>
+          <div className={styles.timingGuidelines}>
+            <h4>Insulin Timing Guidelines</h4>
+            {selectedFoods.map(food => {
+              const absorptionType = food.details.absorption_type || 'medium';
+              const guideline = patientConstants.insulin_timing_guidelines[absorptionType];
+              return (
+                <p key={food.id}>
+                  {food.name}: {guideline?.description || 'Take insulin as usual'}
+                </p>
+              );
+            })}
+          </div>
         )}
 
         <div className={styles.notesSection}>
           <div className={styles.formField}>
             <label>Notes</label>
             <textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Enter any additional notes"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Enter any additional notes"
             />
           </div>
         </div>
 
-        <button
-            className={styles.submitButton}
-            type="submit"
-            disabled={loading || !patientConstants || isSubmitting}
-        >
-          {isSubmitting ? 'Submitting...' : 'Log Meal'}
-        </button>
+<button
+  className={styles.submitButton}
+  type="submit"
+  disabled={loading || !patientConstants || isSubmitting}
+>
+  {isSubmitting ? 'Submitting...' : 'Log Meal'}
+</button>
       </form>
 
       {message && (
           <div className={`${styles.message} ${message.includes('Error') ? styles.error : styles.success}`}>
-            {message}
-          </div>
+          {message}
+        </div>
       )}
     </div>
   );

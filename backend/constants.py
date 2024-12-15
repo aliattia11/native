@@ -65,37 +65,6 @@ class ConstantConfig:
         }
     })
 
-
-medical_condition_factors: Dict[str, Dict[str, Any]] = field(default_factory=lambda: {
-    'default': {
-        'name': 'No Medical Conditions',
-        'factor': 1.0,
-        'description': 'No adjustment needed'
-    }
-})
-
-medication_factors: Dict[str, Dict[str, Any]] = field(default_factory=lambda: {
-    'default': {
-        'name': 'No Medications',
-        'factor': 1.0,
-        'description': 'No adjustment needed'
-    }
-})
-medical_condition_factors: Dict[str, Dict[str, Any]] = field(default_factory=lambda: {
-    'default': {
-        'name': 'No Medical Conditions',
-        'factor': 1.0,
-        'description': 'No adjustment needed'
-    }
-})
-
-medication_factors: Dict[str, Dict[str, Any]] = field(default_factory=lambda: {
-    'default': {
-        'name': 'No Medications',
-        'factor': 1.0,
-        'description': 'No adjustment needed'
-    }
-})
 class Constants:
     """Enhanced constants management with dataclass support"""
 
@@ -214,52 +183,8 @@ class Constants:
                 'factor': 0.9,
                 'description': 'Late night adjustment'
             }
-        },'medical_condition_factors': {
-        'default': {
-            'name': 'No Medical Conditions',
-            'factor': 1.0,
-            'description': 'No adjustment needed'
-        },
-        'infection': {
-            'name': 'Active Infection',
-            'factor': 1.3,
-            'description': 'Increased insulin resistance due to infection'
-        },
-        'thyroid_high': {
-            'name': 'Hyperthyroidism',
-            'factor': 0.8,
-            'description': 'Decreased insulin requirements'
-        },
-        'thyroid_low': {
-            'name': 'Hypothyroidism',
-            'factor': 1.2,
-            'description': 'Increased insulin requirements'
-        }
-    },
-    'medication_factors': {
-        'default': {
-            'name': 'No Medications',
-            'factor': 1.0,
-            'description': 'No adjustment needed'
-        },
-        'steroids': {
-            'name': 'Corticosteroids',
-            'factor': 1.4,
-            'description': 'Significant increase in insulin resistance'
-        },
-        'metformin': {
-            'name': 'Metformin',
-            'factor': 0.9,
-            'description': 'Slight decrease in insulin requirements'
-        },
-        'thiazolidinediones': {
-            'name': 'Thiazolidinediones',
-            'factor': 0.85,
-            'description': 'Moderate decrease in insulin requirements'
         }
     }
-}
-
 
     def __init__(self, patient_id: Optional[str] = None):
         """Initialize constants with optional patient-specific overrides"""
@@ -368,9 +293,7 @@ class Constants:
                         'fat_factor': patient.get('fat_factor'),
                         'activity_coefficients': patient.get('activity_coefficients'),
                         'absorption_modifiers': patient.get('absorption_modifiers'),
-                        'insulin_timing_guidelines': patient.get('insulin_timing_guidelines'),
-                        'medical_condition_factors': patient.get('medical_condition_factors'),
-                        'medication_factors': patient.get('medication_factors')
+                        'insulin_timing_guidelines': patient.get('insulin_timing_guidelines')
                     }
 
                 # Remove None values
@@ -480,9 +403,7 @@ class Constants:
             'FOOD_CATEGORIES': cls.FOOD_CATEGORIES,
             'DEFAULT_PATIENT_CONSTANTS': cls.DEFAULT_PATIENT_CONSTANTS,
             'MEAL_TIMING_FACTORS': cls.DEFAULT_PATIENT_CONSTANTS['meal_timing_factors'],
-            'TIME_OF_DAY_FACTORS': cls.DEFAULT_PATIENT_CONSTANTS['time_of_day_factors'],
-            'MEDICAL_CONDITION_FACTORS': cls.DEFAULT_PATIENT_CONSTANTS['medical_condition_factors'],
-            'MEDICATION_FACTORS': cls.DEFAULT_PATIENT_CONSTANTS['medication_factors']
+            'TIME_OF_DAY_FACTORS': cls.DEFAULT_PATIENT_CONSTANTS['time_of_day_factors']
         }
 
     @classmethod
@@ -497,11 +418,9 @@ class Constants:
             'DEFAULT_PATIENT_CONSTANTS': cls.DEFAULT_PATIENT_CONSTANTS,
             'ACTIVITY_LEVELS': cls.ACTIVITY_LEVELS,
             'MEAL_TYPES': cls.MEAL_TYPES,
-            'FOOD_CATEGORIES': cls.FOOD_CATEGORIES,
-            'MEAL_TIMING_FACTORS': cls.DEFAULT_PATIENT_CONSTANTS['meal_timing_factors'],
-            'TIME_OF_DAY_FACTORS': cls.DEFAULT_PATIENT_CONSTANTS['time_of_day_factors'],
-            'MEDICAL_CONDITION_FACTORS': cls.DEFAULT_PATIENT_CONSTANTS['medical_condition_factors'],
-            'MEDICATION_FACTORS': cls.DEFAULT_PATIENT_CONSTANTS['medication_factors'],
+            'FOOD_CATEGORIES': cls.FOOD_CATEGORIES,  # Use class constant
+            'MEAL_TIMING_FACTORS': cls.DEFAULT_PATIENT_CONSTANTS['meal_timing_factors'],  # Use class constant
+            'TIME_OF_DAY_FACTORS': cls.DEFAULT_PATIENT_CONSTANTS['time_of_day_factors'],  # Use class constant
 
             # Conversion Utilities
             'CONVERSION_UTILS': {
@@ -550,27 +469,6 @@ class Constants:
           // Utility Functions
           export const convertToGrams = {constants['CONVERSION_UTILS']['convertToGrams']};
           export const convertToMl = {constants['CONVERSION_UTILS']['convertToMl']};
-
-          // Medical Factor Utilities
-          export const calculateMedicalFactors = (conditions, medications) => {{
-            let totalFactor = 1.0;
-
-            // Calculate condition factors
-            Object.values(conditions).forEach(condition => {{
-              if (condition.active) {{
-                totalFactor *= condition.factor;
-              }}
-            }});
-
-            // Calculate medication factors
-            Object.values(medications).forEach(medication => {{
-              if (medication.active) {{
-                totalFactor *= medication.factor;
-              }}
-            }});
-
-            return totalFactor;
-          }};
           """
 
         frontend_path = Path(output_path)
