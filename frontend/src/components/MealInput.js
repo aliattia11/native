@@ -5,24 +5,19 @@ import { FaPlus, FaMinus } from 'react-icons/fa';
 import DurationInput from './DurationInput';
 import FoodSection from './FoodSection';
 import { calculateTotalNutrients, calculateInsulinDose } from './EnhancedPatientConstantsCalc';
-import { MEAL_TYPES } from '../constants';
+import { MEAL_TYPES, ACTIVITY_LEVELS, SHARED_CONSTANTS } from '../constants';
 import styles from './MealInput.module.css';
 
-const ActivityItem = ({ index, item, updateItem, removeItem, activityCoefficients }) => (
+// Update ActivityItem to use ACTIVITY_LEVELS from shared constants
+const ActivityItem = ({ index, item, updateItem, removeItem }) => (
   <div className={styles.activityItem}>
     <select
       value={item.level}
       onChange={(e) => updateItem(index, { ...item, level: parseInt(e.target.value) })}
       required
     >
-      {Object.entries(activityCoefficients || {}).map(([value, _]) => (
-        <option key={value} value={value}>
-          {value === "-2" ? "Sleep" :
-           value === "-1" ? "Very Low Activity" :
-           value === "0" ? "Normal Activity" :
-           value === "1" ? "High Activity" :
-           "Vigorous Activity"}
-        </option>
+      {ACTIVITY_LEVELS.map(({ value, label }) => (
+        <option key={value} value={value}>{label}</option>
       ))}
     </select>
     <DurationInput

@@ -1,16 +1,31 @@
+// EnhancedPatientConstantsCalc.js
+// EnhancedPatientConstantsCalc.js
 import {
+  SHARED_CONSTANTS,
   MEASUREMENT_SYSTEMS,
   VOLUME_MEASUREMENTS,
-  WEIGHT_MEASUREMENTS,
-  ACTIVITY_LEVELS,
-  MEAL_TYPES
+  WEIGHT_MEASUREMENTS
 } from '../constants';
 
-
-// Calculation functions
+// Use shared utility functions if available, otherwise fall back to local implementation
 export const convertToGrams = (amount, unit) => {
+  if (SHARED_CONSTANTS.convertToGrams) {
+    return SHARED_CONSTANTS.convertToGrams(amount, unit);
+  }
+
   if (WEIGHT_MEASUREMENTS[unit]) {
     return amount * WEIGHT_MEASUREMENTS[unit].grams;
+  }
+  return amount;
+};
+
+export const convertToMl = (amount, unit) => {
+  if (SHARED_CONSTANTS.convertToMl) {
+    return SHARED_CONSTANTS.convertToMl(amount, unit);
+  }
+
+  if (VOLUME_MEASUREMENTS[unit]) {
+    return amount * VOLUME_MEASUREMENTS[unit].ml;
   }
   return amount;
 };
@@ -28,17 +43,12 @@ export const calculateNutrients = (food) => {
     );
     conversionRatio = portionInGrams / servingSizeInGrams;
   } else {
-    const portionUnit = food.portion.unit;
-    const servingUnit = food.details.serving_size?.unit || 'serving';
-
-    if (portionUnit === 'serving' || servingUnit === 'serving') {
-      conversionRatio = food.portion.amount / (food.details.serving_size?.amount || 1);
-    } else if (VOLUME_MEASUREMENTS[portionUnit] && VOLUME_MEASUREMENTS[servingUnit]) {
-      const portionInMl = food.portion.amount * VOLUME_MEASUREMENTS[portionUnit].ml;
-      const servingInMl = (food.details.serving_size?.amount || 1) *
-        VOLUME_MEASUREMENTS[servingUnit].ml;
-      conversionRatio = portionInMl / servingInMl;
-    }
+    const portionInMl = convertToMl(food.portion.amount, food.portion.unit);
+    const servingSizeInMl = convertToMl(
+      food.details.serving_size?.amount || 1,
+      food.details.serving_size?.unit || 'serving'
+    );
+    conversionRatio = portionInMl / servingSizeInMl;
   }
 
   return {
@@ -48,7 +58,6 @@ export const calculateNutrients = (food) => {
     absorptionType: food.details.absorption_type || 'medium'
   };
 };
-
 export const calculateTotalNutrients = (selectedFoods) => {
   return selectedFoods.reduce((acc, food) => {
     const nutrients = calculateNutrients(food);
@@ -61,18 +70,6 @@ export const calculateTotalNutrients = (selectedFoods) => {
   }, { carbs: 0, protein: 0, fat: 0, absorptionType: 'medium' });
 };
 
-export const calculateActivityImpact = (activities, patientConstants) => {
-  if (!activities || !patientConstants?.activity_coefficients) return 0;
-
-  return activities.reduce((total, activity) => {
-    const coefficient = patientConstants.activity_coefficients[activity.level] || 0;
-    const duration = typeof activity.duration === 'string'
-      ? parseFloat(activity.duration.split(':')[0]) + (parseFloat(activity.duration.split(':')[1]) || 0) / 60
-      : activity.duration;
-    const durationFactor = Math.min(duration / 2, 1);
-    return total + (coefficient * durationFactor);
-  }, 0);
-};
 
 export const calculateInsulinDose = ({
   carbs,
@@ -81,6 +78,7 @@ export const calculateInsulinDose = ({
   bloodSugar,
   activities,
   patientConstants,
+  mealType,
   absorptionType = 'medium'
 }) => {
   if (!patientConstants) {
@@ -97,8 +95,17 @@ export const calculateInsulinDose = ({
   // Get absorption factor based on food type
   const absorptionFactor = patientConstants.absorption_modifiers[absorptionType] || 1.0;
 
-  // Calculate base insulin with absorption factor
-  const baseInsulin = (carbInsulin + proteinContribution + fatContribution) * absorptionFactor;
+  // Apply meal timing factor if available
+  const mealTimingFactor = mealType && patientConstants.meal_timing_factors?.[mealType] || 1.0;
+
+  // Get time-based factor
+  const hour = new Date().getHours();
+  const timeOfDayFactor = Object.values(patientConstants.time_of_day_factors || {})
+    .find(factor => hour >= factor.hours[0] && hour < factor.hours[1])?.factor || 1.0;
+
+  // Calculate base insulin with all factors
+  const baseInsulin = (carbInsulin + proteinContribution + fatContribution) *
+    absorptionFactor * mealTimingFactor * timeOfDayFactor;
 
   // Calculate activity impact and apply to base insulin
   const activityImpact = calculateActivityImpact(activities, patientConstants);
@@ -122,7 +129,22 @@ export const calculateInsulinDose = ({
       fatContribution: Math.round(fatContribution * 100) / 100,
       correctionInsulin: Math.round(correctionInsulin * 100) / 100,
       activityImpact: Math.round(activityImpact * 100) / 100,
-      absorptionFactor
+      absorptionFactor,
+      mealTimingFactor,
+      timeOfDayFactor
     }
   };
+};
+
+export const calculateActivityImpact = (activities, patientConstants) => {
+  if (!activities || !patientConstants?.activity_coefficients) return 0;
+
+  return activities.reduce((total, activity) => {
+    const coefficient = patientConstants.activity_coefficients[activity.level.toString()] || 0;
+    const duration = typeof activity.duration === 'string'
+      ? parseFloat(activity.duration.split(':')[0]) + (parseFloat(activity.duration.split(':')[1]) || 0) / 60
+      : activity.duration;
+    const durationFactor = Math.min(duration / 2, 1);
+    return total + (coefficient * durationFactor);
+  }, 0);
 };

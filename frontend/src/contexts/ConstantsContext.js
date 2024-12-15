@@ -11,6 +11,10 @@ export function ConstantsProvider({ children }) {
 
   const fetchPatientConstants = async () => {
     const token = localStorage.getItem('token');
+    if (!token) {
+      throw new Error('No authentication token found');
+    }
+
     try {
       const response = await axios.get('http://localhost:5000/api/patient/constants', {
         headers: {
@@ -18,7 +22,19 @@ export function ConstantsProvider({ children }) {
           'Content-Type': 'application/json'
         }
       });
-      return response.data.constants || DEFAULT_PATIENT_CONSTANTS;
+
+      // Validate the response data
+      const constants = response.data.constants;
+      if (!constants) {
+        console.warn('No constants received from server, using defaults');
+        return DEFAULT_PATIENT_CONSTANTS;
+      }
+
+      // Merge with defaults to ensure all required fields exist
+      return {
+        ...DEFAULT_PATIENT_CONSTANTS,
+        ...constants
+      };
     } catch (error) {
       console.error('Error fetching patient constants:', error);
       throw new Error('Failed to fetch patient constants');

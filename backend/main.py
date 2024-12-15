@@ -3,7 +3,7 @@ from flask import Flask
 import logging
 from config import create_app_config, mongo
 from constants import Constants
-
+from pathlib import Path
 
 def create_app():
     # Create Flask app
