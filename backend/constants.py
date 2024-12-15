@@ -4,6 +4,8 @@ import json
 from bson import ObjectId
 import dataclasses
 from dataclasses import dataclass, asdict, field
+import json
+from pathlib import Path
 
 @dataclass
 class ConstantConfig:
@@ -405,7 +407,7 @@ class Constants:
         }
 
     @classmethod
-    def export_constants_to_frontend(cls, output_path: str = '../frontend/src/constants/shared_constants.js') -> None:
+    def export_constants_to_frontend(cls, output_path: str = '../frontend/src/constants/shared_constants.js'):
         """
         Enhanced export of constants to JavaScript, ensuring comprehensive coverage
         """
@@ -413,7 +415,7 @@ class Constants:
             'MEASUREMENT_SYSTEMS': cls.MEASUREMENT_SYSTEMS,
             'VOLUME_MEASUREMENTS': cls.VOLUME_MEASUREMENTS,
             'WEIGHT_MEASUREMENTS': cls.WEIGHT_MEASUREMENTS,
-            'DEFAULT_PATIENT_CONSTANTS': asdict(ConstantConfig()),
+            'DEFAULT_PATIENT_CONSTANTS': cls.DEFAULT_PATIENT_CONSTANTS,
             'ACTIVITY_LEVELS': cls.ACTIVITY_LEVELS,
             'MEAL_TYPES': cls.MEAL_TYPES,
             'FOOD_CATEGORIES': cls.FOOD_CATEGORIES,  # Use class constant
@@ -423,18 +425,19 @@ class Constants:
             # Conversion Utilities
             'CONVERSION_UTILS': {
                 'convertToGrams': '''
-         function convertToGrams(amount, unit) {
-             const volumeMeasurements = SHARED_CONSTANTS.VOLUME_MEASUREMENTS;
-             const weightMeasurements = SHARED_CONSTANTS.WEIGHT_MEASUREMENTS;
+          function convertToGrams(amount, unit) {
+              const volumeMeasurements = SHARED_CONSTANTS.VOLUME_MEASUREMENTS;
+              const weightMeasurements = SHARED_CONSTANTS.WEIGHT_MEASUREMENTS;
 
-             if (weightMeasurements[unit]) {
-                 return amount * weightMeasurements[unit].grams;
-             }
+              if (weightMeasurements[unit]) {
+                  return amount * weightMeasurements[unit].grams;
+              }
 
-             if (volumeMeasurements[unit]) {
-                 // For volume, use a default density of 1g/ml for simplicity
-                 return amount * volumeMeasurements[unit].ml;
-             }
+              if (volumeMeasurements[unit]) {
+                  // For volume, use a default density of 1g/ml for simplicity
+                  return amount * volumeMeasurements[unit].ml;
+              }
+
               // If unit is not found, return the original amount
               return amount;
           }
