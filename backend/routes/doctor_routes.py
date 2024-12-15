@@ -181,3 +181,37 @@ def update_patient_constants(current_user, patient_id):
     except Exception as e:
         logger.error(f"Error updating patient constants: {str(e)}")
         return jsonify({'message': 'Error updating patient constants'}), 500
+
+
+@doctor_routes.route('/api/doctor/patient/<patient_id>/medical-factors', methods=['PUT'])
+@token_required
+@api_error_handler
+def update_patient_medical_factors(current_user, patient_id):
+    if current_user.get('user_type') != 'doctor':
+        return jsonify({'message': 'Unauthorized access'}), 403
+
+    try:
+        data = request.json
+        factors = data.get('factors', {})
+
+        update_data = {
+            'medical_condition_factors': factors.get('conditions', {}),
+            'medication_factors': factors.get('medications', {})
+        }
+
+        result = mongo.db.users.update_one(
+            {"_id": ObjectId(patient_id)},
+            {"$set": update_data}
+        )
+
+        if result.matched_count == 0:
+            return jsonify({'message': 'Patient not found'}), 404
+
+        return jsonify({
+            'success': True,
+            'message': 'Medical factors updated successfully'
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error updating medical factors: {str(e)}")
+        return jsonify({'message': 'Error updating medical factors'}), 500

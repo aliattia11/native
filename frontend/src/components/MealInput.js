@@ -49,6 +49,33 @@ const MealInput = () => {
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showMedicalFactors, setShowMedicalFactors] = useState(false);
+const [activeMedicalFactors, setActiveMedicalFactors] = useState({
+  conditions: {},
+  medications: {}
+});
+useEffect(() => {
+  if (patientConstants) {
+    const activeConditions = {};
+    const activeMedications = {};
+
+    Object.entries(patientConstants.medical_condition_factors || {}).forEach(([id, condition]) => {
+      if (condition.active) {
+        activeConditions[id] = condition;
+      }
+    });
+
+    Object.entries(patientConstants.medication_factors || {}).forEach(([id, medication]) => {
+      if (medication.active) {
+        activeMedications[id] = medication;
+      }
+    });
+
+    setActiveMedicalFactors({
+      conditions: activeConditions,
+      medications: activeMedications
+    });
+  }
+}, [patientConstants]);
 
 
   // Refresh constants on mount and setup listener
@@ -194,8 +221,24 @@ const MealInput = () => {
         suggestedInsulin: suggestedInsulin ? parseFloat(suggestedInsulin) : null,
         notes,
         constants: patientConstants,
-        timestamp: new Date().toISOString()
-      };
+        timestamp: new Date().toISOString(),
+         medical_factors: {
+    conditions: Object.entries(activeMedicalFactors.conditions)
+      .map(([id, condition]) => ({
+        id,
+        name: condition.name,
+        factor: condition.factor,
+        description: condition.description
+      })),
+    medications: Object.entries(activeMedicalFactors.medications)
+      .map(([id, medication]) => ({
+        id,
+        name: medication.name,
+        factor: medication.factor,
+        description: medication.description
+      }))
+  }
+};
 
       await axios.post(
         'http://localhost:5000/api/meal',
