@@ -34,6 +34,36 @@ class ConstantConfig:
         'fast': {'timing_minutes': 15, 'description': 'Take insulin 15 minutes before meal'},
         'very_fast': {'timing_minutes': 20, 'description': 'Take insulin 20 minutes before meal'}
     })
+    # Add timing-related constants
+    meal_timing_factors: Dict[str, float] = field(default_factory=lambda: {
+        'breakfast': 1.2,  # Higher insulin resistance in morning
+        'lunch': 1.0,
+        'dinner': 0.9,  # Better insulin sensitivity in evening
+        'snack': 1.0  # Default factor for snacks
+    })
+
+    time_of_day_factors: Dict[str, Dict[str, Any]] = field(default_factory=lambda: {
+        'early_morning': {
+            'hours': (0, 6),
+            'factor': 1.1,
+            'description': 'Very early morning adjustment'
+        },
+        'morning': {
+            'hours': (6, 10),
+            'factor': 1.2,
+            'description': 'Morning insulin resistance period'
+        },
+        'daytime': {
+            'hours': (10, 22),
+            'factor': 1.0,
+            'description': 'Standard daytime period'
+        },
+        'late_night': {
+            'hours': (22, 24),
+            'factor': 0.9,
+            'description': 'Late night adjustment'
+        }
+    })
 
 
 class Constants:
@@ -312,20 +342,20 @@ class Constants:
             }
         }
 
-
-
     @classmethod
     def get_all_constants(cls) -> Dict[str, Any]:
         """Get all base constants in a format suitable for frontend export"""
+        config = ConstantConfig()
         return {
             'MEASUREMENT_SYSTEMS': cls.MEASUREMENT_SYSTEMS,
             'VOLUME_MEASUREMENTS': cls.VOLUME_MEASUREMENTS,
             'WEIGHT_MEASUREMENTS': cls.WEIGHT_MEASUREMENTS,
             'ACTIVITY_LEVELS': cls.ACTIVITY_LEVELS,
             'MEAL_TYPES': cls.MEAL_TYPES,
-            'DEFAULT_PATIENT_CONSTANTS': cls.DEFAULT_PATIENT_CONSTANTS
+            'DEFAULT_PATIENT_CONSTANTS': cls.DEFAULT_PATIENT_CONSTANTS,
+            'MEAL_TIMING_FACTORS': asdict(config)['meal_timing_factors'],
+            'TIME_OF_DAY_FACTORS': asdict(config)['time_of_day_factors']
         }
-
     @classmethod
     def export_constants_to_frontend(cls, output_path: str = '../frontend/src/constants/shared_constants.js') -> None:
         """

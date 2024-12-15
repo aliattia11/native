@@ -6,16 +6,16 @@ import './charts.css';
 
 const API_BASE_URL = 'http://localhost:5000';
 
-const BloodGlucoseAnalytics = ({ patientId }) => {
+const BloodGlucoseAnalytics = ({ patientId, isDoctor }) => {
   const [chartData, setChartData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [dateRange, setDateRange] = useState('week');
   const [targetRange] = useState({ min: 70, max: 180 }); // Standard target range
 
-  useEffect(() => {
-    fetchData();
-  }, [patientId, dateRange]);
+useEffect(() => {
+  fetchData();
+}, [patientId, dateRange, isDoctor]);
   const formatDateForAPI = (date) => {
     return date.toISOString().split('T')[0]; // Returns YYYY-MM-DD format
   };
@@ -57,31 +57,35 @@ const BloodGlucoseAnalytics = ({ patientId }) => {
       const formattedEndDate = formatDateForAPI(endDate);
 
       // Fetch blood glucose data
-      const glucoseResponse = await axios.get(
-        `${API_BASE_URL}/api/blood-sugar`,
-        {
-          headers,
-          params: {
-            start_date: formattedStartDate,
-            end_date: formattedEndDate,
-            unit: 'mg/dL',
-            ...(patientId && { patient_id: patientId })
-          }
-        }
-      );
+     const glucoseResponse = await axios.get(
+  isDoctor
+    ? `${API_BASE_URL}/doctor/patient/${patientId}/blood-sugar`
+    : `${API_BASE_URL}/api/blood-sugar`,
+  {
+    headers,
+    params: {
+      start_date: formattedStartDate,
+      end_date: formattedEndDate,
+      unit: 'mg/dL',
+      ...(patientId && !isDoctor && { patient_id: patientId })
+    }
+  }
+);
 
-      // Fetch meal data
-      const mealResponse = await axios.get(
-        `${API_BASE_URL}/api/meals`,
-        {
-          headers,
-          params: {
-            start_date: formattedStartDate,
-            end_date: formattedEndDate,
-            ...(patientId && { patient_id: patientId })
-          }
-        }
-      );
+// Fetch meal data
+const mealResponse = await axios.get(
+  isDoctor
+    ? `${API_BASE_URL}/api/doctor/meal-history/${patientId}`
+    : `${API_BASE_URL}/api/meals`,
+  {
+    headers,
+    params: {
+      start_date: formattedStartDate,
+      end_date: formattedEndDate,
+      ...(patientId && !isDoctor && { patient_id: patientId })
+    }
+  }
+);
 
       const processedData = processData(
         glucoseResponse.data || [],
@@ -189,67 +193,120 @@ const BloodGlucoseAnalytics = ({ patientId }) => {
     };
   };
 
-  const chartOptions = {
-    ...commonOptions,
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      tooltip: {
-        mode: 'index',
-        intersect: false,
-        callbacks: {
-          label: (context) => {
-            const dataset = context.dataset;
-            const point = dataset.data[context.dataIndex];
+ const chartOptions = {
+  ...commonOptions,
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    tooltip: {
+      mode: 'index',
+      intersect: false,
+      callbacks: {
+        label: (context) => {
+          const dataset = context.dataset;
+          const point = dataset.data[context.dataIndex];
 
-            if (dataset.label === 'Meals') {
-              const labels = [
-                `${point.mealType}`,
-                `Blood Sugar: ${point.y || 'N/A'} mg/dL`,
-                `Insulin Taken: ${point.insulin || 'N/A'} units`,
-                `Suggested Insulin: ${point.suggestedInsulin || 'N/A'} units`
-              ];
-              if (point.foodItems?.length > 0) {
-                labels.push(`Foods: ${point.foodItems.map(f => f.name).join(', ')}`);
-              }
-              return labels;
+          if (dataset.label === 'Meals') {
+            const labels = [
+              `${point.mealType}`,
+              `Blood Sugar: ${point.y || 'N/A'} mg/dL`,
+              `Insulin Taken: ${point.insulin || 'N/A'} units`,
+              `Suggested Insulin: ${point.suggestedInsulin || 'N/A'} units`
+            ];
+            if (point.foodItems?.length > 0) {
+              labels.push(`Foods: ${point.foodItems.map(f => f.name).join(', ')}`);
             }
-            return `${dataset.label}: ${point.y} mg/dL`;
+            return labels;
           }
+          return `${dataset.label}: ${point.y} mg/dL`;
         }
-      },
-      legend: {
-        position: 'top'
-      },
-      title: {
-        display: true,
-        text: 'Blood Glucose Trends'
       }
     },
-    scales: {
-      x: {
-        type: 'time',
-        time: timeFormats[dateRange],
-        title: {
-          display: true,
-          text: 'Time'
-        }
-      },
-      glucose: {
-        type: 'linear',
-        position: 'left',
-        title: {
-          display: true,
-          text: 'Blood Glucose (mg/dL)'
+    legend: {
+      position: 'top',
+      labels: {
+        usePointStyle: true,
+        padding: 20
+      }
+    },
+    title: {
+      display: true,
+      text: ['Blood Glucose Trends', 'With Meal and Insulin Data'],
+      font: {
+        size: 16
+      }
+    },
+    annotation: {
+      annotations: {
+        hyper: {
+          type: 'line',
+          yMin: 180,
+          yMax: 180,
+          borderColor: 'rgba(255, 0, 0, 0.3)',
+          borderWidth: 2,
+          label: {
+            content: 'Hyperglycemia Threshold',
+            enabled: true
+          }
         },
-        suggestedMin: 40,
-        suggestedMax: 250,
-        grid: {
-          color: 'rgba(0, 0, 0, 0.1)'
+        hypo: {
+          type: 'line',
+          yMin: 70,
+          yMax: 70,
+          borderColor: 'rgba(255, 0, 0, 0.3)',
+          borderWidth: 2,
+          label: {
+            content: 'Hypoglycemia Threshold',
+            enabled: true
+          }
         }
       }
     }
-  };
+  },
+   scales: {
+  x: {
+    type: 'time',
+    time: timeFormats[dateRange],
+    title: {
+      display: true,
+      text: 'Time',
+      font: {
+        size: 14,
+        weight: 'bold'
+      }
+    },
+    grid: {
+      display: true,
+      color: 'rgba(0, 0, 0, 0.1)'
+    }
+  },
+  y: {
+    type: 'linear',
+    position: 'left',
+    title: {
+      display: true,
+      text: 'Blood Glucose Level (mg/dL)',
+      font: {
+        size: 14,
+        weight: 'bold'
+      }
+    },
+    min: 40,  // Minimum safe readable value
+    max: 400, // Maximum reasonable value for visualization
+    ticks: {
+      stepSize: 50,
+      callback: function(value) {
+        return value + ' mg/dL';
+      }
+    },
+    grid: {
+      color: 'rgba(0, 0, 0, 0.1)',
+      borderDash: [5, 5]
+    }
+  }
+}
+};
+
 
   if (loading) {
     return (

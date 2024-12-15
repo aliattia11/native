@@ -19,6 +19,12 @@ def create_app():
     # Initialize Constants
     constants = Constants()
     app.constants = constants
+    try:
+        frontend_path = Path(__file__).parent.parent / 'frontend' / 'src' / 'constants' / 'shared_constants.js'
+        Constants.export_constants_to_frontend(str(frontend_path))
+        app.logger.info("Constants exported successfully")
+    except Exception as e:
+        app.logger.error(f"Error exporting constants: {e}")
 
     # Error handling setup
     @app.errorhandler(404)

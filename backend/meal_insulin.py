@@ -37,6 +37,7 @@ def calculate_activity_impact(activities):
 
     return total_coefficient
 
+
 def get_meal_timing_factor(meal_type, time=None):
     """
     Get timing factor based on meal type and time of day
@@ -50,23 +51,23 @@ def get_meal_timing_factor(meal_type, time=None):
 
     hour = time.hour
 
-    # Base timing factors
-    timing_factors = {
-        'breakfast': 1.2,  # Higher insulin resistance in morning
-        'lunch': 1.0,
-        'dinner': 0.9,  # Better insulin sensitivity in evening
-        'snack': 1.0  # Default factor for snacks
-    }
+    # Get constants
+    constants = current_app.constants
+    meal_timing_factors = constants.get_constant('meal_timing_factors')
+    time_of_day_factors = constants.get_constant('time_of_day_factors')
 
-    # Time-based adjustments
-    if hour < 6:  # Very early morning
-        return timing_factors.get(meal_type, 1.0) * 1.1
-    elif 6 <= hour < 10:  # Morning
-        return timing_factors.get(meal_type, 1.0) * 1.2
-    elif 22 <= hour:  # Late night
-        return timing_factors.get(meal_type, 1.0) * 0.9
+    # Get base meal factor
+    base_factor = meal_timing_factors.get(meal_type, 1.0)
 
-    return timing_factors.get(meal_type, 1.0)
+    # Apply time of day adjustment
+    time_factor = 1.0
+    for period_info in time_of_day_factors.values():
+        start_hour, end_hour = period_info['hours']
+        if start_hour <= hour < end_hour:
+            time_factor = period_info['factor']
+            break
+
+    return base_factor * time_factor
 
 
 def calculate_meal_nutrition(food_items):
