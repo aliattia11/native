@@ -153,6 +153,50 @@
         "factor": 0.9,
         "description": "Late night adjustment"
       }
+    },
+    "medical_condition_factors": {
+      "default": {
+        "name": "No Medical Conditions",
+        "factor": 1.0,
+        "description": "No adjustment needed"
+      },
+      "infection": {
+        "name": "Active Infection",
+        "factor": 1.3,
+        "description": "Increased insulin resistance due to infection"
+      },
+      "thyroid_high": {
+        "name": "Hyperthyroidism",
+        "factor": 0.8,
+        "description": "Decreased insulin requirements"
+      },
+      "thyroid_low": {
+        "name": "Hypothyroidism",
+        "factor": 1.2,
+        "description": "Increased insulin requirements"
+      }
+    },
+    "medication_factors": {
+      "default": {
+        "name": "No Medications",
+        "factor": 1.0,
+        "description": "No adjustment needed"
+      },
+      "steroids": {
+        "name": "Corticosteroids",
+        "factor": 1.4,
+        "description": "Significant increase in insulin resistance"
+      },
+      "metformin": {
+        "name": "Metformin",
+        "factor": 0.9,
+        "description": "Slight decrease in insulin requirements"
+      },
+      "thiazolidinediones": {
+        "name": "Thiazolidinediones",
+        "factor": 0.85,
+        "description": "Moderate decrease in insulin requirements"
+      }
     }
   },
   "ACTIVITY_LEVELS": [
@@ -302,6 +346,50 @@
       "description": "Late night adjustment"
     }
   },
+  "MEDICAL_CONDITION_FACTORS": {
+    "default": {
+      "name": "No Medical Conditions",
+      "factor": 1.0,
+      "description": "No adjustment needed"
+    },
+    "infection": {
+      "name": "Active Infection",
+      "factor": 1.3,
+      "description": "Increased insulin resistance due to infection"
+    },
+    "thyroid_high": {
+      "name": "Hyperthyroidism",
+      "factor": 0.8,
+      "description": "Decreased insulin requirements"
+    },
+    "thyroid_low": {
+      "name": "Hypothyroidism",
+      "factor": 1.2,
+      "description": "Increased insulin requirements"
+    }
+  },
+  "MEDICATION_FACTORS": {
+    "default": {
+      "name": "No Medications",
+      "factor": 1.0,
+      "description": "No adjustment needed"
+    },
+    "steroids": {
+      "name": "Corticosteroids",
+      "factor": 1.4,
+      "description": "Significant increase in insulin resistance"
+    },
+    "metformin": {
+      "name": "Metformin",
+      "factor": 0.9,
+      "description": "Slight decrease in insulin requirements"
+    },
+    "thiazolidinediones": {
+      "name": "Thiazolidinediones",
+      "factor": 0.85,
+      "description": "Moderate decrease in insulin requirements"
+    }
+  },
   "CONVERSION_UTILS": {
     "convertToGrams": "\n          function convertToGrams(amount, unit) {\n              const volumeMeasurements = SHARED_CONSTANTS.VOLUME_MEASUREMENTS;\n              const weightMeasurements = SHARED_CONSTANTS.WEIGHT_MEASUREMENTS;\n\n              if (weightMeasurements[unit]) {\n                  return amount * weightMeasurements[unit].grams;\n              }\n\n              if (volumeMeasurements[unit]) {\n                  // For volume, use a default density of 1g/ml for simplicity\n                  return amount * volumeMeasurements[unit].ml;\n              }\n\n              // If unit is not found, return the original amount\n              return amount;\n          }\n          ",
     "convertToMl": "\n          function convertToMl(amount, unit) {\n              const volumeMeasurements = SHARED_CONSTANTS.VOLUME_MEASUREMENTS;\n              const weightMeasurements = SHARED_CONSTANTS.WEIGHT_MEASUREMENTS;\n\n              if (volumeMeasurements[unit]) {\n                  return amount * volumeMeasurements[unit].ml;\n              }\n\n              if (weightMeasurements[unit]) {\n                  // For weight, use a default density of 1g/ml for simplicity\n                  return amount * weightMeasurements[unit].grams;\n              }\n\n              // If unit is not found, return the original amount\n              return amount;\n          }\n          "
@@ -345,4 +433,25 @@
               return amount;
           }
           ;
+
+          // Medical Factor Utilities
+          export const calculateMedicalFactors = (conditions, medications) => {
+            let totalFactor = 1.0;
+
+            // Calculate condition factors
+            Object.values(conditions).forEach(condition => {
+              if (condition.active) {
+                totalFactor *= condition.factor;
+              }
+            });
+
+            // Calculate medication factors
+            Object.values(medications).forEach(medication => {
+              if (medication.active) {
+                totalFactor *= medication.factor;
+              }
+            });
+
+            return totalFactor;
+          };
           

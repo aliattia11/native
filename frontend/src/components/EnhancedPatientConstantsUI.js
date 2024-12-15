@@ -3,16 +3,52 @@ import styles from './EnhancedPatientConstants.module.css';
 import { DEFAULT_PATIENT_CONSTANTS } from '../constants';
 
 const EnhancedPatientConstantsUI = ({ patientId }) => {
-  const [constants, setConstants] = useState(DEFAULT_PATIENT_CONSTANTS);
+const [constants, setConstants] = useState({
+  ...DEFAULT_PATIENT_CONSTANTS,
+  medical_condition_factors: {},
+  medication_factors: {}
+});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [message, setMessage] = useState('');
   const [expandedSections, setExpandedSections] = useState({
-    basic: true,
-    activity: true,
-    absorption: true
-  });
+  basic: true,
+  activity: true,
+  absorption: true,
+  medical: true,  // Add this
+  medications: true  // Add this
+});
+  const addNewMedicalCondition = () => {
+    const newId = `condition_${Date.now()}`;
+    setConstants(prev => ({
+      ...prev,
+      medical_condition_factors: {
+        ...prev.medical_condition_factors,
+        [newId]: {
+          name: '',
+          factor: 1.0,
+          description: '',
+          active: false
+        }
+      }
+    }));
+  };
 
+  const addNewMedication = () => {
+    const newId = `medication_${Date.now()}`;
+    setConstants(prev => ({
+      ...prev,
+      medication_factors: {
+        ...prev.medication_factors,
+        [newId]: {
+          name: '',
+          factor: 1.0,
+          description: '',
+          active: false
+        }
+      }
+    }));
+  };
   const fetchPatientConstants = useCallback(async () => {
     try {
       setLoading(true);
@@ -35,7 +71,33 @@ const EnhancedPatientConstantsUI = ({ patientId }) => {
   useEffect(() => {
     fetchPatientConstants();
   }, [fetchPatientConstants]);
+const handleMedicalConditionChange = (conditionId, field, value) => {
+  setConstants(prev => ({
+    ...prev,
+    medical_condition_factors: {
+      ...prev.medical_condition_factors,
+      [conditionId]: {
+        ...prev.medical_condition_factors[conditionId],
+        [field]: field === 'factor' ? parseFloat(value) || 0 : value,
+        active: field === 'active' ? value : prev.medical_condition_factors[conditionId]?.active || false
+      }
+    }
+  }));
+};
 
+const handleMedicationChange = (medicationId, field, value) => {
+  setConstants(prev => ({
+    ...prev,
+    medication_factors: {
+      ...prev.medication_factors,
+      [medicationId]: {
+        ...prev.medication_factors[medicationId],
+        [field]: field === 'factor' ? parseFloat(value) || 0 : value,
+        active: field === 'active' ? value : prev.medication_factors[medicationId]?.active || false
+      }
+    }
+  }));
+};
   const handleBasicConstantChange = (key, value) => {
     setConstants(prev => ({
       ...prev,
@@ -247,6 +309,101 @@ const handleSubmit = async () => {
             </div>
           )}
         </div>
+ {/* Medical Conditions Section */}
+    <div className={styles.constantsSection}>
+      <h3 className={styles.subsectionTitle} onClick={() => toggleSection('medical')}>
+        Medical Conditions
+        <span style={{ float: 'right' }}>{expandedSections.medical ? '▼' : '▶'}</span>
+      </h3>
+      {expandedSections.medical && (
+        <div className={styles.constantsWrapper}>
+          {Object.entries(constants.medical_condition_factors || {}).map(([id, condition]) => (
+            <div key={id} className={styles.medicalFactorGroup}>
+              <div className={styles.checkboxGroup}>
+                <input
+                  type="checkbox"
+                  id={`condition-${id}`}
+                  checked={condition.active || false}
+                  onChange={(e) => handleMedicalConditionChange(id, 'active', e.target.checked)}
+                />
+                <input
+                  type="text"
+                  value={condition.name || ''}
+                  onChange={(e) => handleMedicalConditionChange(id, 'name', e.target.value)}
+                  placeholder="Condition name"
+                />
+              </div>
+              <div className={styles.factorInputGroup}>
+                <input
+                  type="number"
+                  value={condition.factor || 1.0}
+                  onChange={(e) => handleMedicalConditionChange(id, 'factor', e.target.value)}
+                  step="0.1"
+                  min="0"
+                />
+                <input
+                  type="text"
+                  value={condition.description || ''}
+                  onChange={(e) => handleMedicalConditionChange(id, 'description', e.target.value)}
+                  placeholder="Description"
+                />
+              </div>
+            </div>
+          ))}
+          <button className={styles.addButton} onClick={addNewMedicalCondition}>
+            Add New Medical Condition
+          </button>
+        </div>
+      )}
+    </div>
+
+    {/* Medications Section */}
+    <div className={styles.constantsSection}>
+      <h3 className={styles.subsectionTitle} onClick={() => toggleSection('medications')}>
+        Medications
+        <span style={{ float: 'right' }}>{expandedSections.medications ? '▼' : '▶'}</span>
+      </h3>
+      {expandedSections.medications && (
+        <div className={styles.constantsWrapper}>
+          {Object.entries(constants.medication_factors || {}).map(([id, medication]) => (
+            <div key={id} className={styles.medicalFactorGroup}>
+              <div className={styles.checkboxGroup}>
+                <input
+                  type="checkbox"
+                  id={`medication-${id}`}
+                  checked={medication.active || false}
+                  onChange={(e) => handleMedicationChange(id, 'active', e.target.checked)}
+                />
+                <input
+                  type="text"
+                  value={medication.name || ''}
+                  onChange={(e) => handleMedicationChange(id, 'name', e.target.value)}
+                  placeholder="Medication name"
+                />
+              </div>
+              <div className={styles.factorInputGroup}>
+                <input
+                  type="number"
+                  value={medication.factor || 1.0}
+                  onChange={(e) => handleMedicationChange(id, 'factor', e.target.value)}
+                  step="0.1"
+                  min="0"
+                />
+                <input
+                  type="text"
+                  value={medication.description || ''}
+                  onChange={(e) => handleMedicationChange(id, 'description', e.target.value)}
+                  placeholder="Description"
+                />
+              </div>
+            </div>
+          ))}
+          <button className={styles.addButton} onClick={addNewMedication}>
+            Add New Medication
+          </button>
+        </div>
+      )}
+    </div>
 
         {message && (
           <div className={styles.message}>

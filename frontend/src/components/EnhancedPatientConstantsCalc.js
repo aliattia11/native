@@ -1,5 +1,4 @@
 // EnhancedPatientConstantsCalc.js
-// EnhancedPatientConstantsCalc.js
 import {
   SHARED_CONSTANTS,
   MEASUREMENT_SYSTEMS,
@@ -71,6 +70,21 @@ export const calculateTotalNutrients = (selectedFoods) => {
 };
 
 
+
+
+export const calculateActivityImpact = (activities, patientConstants) => {
+  if (!activities || !patientConstants?.activity_coefficients) return 0;
+
+  return activities.reduce((total, activity) => {
+    const coefficient = patientConstants.activity_coefficients[activity.level.toString()] || 0;
+    const duration = typeof activity.duration === 'string'
+      ? parseFloat(activity.duration.split(':')[0]) + (parseFloat(activity.duration.split(':')[1]) || 0) / 60
+      : activity.duration;
+    const durationFactor = Math.min(duration / 2, 1);
+    return total + (coefficient * durationFactor);
+  }, 0);
+};
+
 export const calculateInsulinDose = ({
   carbs,
   protein,
@@ -84,6 +98,15 @@ export const calculateInsulinDose = ({
   if (!patientConstants) {
     throw new Error('Patient constants are required for insulin calculation');
   }
+
+  // Calculate medical condition and medication factors
+  const medicalFactor = Object.values(patientConstants.medical_condition_factors || {})
+    .reduce((factor, condition) =>
+      condition.active ? factor * (condition.factor || 1.0) : factor, 1.0);
+
+  const medicationFactor = Object.values(patientConstants.medication_factors || {})
+    .reduce((factor, medication) =>
+      medication.active ? factor * (medication.factor || 1.0) : factor, 1.0);
 
   // Calculate base insulin from carbs
   const carbInsulin = carbs / patientConstants.insulin_to_carb_ratio;
@@ -105,7 +128,7 @@ export const calculateInsulinDose = ({
 
   // Calculate base insulin with all factors
   const baseInsulin = (carbInsulin + proteinContribution + fatContribution) *
-    absorptionFactor * mealTimingFactor * timeOfDayFactor;
+    absorptionFactor * mealTimingFactor * timeOfDayFactor * medicalFactor * medicationFactor;
 
   // Calculate activity impact and apply to base insulin
   const activityImpact = calculateActivityImpact(activities, patientConstants);
@@ -115,7 +138,7 @@ export const calculateInsulinDose = ({
   let correctionInsulin = 0;
   if (bloodSugar && patientConstants.target_glucose && patientConstants.correction_factor) {
     const glucoseDifference = bloodSugar - patientConstants.target_glucose;
-    correctionInsulin = glucoseDifference / patientConstants.correction_factor;
+    correctionInsulin = (glucoseDifference / patientConstants.correction_factor) * medicalFactor * medicationFactor;
   }
 
   // Calculate total insulin (ensuring it never goes below 0)
@@ -131,20 +154,12 @@ export const calculateInsulinDose = ({
       activityImpact: Math.round(activityImpact * 100) / 100,
       absorptionFactor,
       mealTimingFactor,
-      timeOfDayFactor
+      timeOfDayFactor,
+      medicalFactors: {
+        total: Math.round(medicalFactor * medicationFactor * 100) / 100,
+        conditions: medicalFactor,
+        medications: medicationFactor
+      }
     }
   };
-};
-
-export const calculateActivityImpact = (activities, patientConstants) => {
-  if (!activities || !patientConstants?.activity_coefficients) return 0;
-
-  return activities.reduce((total, activity) => {
-    const coefficient = patientConstants.activity_coefficients[activity.level.toString()] || 0;
-    const duration = typeof activity.duration === 'string'
-      ? parseFloat(activity.duration.split(':')[0]) + (parseFloat(activity.duration.split(':')[1]) || 0) / 60
-      : activity.duration;
-    const durationFactor = Math.min(duration / 2, 1);
-    return total + (coefficient * durationFactor);
-  }, 0);
 };

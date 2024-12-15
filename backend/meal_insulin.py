@@ -149,6 +149,21 @@ def calculate_suggested_insulin(user_id, nutrition, activities, blood_glucose=No
     protein_factor = patient_constants['protein_factor']
     fat_factor = patient_constants['fat_factor']
 
+    # Get medical condition and medication factors
+    medical_condition_factors = patient_constants.get('medical_condition_factors', {})
+    medication_factors = patient_constants.get('medication_factors', {})
+
+    # Calculate combined medical factors (multiply all active factors)
+    medical_factor = 1.0
+    for condition in medical_condition_factors.values():
+        if condition.get('active', False):  # Only apply active conditions
+            medical_factor *= condition.get('factor', 1.0)
+
+    medication_factor = 1.0
+    for medication in medication_factors.values():
+        if medication.get('active', False):  # Only apply active medications
+            medication_factor *= medication.get('factor', 1.0)
+
     # Calculate timing factor using the enhanced method
     timing_factor = get_meal_timing_factor(meal_type)
 
@@ -167,14 +182,19 @@ def calculate_suggested_insulin(user_id, nutrition, activities, blood_glucose=No
     # Apply timing factor to base insulin calculation
     base_insulin = (carb_insulin + protein_fat_insulin) * timing_factor
 
+    # Apply medical conditions and medications factors
+    medically_adjusted_insulin = base_insulin * medical_factor * medication_factor
+
     # Activity adjustment
-    activity_adjusted_insulin = base_insulin * (1 + activity_coefficient)
+    activity_adjusted_insulin = medically_adjusted_insulin * (1 + activity_coefficient)
 
     # Add correction insulin if blood glucose is provided
     correction_insulin = 0
     if blood_glucose is not None:
         glucose_difference = blood_glucose - target_glucose
         correction_insulin = max(0, glucose_difference / correction_factor)
+        # Apply medical factors to correction insulin as well
+        correction_insulin *= medical_factor * medication_factor
 
     total_insulin = activity_adjusted_insulin + correction_insulin
 
@@ -186,10 +206,14 @@ def calculate_suggested_insulin(user_id, nutrition, activities, blood_glucose=No
             'timing_factor': round(timing_factor, 2),
             'activity_coefficient': round(activity_coefficient, 2),
             'correction_insulin': round(correction_insulin, 2),
-            'absorption_factor': nutrition.get('absorption_factor', 1.0)
+            'absorption_factor': nutrition.get('absorption_factor', 1.0),
+            'medical_factors': {
+                'total': round(medical_factor * medication_factor, 2),
+                'conditions': {k: v['factor'] for k, v in medical_condition_factors.items() if v.get('active', False)},
+                'medications': {k: v['factor'] for k, v in medication_factors.items() if v.get('active', False)}
+            }
         }
     }
-
 
 @meal_insulin_bp.route('/api/meal', methods=['POST'])
 @token_required
