@@ -10,7 +10,10 @@ export function ConstantsProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [medicalFactorsHistory, setMedicalFactorsHistory] = useState([]);
-
+  const [activeMedicalFactors, setActiveMedicalFactors] = useState({
+    conditions: {},
+    medications: {}
+});
   const validateConstants = (constants) => {
     const required = [
       'insulin_to_carb_ratio',
@@ -93,50 +96,30 @@ export function ConstantsProvider({ children }) {
     }
   };
 
-  const updateMedicalFactors = async (patientId, factors) => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      throw new Error('No authentication token found');
-    }
-
+  const updateMedicalFactors = useCallback(async (factors) => {
     try {
-      const response = await axios.put(
-        `${API_BASE_URL}/api/doctor/patient/${patientId}/medical-factors`,
-        { factors },
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
+        const token = localStorage.getItem('token');
+        const response = await axios.put(
+            `${API_BASE_URL}/api/patient/medical-factors`,
+            { factors },
+            {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+
+        if (response.data.success) {
+            setActiveMedicalFactors(factors);
+            return true;
         }
-      );
-
-      if (response.data.success) {
-        const updatedConstants = {
-          ...patientConstants,
-          medical_condition_factors: factors.conditions,
-          medication_factors: factors.medications
-        };
-        setPatientConstants(updatedConstants);
-
-        // Add to history
-        setMedicalFactorsHistory(prev => [
-          {
-            timestamp: new Date().toISOString(),
-            factors: factors,
-            patientId: patientId
-          },
-          ...prev
-        ]);
-
-        return true;
-      }
-      return false;
+        return false;
     } catch (error) {
-      console.error('Error updating medical factors:', error);
-      throw new Error(error.response?.data?.message || 'Failed to update medical factors');
+        console.error('Error updating medical factors:', error);
+        throw error;
     }
-  };
+}, []);
 
   const getMedicalFactorsForDate = useCallback((date) => {
     const timestamp = date.toISOString();
@@ -198,7 +181,8 @@ export function ConstantsProvider({ children }) {
     getMedicalFactorsForDate,
     medicalFactorsHistory,
     setPatientConstants,
-    validateConstants
+    validateConstants,
+    activeMedicalFactors
   };
 
   return (

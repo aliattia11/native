@@ -36,7 +36,7 @@ const ActivityItem = ({ index, item, updateItem, removeItem }) => (
 );
 
 const MealInput = () => {
-  const { patientConstants, loading, error, refreshConstants } = useConstants();
+  const { patientConstants, loading, error, refreshConstants  } = useConstants();
   const [mealType, setMealType] = useState('');
   const [selectedFoods, setSelectedFoods] = useState([]);
   const [activities, setActivities] = useState([{ level: 0, duration: 0 }]);
@@ -49,7 +49,7 @@ const MealInput = () => {
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showMedicalFactors, setShowMedicalFactors] = useState(false);
-const [activeMedicalFactors, setActiveMedicalFactors] = useState({
+  const [activeMedicalFactors, setActiveMedicalFactors] = useState({
   conditions: {},
   medications: {}
 });
@@ -108,7 +108,9 @@ useEffect(() => {
         bloodSugar: parseFloat(bloodSugar) || 0,
         activities,
         patientConstants,
-        mealType
+        mealType,
+        medicalFactors: activeMedicalFactors
+
       });
 
       setSuggestedInsulin(insulinCalculation.total);
@@ -118,7 +120,7 @@ useEffect(() => {
       console.error('Error calculating insulin:', error);
       setMessage('Error calculating insulin needs: ' + error.message);
     }
-  }, [selectedFoods, bloodSugar, activities, patientConstants, mealType]);
+}, [selectedFoods, bloodSugar, activities, patientConstants, mealType, activeMedicalFactors]);
 
   useEffect(() => {
     if (!loading && patientConstants && (selectedFoods.length > 0 || bloodSugar)) {

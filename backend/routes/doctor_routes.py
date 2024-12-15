@@ -140,7 +140,7 @@ def update_patient_constants(current_user, patient_id):
         if not constants:
             return jsonify({'message': 'Missing required constants data'}), 400
 
-        # Validate the data structure
+        # Add medical factors to required fields
         required_fields = [
             'insulin_to_carb_ratio',
             'correction_factor',
@@ -149,7 +149,9 @@ def update_patient_constants(current_user, patient_id):
             'fat_factor',
             'activity_coefficients',
             'absorption_modifiers',
-            'insulin_timing_guidelines'
+            'insulin_timing_guidelines',
+            'medical_condition_factors',  # Add these
+            'medication_factors'          # Add these
         ]
 
         update_data = {}
@@ -160,6 +162,7 @@ def update_patient_constants(current_user, patient_id):
         if not update_data:
             return jsonify({'message': 'No valid constants provided'}), 400
 
+        # Update the patient document
         result = mongo.db.users.update_one(
             {"_id": ObjectId(patient_id)},
             {"$set": update_data}
@@ -168,7 +171,7 @@ def update_patient_constants(current_user, patient_id):
         if result.matched_count == 0:
             return jsonify({'message': 'Patient not found'}), 404
 
-        # Return the updated constants
+        # Return the updated constants with medical factors
         updated_user = mongo.db.users.find_one({"_id": ObjectId(patient_id)})
         updated_constants = {
             field: updated_user.get(field) for field in required_fields
@@ -182,36 +185,3 @@ def update_patient_constants(current_user, patient_id):
         logger.error(f"Error updating patient constants: {str(e)}")
         return jsonify({'message': 'Error updating patient constants'}), 500
 
-
-@doctor_routes.route('/api/doctor/patient/<patient_id>/medical-factors', methods=['PUT'])
-@token_required
-@api_error_handler
-def update_patient_medical_factors(current_user, patient_id):
-    if current_user.get('user_type') != 'doctor':
-        return jsonify({'message': 'Unauthorized access'}), 403
-
-    try:
-        data = request.json
-        factors = data.get('factors', {})
-
-        update_data = {
-            'medical_condition_factors': factors.get('conditions', {}),
-            'medication_factors': factors.get('medications', {})
-        }
-
-        result = mongo.db.users.update_one(
-            {"_id": ObjectId(patient_id)},
-            {"$set": update_data}
-        )
-
-        if result.matched_count == 0:
-            return jsonify({'message': 'Patient not found'}), 404
-
-        return jsonify({
-            'success': True,
-            'message': 'Medical factors updated successfully'
-        }), 200
-
-    except Exception as e:
-        logger.error(f"Error updating medical factors: {str(e)}")
-        return jsonify({'message': 'Error updating medical factors'}), 500
