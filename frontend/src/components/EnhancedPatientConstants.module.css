@@ -186,3 +186,177 @@
 .factorInputGroup input[type="text"] {
   flex: 1;
 }
+
+.patientConstants {
+    padding: 20px;
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.form {
+    background: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.constantsSection {
+    margin-bottom: 20px;
+    border: 1px solid #e1e4e8;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.subsectionTitle {
+    padding: 12px 16px;
+    margin: 0;
+    background-color: #f6f8fa;
+    border-bottom: 1px solid #e1e4e8;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.constantsWrapper {
+    padding: 16px;
+}
+
+.formGroup {
+    margin-bottom: 15px;
+}
+
+.formGroup label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 500;
+}
+
+.formGroup input {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #e1e4e8;
+    border-radius: 4px;
+}
+
+.medicalFactorGroup {
+    margin-bottom: 15px;
+    padding: 10px;
+    border: 1px solid #e1e4e8;
+    border-radius: 4px;
+}
+
+.checkboxGroup {
+    display: flex;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.checkboxGroup input[type="checkbox"] {
+    margin-right: 10px;
+}
+
+.checkboxGroup input[type="text"] {
+    flex-grow: 1;
+    padding: 6px;
+    border: 1px solid #e1e4e8;
+    border-radius: 4px;
+}
+
+.factorInputGroup {
+    display: flex;
+    gap: 10px;
+}
+
+.factorInputGroup input {
+    flex: 1;
+    padding: 6px;
+    border: 1px solid #e1e4e8;
+    border-radius: 4px;
+}
+
+.buttonGroup {
+    margin-top: 20px;
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+.addButton {
+    background-color: #2ea44f;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-top: 10px;
+}
+
+.addButton:hover {
+    background-color: #2c974b;
+}
+
+.resetButton {
+    background-color: #6e7681;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.resetButton:hover {
+    background-color: #5c636a;
+}
+
+.submitButton {
+    background-color: #2ea44f;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.submitButton:hover {
+    background-color: #2c974b;
+}
+
+.submitButton:disabled {
+    background-color: #94d3a2;
+    cursor: not-allowed;
+}
+
+.message {
+    margin-top: 15px;
+    padding: 10px;
+    border-radius: 4px;
+    text-align: center;
+}
+
+.message.success {
+    background-color: #dcffe4;
+    color: #0f5323;
+    border: 1px solid #95e3a9;
+}
+
+.message.error {
+    background-color: #ffe9e9;
+    color: #b91c1c;
+    border: 1px solid #fca5a5;
+}
+
+.loading {
+    text-align: center;
+    padding: 20px;
+    color: #6e7681;
+}
+
+.error {
+    color: #b91c1c;
+    text-align: center;
+    padding: 20px;
+    background-color: #ffe9e9;
+    border-radius: 4px;
+    margin: 20px 0;
+}

@@ -93,33 +93,32 @@ useEffect(() => {
   }, [refreshConstants]);
 
   // Calculate insulin needs whenever relevant inputs change
-  const calculateInsulinNeeds = useCallback(() => {
-    if (selectedFoods.length === 0 || !patientConstants) {
-      setSuggestedInsulin('');
-      setInsulinBreakdown(null);
-      return;
-    }
+ const calculateInsulinNeeds = useCallback(() => {
+  if (selectedFoods.length === 0 || !patientConstants) {
+    setSuggestedInsulin('');
+    setInsulinBreakdown(null);
+    return;
+  }
 
-    try {
-      const totalNutrition = calculateTotalNutrients(selectedFoods);
+  try {
+    const totalNutrition = calculateTotalNutrients(selectedFoods);
 
-      const insulinCalculation = calculateInsulinDose({
-        ...totalNutrition,
-        bloodSugar: parseFloat(bloodSugar) || 0,
-        activities,
-        patientConstants,
-        mealType,
-        medicalFactors: activeMedicalFactors
+    const insulinCalculation = calculateInsulinDose({
+      ...totalNutrition,
+      bloodSugar: parseFloat(bloodSugar) || 0,
+      activities,
+      patientConstants,
+      mealType,
+      medicalFactors: activeMedicalFactors
+    });
 
-      });
-
-      setSuggestedInsulin(insulinCalculation.total);
-      setInsulinBreakdown(insulinCalculation.breakdown);
-      setActivityImpact(insulinCalculation.breakdown.activityImpact || 0);
-    } catch (error) {
-      console.error('Error calculating insulin:', error);
-      setMessage('Error calculating insulin needs: ' + error.message);
-    }
+    setSuggestedInsulin(insulinCalculation.total);
+    setInsulinBreakdown(insulinCalculation.breakdown);
+    setActivityImpact(insulinCalculation.breakdown.activityImpact || 0);
+  } catch (error) {
+    console.error('Error calculating insulin:', error);
+    setMessage('Error calculating insulin needs: ' + error.message);
+  }
 }, [selectedFoods, bloodSugar, activities, patientConstants, mealType, activeMedicalFactors]);
 
   useEffect(() => {
@@ -127,6 +126,8 @@ useEffect(() => {
       calculateInsulinNeeds();
     }
   }, [selectedFoods, activities, bloodSugar, mealType, patientConstants, loading, calculateInsulinNeeds]);
+
+
 
   // Food handling functions
   const handleFoodSelect = useCallback((food) => {
@@ -174,7 +175,35 @@ useEffect(() => {
   const removeActivity = useCallback((index) => {
     setActivities(prev => prev.filter((_, i) => i !== index));
   }, []);
+useEffect(() => {
+  const handleConstantsUpdate = (event) => {
+    const { medicalFactors } = event.detail;
+    setActiveMedicalFactors(medicalFactors);
+  };
 
+  window.addEventListener('patientConstantsUpdated', handleConstantsUpdate);
+  return () => {
+    window.removeEventListener('patientConstantsUpdated', handleConstantsUpdate);
+  };
+}, []);
+const formatAdjustmentText = (factor) => {
+  if (factor === 1) return ' (no adjustment)';
+  const percentage = ((factor - 1) * 100).toFixed(1);
+  return factor > 1
+    ? ` (+${percentage}% increase)`
+    : ` (${percentage}% decrease)`;
+};
+
+// Helper function to calculate total adjustment
+const calculateTotalAdjustment = (breakdown) => {
+  const baseAdjustment =
+    breakdown.absorptionFactor *
+    breakdown.mealTimingFactor *
+    breakdown.timeOfDayFactor *
+    (1 + breakdown.activityImpact);
+
+  return baseAdjustment * (breakdown.medicalFactors?.total || 1);
+};
   // Form submission handler
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -433,101 +462,105 @@ useEffect(() => {
           </div>
         </div>
 
-        {selectedFoods.length > 0 && insulinBreakdown && (
-            <div className={styles.insulinBreakdown}>
-              <h4>Insulin Calculation Breakdown</h4>
-              <ul>
-                {/* Units Section */}
-                <li className={styles.breakdownSection}>
-                  <strong>Base Units:</strong>
-                </li>
-                <li>• Carbohydrate insulin: {insulinBreakdown.carbInsulin} units</li>
-                <li>• Protein contribution: {insulinBreakdown.proteinContribution} units</li>
-                <li>• Fat contribution: {insulinBreakdown.fatContribution} units</li>
-                <li>• Correction insulin: {insulinBreakdown.correctionInsulin} units</li>
-                <li className={styles.summaryLine}>
-                  <strong>Total Base Units: {(
-                      Number(insulinBreakdown.carbInsulin) +
-                      Number(insulinBreakdown.proteinContribution) +
-                      Number(insulinBreakdown.fatContribution) +
-                      Number(insulinBreakdown.correctionInsulin)
-                  ).toFixed(2)} units</strong>
-                </li>
+ {selectedFoods.length > 0 && insulinBreakdown && (
+  <div className={styles.insulinBreakdown}>
+    <h4>Insulin Calculation Breakdown</h4>
+    <ul>
+      {/* Base Units Section */}
+      <li className={styles.breakdownSection}>
+        <strong>Base Units:</strong>
+      </li>
+      <li>• Carbohydrate insulin: {insulinBreakdown.carbInsulin} units</li>
+      <li>• Protein contribution: {insulinBreakdown.proteinContribution} units</li>
+      <li>• Fat contribution: {insulinBreakdown.fatContribution} units</li>
+      <li>• Correction insulin: {insulinBreakdown.correctionInsulin} units</li>
+      <li className={styles.summaryLine}>
+        <strong>Total Base Units: {(
+          Number(insulinBreakdown.carbInsulin) +
+          Number(insulinBreakdown.proteinContribution) +
+          Number(insulinBreakdown.fatContribution) +
+          Number(insulinBreakdown.correctionInsulin)
+        ).toFixed(2)} units</strong>
+      </li>
 
-                {/* Adjustment Factors Section */}
-                <li className={styles.breakdownSection}>
-                  <strong>Adjustment Factors:</strong>
-                </li>
-                <li>• Absorption rate: {((insulinBreakdown.absorptionFactor - 1) * 100).toFixed(1)}%
-                  {insulinBreakdown.absorptionFactor > 1
-                      ? ` (+${((insulinBreakdown.absorptionFactor - 1) * 100).toFixed(1)}% increase)`
-                      : insulinBreakdown.absorptionFactor < 1
-                          ? ` (${((insulinBreakdown.absorptionFactor - 1) * 100).toFixed(1)}% decrease)`
-                          : ' (no adjustment)'}
-                </li>
-                <li>• Meal timing: {((insulinBreakdown.mealTimingFactor - 1) * 100).toFixed(1)}%
-                  {insulinBreakdown.mealTimingFactor > 1
-                      ? ` (+${((insulinBreakdown.mealTimingFactor - 1) * 100).toFixed(1)}% increase)`
-                      : insulinBreakdown.mealTimingFactor < 1
-                          ? ` (${((insulinBreakdown.mealTimingFactor - 1) * 100).toFixed(1)}% decrease)`
-                          : ' (no adjustment)'}
-                </li>
-                <li>• Time of day: {((insulinBreakdown.timeOfDayFactor - 1) * 100).toFixed(1)}%
-                  {insulinBreakdown.timeOfDayFactor > 1
-                      ? ` (+${((insulinBreakdown.timeOfDayFactor - 1) * 100).toFixed(1)}% increase)`
-                      : insulinBreakdown.timeOfDayFactor < 1
-                          ? ` (${((insulinBreakdown.timeOfDayFactor - 1) * 100).toFixed(1)}% decrease)`
-                          : ' (no adjustment)'}
-                </li>
-                <li>• Activity impact: {(insulinBreakdown.activityImpact * 100).toFixed(1)}%
-                  {insulinBreakdown.activityImpact > 0
-                      ? ` (+${(insulinBreakdown.activityImpact * 100).toFixed(1)}% increase)`
-                      : insulinBreakdown.activityImpact < 0
-                          ? ` (${(insulinBreakdown.activityImpact * 100).toFixed(1)}% decrease)`
-                          : ' (no adjustment)'}
-                </li>
-                {/* Medical Factors Section */}
-{insulinBreakdown.medical_factors && (
-  <>
-    <li className={styles.breakdownSection}>
-      <strong>Medical Adjustments:</strong>
-    </li>
-    {Object.entries(insulinBreakdown.medical_factors.conditions || {}).map(([name, factor]) => (
-      <li key={name}>
-        • {name}: {((factor - 1) * 100).toFixed(1)}%
-        {factor > 1
-          ? ` (+${((factor - 1) * 100).toFixed(1)}% increase)`
-          : factor < 1
-            ? ` (${((factor - 1) * 100).toFixed(1)}% decrease)`
-            : ' (no adjustment)'}
+      {/* Adjustment Factors Section */}
+      <li className={styles.breakdownSection}>
+        <strong>Adjustment Factors:</strong>
       </li>
-    ))}
-    {Object.entries(insulinBreakdown.medical_factors.medications || {}).map(([name, factor]) => (
-      <li key={name}>
-        • {name}: {((factor - 1) * 100).toFixed(1)}%
-        {factor > 1
-          ? ` (+${((factor - 1) * 100).toFixed(1)}% increase)`
-          : factor < 1
-            ? ` (${((factor - 1) * 100).toFixed(1)}% decrease)`
-            : ' (no adjustment)'}
+      <li>• Absorption rate: {((insulinBreakdown.absorptionFactor - 1) * 100).toFixed(1)}%
+        {formatAdjustmentText(insulinBreakdown.absorptionFactor)}
       </li>
-    ))}
-    <li className={styles.summaryLine}>
-      <strong>Total Medical Impact: {((insulinBreakdown.medical_factors.total - 1) * 100).toFixed(1)}%</strong>
-    </li>
-  </>
+      <li>• Meal timing: {((insulinBreakdown.mealTimingFactor - 1) * 100).toFixed(1)}%
+        {formatAdjustmentText(insulinBreakdown.mealTimingFactor)}
+      </li>
+      <li>• Time of day: {((insulinBreakdown.timeOfDayFactor - 1) * 100).toFixed(1)}%
+        {formatAdjustmentText(insulinBreakdown.timeOfDayFactor)}
+      </li>
+      <li>• Activity impact: {(insulinBreakdown.activityImpact * 100).toFixed(1)}%
+        {formatAdjustmentText(1 + insulinBreakdown.activityImpact)}
+      </li>
+
+      {/* Medical Factors Section */}
+      {insulinBreakdown.medicalFactors && (
+        <>
+          <li className={styles.breakdownSection}>
+            <strong>Medical Factors:</strong>
+          </li>
+
+          {/* Medical Conditions */}
+          {Object.entries(insulinBreakdown.medicalFactors.conditions || {}).length > 0 && (
+            <>
+              <li className={styles.subBreakdownSection}>Medical Conditions:</li>
+              {Object.entries(insulinBreakdown.medicalFactors.conditions).map(([name, factor]) => (
+                <li key={name}>
+                  • {name}: {((factor - 1) * 100).toFixed(1)}%
+                  {formatAdjustmentText(factor)}
+                </li>
+              ))}
+            </>
+          )}
+
+          {/* Medications */}
+          {Object.entries(insulinBreakdown.medicalFactors.medications || {}).length > 0 && (
+            <>
+              <li className={styles.subBreakdownSection}>Medications:</li>
+              {Object.entries(insulinBreakdown.medicalFactors.medications).map(([name, factor]) => (
+                <li key={name}>
+                  • {name}: {((factor - 1) * 100).toFixed(1)}%
+                  {formatAdjustmentText(factor)}
+                </li>
+              ))}
+            </>
+          )}
+
+          {/* Total Medical Impact */}
+          <li className={styles.summaryLine}>
+            <strong>Total Medical Impact: {((insulinBreakdown.medicalFactors.total - 1) * 100).toFixed(1)}%
+              {formatAdjustmentText(insulinBreakdown.medicalFactors.total)}
+            </strong>
+          </li>
+        </>
+      )}
+
+      {/* Final Summary */}
+      <li className={styles.finalSummary}>
+        <strong>Final Adjustments:</strong>
+      </li>
+      <li>• Total Base Units: {(
+        Number(insulinBreakdown.carbInsulin) +
+        Number(insulinBreakdown.proteinContribution) +
+        Number(insulinBreakdown.fatContribution) +
+        Number(insulinBreakdown.correctionInsulin)
+      ).toFixed(2)} units</li>
+      <li>• Total Adjustment Factor: {calculateTotalAdjustment(insulinBreakdown).toFixed(2)}x</li>
+      <li className={styles.finalTotal}>
+        <strong>Final Insulin Dose: {suggestedInsulin} units</strong>
+      </li>
+    </ul>
+  </div>
 )}
-                <li className={styles.summaryLine}>
-                  <strong>Net Adjustment: {(
-                      ((insulinBreakdown.absorptionFactor - 1) * 100) +
-                      ((insulinBreakdown.mealTimingFactor - 1) * 100) +
-                      ((insulinBreakdown.timeOfDayFactor - 1) * 100) +
-                      (insulinBreakdown.activityImpact * 100)
-                  ).toFixed(1)}%</strong>
-                </li>
-              </ul>
-            </div>
-        )}
+
+
         {selectedFoods.length > 0 && patientConstants && (
             <div className={styles.timingGuidelines}>
               <h4>Insulin Timing Guidelines</h4>

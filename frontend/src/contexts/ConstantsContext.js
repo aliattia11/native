@@ -13,7 +13,9 @@ export function ConstantsProvider({ children }) {
   const [activeMedicalFactors, setActiveMedicalFactors] = useState({
     conditions: {},
     medications: {}
-});
+  });
+
+  // Function to validate constants
   const validateConstants = (constants) => {
     const required = [
       'insulin_to_carb_ratio',
@@ -36,6 +38,7 @@ export function ConstantsProvider({ children }) {
     return true;
   };
 
+  // Fetch patient constants from the server
   const fetchPatientConstants = async () => {
     const token = localStorage.getItem('token');
     if (!token) {
@@ -60,6 +63,27 @@ export function ConstantsProvider({ children }) {
         };
       }
 
+      // Update active medical factors
+      const activeConditions = {};
+      const activeMedications = {};
+
+      Object.entries(constants.medical_condition_factors || {}).forEach(([id, condition]) => {
+        if (condition.active) {
+          activeConditions[id] = condition;
+        }
+      });
+
+      Object.entries(constants.medication_factors || {}).forEach(([id, medication]) => {
+        if (medication.active) {
+          activeMedications[id] = medication;
+        }
+      });
+
+      setActiveMedicalFactors({
+        conditions: activeConditions,
+        medications: activeMedications
+      });
+
       return constants;
     } catch (error) {
       console.error('Error fetching patient constants:', error);
@@ -67,6 +91,7 @@ export function ConstantsProvider({ children }) {
     }
   };
 
+  // Update patient constants on the server
   const updatePatientConstants = async (newConstants) => {
     const token = localStorage.getItem('token');
     if (!token) {
@@ -96,31 +121,43 @@ export function ConstantsProvider({ children }) {
     }
   };
 
+  // Update medical factors
   const updateMedicalFactors = useCallback(async (factors) => {
     try {
-        const token = localStorage.getItem('token');
-        const response = await axios.put(
-            `${API_BASE_URL}/api/patient/medical-factors`,
-            { factors },
-            {
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                }
-            }
-        );
-
-        if (response.data.success) {
-            setActiveMedicalFactors(factors);
-            return true;
+      const token = localStorage.getItem('token');
+      const response = await axios.put(
+        `${API_BASE_URL}/api/patient/medical-factors`,
+        { factors },
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
         }
-        return false;
-    } catch (error) {
-        console.error('Error updating medical factors:', error);
-        throw error;
-    }
-}, []);
+      );
 
+      if (response.data.success) {
+        setActiveMedicalFactors(factors);
+
+        // Add to history
+        setMedicalFactorsHistory(prev => [
+          ...prev,
+          {
+            timestamp: new Date().toISOString(),
+            factors
+          }
+        ]);
+
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Error updating medical factors:', error);
+      throw error;
+    }
+  }, []);
+
+  // Get medical factors for a specific date
   const getMedicalFactorsForDate = useCallback((date) => {
     const timestamp = date.toISOString();
     const historyEntry = medicalFactorsHistory.find(entry =>
@@ -132,6 +169,7 @@ export function ConstantsProvider({ children }) {
     };
   }, [medicalFactorsHistory, patientConstants]);
 
+  // Refresh constants
   const refreshConstants = useCallback(async () => {
     try {
       setLoading(true);
@@ -162,6 +200,27 @@ export function ConstantsProvider({ children }) {
       const { constants } = event.detail;
       if (validateConstants(constants)) {
         setPatientConstants(constants);
+
+        // Update active medical factors when constants are updated
+        const activeConditions = {};
+        const activeMedications = {};
+
+        Object.entries(constants.medical_condition_factors || {}).forEach(([id, condition]) => {
+          if (condition.active) {
+            activeConditions[id] = condition;
+          }
+        });
+
+        Object.entries(constants.medication_factors || {}).forEach(([id, medication]) => {
+          if (medication.active) {
+            activeMedications[id] = medication;
+          }
+        });
+
+        setActiveMedicalFactors({
+          conditions: activeConditions,
+          medications: activeMedications
+        });
       }
     };
 
@@ -182,7 +241,8 @@ export function ConstantsProvider({ children }) {
     medicalFactorsHistory,
     setPatientConstants,
     validateConstants,
-    activeMedicalFactors
+    activeMedicalFactors,
+    setActiveMedicalFactors
   };
 
   return (

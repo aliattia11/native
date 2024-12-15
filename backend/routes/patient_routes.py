@@ -47,3 +47,30 @@ def patient_constants():
             return jsonify({'error': str(e)}), 500
 
     return get_constants()
+
+
+@patient_routes.route('/api/patient/medical-factors', methods=['GET'])
+@token_required
+def get_medical_factors(current_user):
+    try:
+        user_id = str(current_user['_id'])
+        user = mongo.db.users.find_one({"_id": ObjectId(user_id)})
+
+        if not user:
+            return jsonify({'success': False, 'message': 'User not found'}), 404
+
+        medical_factors = {
+            'conditions': user.get('medical_condition_factors', {}),
+            'medications': user.get('medication_factors', {})
+        }
+
+        return jsonify({
+            'success': True,
+            'factors': medical_factors
+        }), 200
+
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': str(e)
+        }), 500

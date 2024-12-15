@@ -28,9 +28,13 @@ export const convertToMl = (amount, unit) => {
   }
   return amount;
 };
-
 export const calculateNutrients = (food) => {
-  if (!food.details) return { carbs: 0, protein: 0, fat: 0, absorptionType: 'medium' };
+  if (!food.details) return {
+    carbs: 0,
+    protein: 0,
+    fat: 0,
+    absorptionType: 'medium'
+  };
 
   let conversionRatio = 1;
 
@@ -57,6 +61,7 @@ export const calculateNutrients = (food) => {
     absorptionType: food.details.absorption_type || 'medium'
   };
 };
+
 export const calculateTotalNutrients = (selectedFoods) => {
   return selectedFoods.reduce((acc, food) => {
     const nutrients = calculateNutrients(food);
@@ -69,9 +74,7 @@ export const calculateTotalNutrients = (selectedFoods) => {
   }, { carbs: 0, protein: 0, fat: 0, absorptionType: 'medium' });
 };
 
-
-
-
+// Enhanced activity impact calculation
 export const calculateActivityImpact = (activities, patientConstants) => {
   if (!activities || !patientConstants?.activity_coefficients) return 0;
 
@@ -85,6 +88,26 @@ export const calculateActivityImpact = (activities, patientConstants) => {
   }, 0);
 };
 
+// Calculate medical factors impact
+export const calculateMedicalFactors = (medicalFactors) => {
+  if (!medicalFactors) return { conditionFactor: 1.0, medicationFactor: 1.0 };
+
+  const conditionFactor = Object.values(medicalFactors.conditions || {})
+    .reduce((factor, condition) =>
+      condition.active ? factor * (condition.factor || 1.0) : factor, 1.0);
+
+  const medicationFactor = Object.values(medicalFactors.medications || {})
+    .reduce((factor, medication) =>
+      medication.active ? factor * (medication.factor || 1.0) : factor, 1.0);
+
+  return {
+    conditionFactor,
+    medicationFactor,
+    totalFactor: conditionFactor * medicationFactor
+  };
+};
+
+// Enhanced insulin dose calculation
 export const calculateInsulinDose = ({
   carbs,
   protein,
@@ -93,55 +116,46 @@ export const calculateInsulinDose = ({
   activities,
   patientConstants,
   mealType,
-  absorptionType = 'medium'
+  absorptionType = 'medium',
+  medicalFactors
 }) => {
   if (!patientConstants) {
     throw new Error('Patient constants are required for insulin calculation');
   }
 
-  // Calculate medical condition and medication factors
-  const medicalFactor = Object.values(patientConstants.medical_condition_factors || {})
-    .reduce((factor, condition) =>
-      condition.active ? factor * (condition.factor || 1.0) : factor, 1.0);
+  // Calculate medical factors
+  const { conditionFactor, medicationFactor, totalFactor } = calculateMedicalFactors(medicalFactors);
 
-  const medicationFactor = Object.values(patientConstants.medication_factors || {})
-    .reduce((factor, medication) =>
-      medication.active ? factor * (medication.factor || 1.0) : factor, 1.0);
-
-  // Calculate base insulin from carbs
+  // Base insulin calculations
   const carbInsulin = carbs / patientConstants.insulin_to_carb_ratio;
-
-  // Calculate protein and fat contributions
   const proteinContribution = (protein * patientConstants.protein_factor) / patientConstants.insulin_to_carb_ratio;
   const fatContribution = (fat * patientConstants.fat_factor) / patientConstants.insulin_to_carb_ratio;
 
-  // Get absorption factor based on food type
+  // Adjustment factors
   const absorptionFactor = patientConstants.absorption_modifiers[absorptionType] || 1.0;
-
-  // Apply meal timing factor if available
   const mealTimingFactor = mealType && patientConstants.meal_timing_factors?.[mealType] || 1.0;
 
-  // Get time-based factor
+  // Time-based factor
   const hour = new Date().getHours();
   const timeOfDayFactor = Object.values(patientConstants.time_of_day_factors || {})
     .find(factor => hour >= factor.hours[0] && hour < factor.hours[1])?.factor || 1.0;
 
   // Calculate base insulin with all factors
   const baseInsulin = (carbInsulin + proteinContribution + fatContribution) *
-    absorptionFactor * mealTimingFactor * timeOfDayFactor * medicalFactor * medicationFactor;
+    absorptionFactor * mealTimingFactor * timeOfDayFactor * totalFactor;
 
-  // Calculate activity impact and apply to base insulin
+  // Activity impact
   const activityImpact = calculateActivityImpact(activities, patientConstants);
   const activityAdjustedInsulin = baseInsulin * (1 + activityImpact);
 
-  // Calculate correction insulin if needed
+  // Correction insulin
   let correctionInsulin = 0;
   if (bloodSugar && patientConstants.target_glucose && patientConstants.correction_factor) {
     const glucoseDifference = bloodSugar - patientConstants.target_glucose;
-    correctionInsulin = (glucoseDifference / patientConstants.correction_factor) * medicalFactor * medicationFactor;
+    correctionInsulin = (glucoseDifference / patientConstants.correction_factor) * totalFactor;
   }
 
-  // Calculate total insulin (ensuring it never goes below 0)
+  // Total insulin
   const totalInsulin = Math.max(0, activityAdjustedInsulin + correctionInsulin);
 
   return {
@@ -156,10 +170,63 @@ export const calculateInsulinDose = ({
       mealTimingFactor,
       timeOfDayFactor,
       medicalFactors: {
-        total: Math.round(medicalFactor * medicationFactor * 100) / 100,
-        conditions: medicalFactor,
-        medications: medicationFactor
+        total: Math.round(totalFactor * 100) / 100,
+        conditions: {
+          factor: Math.round(conditionFactor * 100) / 100,
+          active: Object.entries(medicalFactors?.conditions || {})
+            .filter(([_, condition]) => condition.active)
+            .map(([id, condition]) => ({
+              id,
+              name: condition.name,
+              factor: condition.factor
+            }))
+        },
+        medications: {
+          factor: Math.round(medicationFactor * 100) / 100,
+          active: Object.entries(medicalFactors?.medications || {})
+            .filter(([_, medication]) => medication.active)
+            .map(([id, medication]) => ({
+              id,
+              name: medication.name,
+              factor: medication.factor
+            }))
+        }
       }
     }
   };
+};
+
+// Add utility to format medical factors for display
+export const formatMedicalFactorsForDisplay = (medicalFactors) => {
+  if (!medicalFactors) return [];
+
+  const formattedFactors = [];
+
+  // Format conditions
+  Object.entries(medicalFactors.conditions || {})
+    .filter(([_, condition]) => condition.active)
+    .forEach(([id, condition]) => {
+      formattedFactors.push({
+        id,
+        type: 'condition',
+        name: condition.name,
+        factor: condition.factor,
+        description: condition.description
+      });
+    });
+
+  // Format medications
+  Object.entries(medicalFactors.medications || {})
+    .filter(([_, medication]) => medication.active)
+    .forEach(([id, medication]) => {
+      formattedFactors.push({
+        id,
+        type: 'medication',
+        name: medication.name,
+        factor: medication.factor,
+        description: medication.description
+      });
+    });
+
+  return formattedFactors;
 };
