@@ -34,14 +34,12 @@ class ConstantConfig:
         'fast': {'timing_minutes': 15, 'description': 'Take insulin 15 minutes before meal'},
         'very_fast': {'timing_minutes': 20, 'description': 'Take insulin 20 minutes before meal'}
     })
-    # Add timing-related constants
     meal_timing_factors: Dict[str, float] = field(default_factory=lambda: {
         'breakfast': 1.2,  # Higher insulin resistance in morning
         'lunch': 1.0,
         'dinner': 0.9,  # Better insulin sensitivity in evening
         'snack': 1.0  # Default factor for snacks
     })
-
     time_of_day_factors: Dict[str, Dict[str, Any]] = field(default_factory=lambda: {
         'early_morning': {
             'hours': (0, 6),
@@ -65,11 +63,10 @@ class ConstantConfig:
         }
     })
 
-
 class Constants:
     """Enhanced constants management with dataclass support"""
 
-    # 1. First define all class-level constants
+    # Class-level constants
     MEASUREMENT_SYSTEMS = {
         'VOLUME': 'volume',
         'WEIGHT': 'weight'
@@ -112,7 +109,24 @@ class Constants:
         {'value': 'snack', 'label': 'Snack'}
     ]
 
-    # Add DEFAULT_PATIENT_CONSTANTS
+    FOOD_CATEGORIES = [
+        {'value': 'basic', 'label': 'Basic Foods'},
+        {'value': 'starch', 'label': 'Starches'},
+        {'value': 'starchy_vegetables', 'label': 'Starchy Vegetables'},
+        {'value': 'pulses', 'label': 'Pulses'},
+        {'value': 'fruits', 'label': 'Fruits'},
+        {'value': 'dairy', 'label': 'Dairy'},
+        {'value': 'sweets', 'label': 'Sweets & Desserts'},
+        {'value': 'snacks', 'label': 'Snacks'},
+        {'value': 'common_snacks', 'label': 'Common Snacks'},
+        {'value': 'high_protein', 'label': 'High Protein Foods'},
+        {'value': 'high_fat', 'label': 'High Fat Foods'},
+        {'value': 'indian', 'label': 'Indian Dishes'},
+        {'value': 'chinese', 'label': 'Chinese Dishes'},
+        {'value': 'italian', 'label': 'Italian Dishes'},
+        {'value': 'custom', 'label': 'Custom Foods'}
+    ]
+
     DEFAULT_PATIENT_CONSTANTS = {
         'insulin_to_carb_ratio': 10,
         'correction_factor': 50,
@@ -132,6 +146,41 @@ class Constants:
             'medium': 1.0,
             'fast': 1.2,
             'very_fast': 1.4
+        },
+        'insulin_timing_guidelines': {
+            'very_slow': {'timing_minutes': 0, 'description': 'Take insulin at the start of meal'},
+            'slow': {'timing_minutes': 5, 'description': 'Take insulin 5 minutes before meal'},
+            'medium': {'timing_minutes': 10, 'description': 'Take insulin 10 minutes before meal'},
+            'fast': {'timing_minutes': 15, 'description': 'Take insulin 15 minutes before meal'},
+            'very_fast': {'timing_minutes': 20, 'description': 'Take insulin 20 minutes before meal'}
+        },
+        'meal_timing_factors': {
+            'breakfast': 1.2,  # Higher insulin resistance in morning
+            'lunch': 1.0,
+            'dinner': 0.9,  # Better insulin sensitivity in evening
+            'snack': 1.0  # Default factor for snacks
+        },
+        'time_of_day_factors': {
+            'early_morning': {
+                'hours': (0, 6),
+                'factor': 1.1,
+                'description': 'Very early morning adjustment'
+            },
+            'morning': {
+                'hours': (6, 10),
+                'factor': 1.2,
+                'description': 'Morning insulin resistance period'
+            },
+            'daytime': {
+                'hours': (10, 22),
+                'factor': 1.0,
+                'description': 'Standard daytime period'
+            },
+            'late_night': {
+                'hours': (22, 24),
+                'factor': 0.9,
+                'description': 'Late night adjustment'
+            }
         }
     }
 
@@ -145,7 +194,6 @@ class Constants:
         if patient_id:
             self._load_patient_constants()
 
-    # 2. Define properties after class-level constants but before other methods
     @property
     def volume_base(self) -> Dict[str, float]:
         """Returns a dictionary of volume measurements to their base unit (ml)"""
@@ -269,7 +317,6 @@ class Constants:
         Update patient-specific constants in MongoDB
         """
 
-
         if not self.patient_id:
             return False
 
@@ -297,7 +344,6 @@ class Constants:
         except Exception as e:
             print(f"Error updating patient constants: {e}")
             return False
-
 
     def convert_between_units(self, amount: float, from_unit: str, to_unit: str) -> float:
         """
@@ -352,10 +398,12 @@ class Constants:
             'WEIGHT_MEASUREMENTS': cls.WEIGHT_MEASUREMENTS,
             'ACTIVITY_LEVELS': cls.ACTIVITY_LEVELS,
             'MEAL_TYPES': cls.MEAL_TYPES,
+            'FOOD_CATEGORIES': cls.FOOD_CATEGORIES,
             'DEFAULT_PATIENT_CONSTANTS': cls.DEFAULT_PATIENT_CONSTANTS,
-            'MEAL_TIMING_FACTORS': asdict(config)['meal_timing_factors'],
-            'TIME_OF_DAY_FACTORS': asdict(config)['time_of_day_factors']
+            'MEAL_TIMING_FACTORS': cls.DEFAULT_PATIENT_CONSTANTS['meal_timing_factors'],
+            'TIME_OF_DAY_FACTORS': cls.DEFAULT_PATIENT_CONSTANTS['time_of_day_factors']
         }
+
     @classmethod
     def export_constants_to_frontend(cls, output_path: str = '../frontend/src/constants/shared_constants.js') -> None:
         """
@@ -368,74 +416,57 @@ class Constants:
             'DEFAULT_PATIENT_CONSTANTS': asdict(ConstantConfig()),
             'ACTIVITY_LEVELS': cls.ACTIVITY_LEVELS,
             'MEAL_TYPES': cls.MEAL_TYPES,
-
-            # Add food-related categories from food_service.py
-            'FOOD_CATEGORIES': [
-                {'value': 'basic', 'label': 'Basic Foods'},
-                {'value': 'starch', 'label': 'Starches'},
-                {'value': 'starchy_vegetables', 'label': 'Starchy Vegetables'},
-                {'value': 'pulses', 'label': 'Pulses'},
-                {'value': 'fruits', 'label': 'Fruits'},
-                {'value': 'dairy', 'label': 'Dairy'},
-                {'value': 'sweets', 'label': 'Sweets & Desserts'},
-                {'value': 'snacks', 'label': 'Snacks'},
-                {'value': 'common_snacks', 'label': 'Common Snacks'},
-                {'value': 'high_protein', 'label': 'High Protein Foods'},
-                {'value': 'high_fat', 'label': 'High Fat Foods'},
-                {'value': 'indian', 'label': 'Indian Dishes'},
-                {'value': 'chinese', 'label': 'Chinese Dishes'},
-                {'value': 'italian', 'label': 'Italian Dishes'},
-                {'value': 'custom', 'label': 'Custom Foods'}
-            ],
+            'FOOD_CATEGORIES': cls.FOOD_CATEGORIES,  # Use class constant
+            'MEAL_TIMING_FACTORS': cls.DEFAULT_PATIENT_CONSTANTS['meal_timing_factors'],  # Use class constant
+            'TIME_OF_DAY_FACTORS': cls.DEFAULT_PATIENT_CONSTANTS['time_of_day_factors'],  # Use class constant
 
             # Conversion Utilities
             'CONVERSION_UTILS': {
                 'convertToGrams': '''
-        function convertToGrams(amount, unit) {
-            const volumeMeasurements = SHARED_CONSTANTS.VOLUME_MEASUREMENTS;
-            const weightMeasurements = SHARED_CONSTANTS.WEIGHT_MEASUREMENTS;
+         function convertToGrams(amount, unit) {
+             const volumeMeasurements = SHARED_CONSTANTS.VOLUME_MEASUREMENTS;
+             const weightMeasurements = SHARED_CONSTANTS.WEIGHT_MEASUREMENTS;
 
-            if (weightMeasurements[unit]) {
-                return amount * weightMeasurements[unit].grams;
-            }
+             if (weightMeasurements[unit]) {
+                 return amount * weightMeasurements[unit].grams;
+             }
 
-            if (volumeMeasurements[unit]) {
-                // For volume, use a default density of 1g/ml for simplicity
-                return amount * volumeMeasurements[unit].ml;
-            }
-
-            // If unit is not found, return the original amount
-            return amount;
-        }
-        ''',
+             if (volumeMeasurements[unit]) {
+                 // For volume, use a default density of 1g/ml for simplicity
+                 return amount * volumeMeasurements[unit].ml;
+             }
+              // If unit is not found, return the original amount
+              return amount;
+          }
+          ''',
                 'convertToMl': '''
-        function convertToMl(amount, unit) {
-            const volumeMeasurements = SHARED_CONSTANTS.VOLUME_MEASUREMENTS;
-            const weightMeasurements = SHARED_CONSTANTS.WEIGHT_MEASUREMENTS;
+          function convertToMl(amount, unit) {
+              const volumeMeasurements = SHARED_CONSTANTS.VOLUME_MEASUREMENTS;
+              const weightMeasurements = SHARED_CONSTANTS.WEIGHT_MEASUREMENTS;
 
-            if (volumeMeasurements[unit]) {
-                return amount * volumeMeasurements[unit].ml;
-            }
+              if (volumeMeasurements[unit]) {
+                  return amount * volumeMeasurements[unit].ml;
+              }
 
-            if (weightMeasurements[unit]) {
-                // For weight, use a default density of 1g/ml for simplicity
-                return amount * weightMeasurements[unit].grams;
-            }
+              if (weightMeasurements[unit]) {
+                  // For weight, use a default density of 1g/ml for simplicity
+                  return amount * weightMeasurements[unit].grams;
+              }
 
-            // If unit is not found, return the original amount
-            return amount;
-        }
-        '''
+              // If unit is not found, return the original amount
+              return amount;
+          }
+          '''
             }
         }
 
         js_content = f"""// Auto-generated from backend constants - DO NOT EDIT DIRECTLY
-        export const SHARED_CONSTANTS = {json.dumps(constants, indent=2)};
+          export const SHARED_CONSTANTS = {json.dumps(constants, indent=2)};
 
-        // Utility Functions
-        export const convertToGrams = {constants['CONVERSION_UTILS']['convertToGrams']};
-        export const convertToMl = {constants['CONVERSION_UTILS']['convertToMl']};
-        """
+          // Utility Functions
+          export const convertToGrams = {constants['CONVERSION_UTILS']['convertToGrams']};
+          export const convertToMl = {constants['CONVERSION_UTILS']['convertToMl']};
+          """
 
         frontend_path = Path(output_path)
         frontend_path.parent.mkdir(parents=True, exist_ok=True)

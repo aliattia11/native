@@ -37,9 +37,10 @@ def calculate_activity_impact(activities):
 
     return total_coefficient
 
+
 def get_meal_timing_factor(meal_type, time=None):
     """
-    Get timing factor based on meal type and time of day
+    Get timing factor based on meal type and time of day using Constants class
 
     Args:
         meal_type (str): Type of meal (breakfast, lunch, dinner, snack)
@@ -50,23 +51,21 @@ def get_meal_timing_factor(meal_type, time=None):
 
     hour = time.hour
 
-    # Base timing factors
-    timing_factors = {
-        'breakfast': 1.2,  # Higher insulin resistance in morning
-        'lunch': 1.0,
-        'dinner': 0.9,  # Better insulin sensitivity in evening
-        'snack': 1.0  # Default factor for snacks
-    }
+    # Get timing factors from Constants class
+    meal_timing_factors = Constants.MEAL_TIMING_FACTORS
+    time_of_day_factors = Constants.TIME_OF_DAY_FACTORS
 
-    # Time-based adjustments
-    if hour < 6:  # Very early morning
-        return timing_factors.get(meal_type, 1.0) * 1.1
-    elif 6 <= hour < 10:  # Morning
-        return timing_factors.get(meal_type, 1.0) * 1.2
-    elif 22 <= hour:  # Late night
-        return timing_factors.get(meal_type, 1.0) * 0.9
+    # Get base factor for meal type
+    base_factor = meal_timing_factors.get(meal_type, 1.0)
 
-    return timing_factors.get(meal_type, 1.0)
+    # Apply time-based adjustments
+    for period, data in time_of_day_factors.items():
+        start_hour, end_hour = data['hours']
+        if start_hour <= hour < end_hour:
+            return base_factor * data['factor']
+
+    # Default to daytime factor if no specific period matches
+    return base_factor * time_of_day_factors['daytime']['factor']
 
 
 def calculate_meal_nutrition(food_items):
@@ -140,7 +139,8 @@ def calculate_meal_nutrition(food_items):
 
 def calculate_suggested_insulin(user_id, nutrition, activities, blood_glucose=None, meal_type='normal'):
     # Initialize Constants with patient ID
-    patient_constants = Constants(user_id).get_patient_constants()  # Use get_patient_constants instead
+    constants = Constants(user_id)
+    patient_constants = constants.get_patient_constants()
 
     # Get user-specific constants with fallbacks
     insulin_to_carb_ratio = patient_constants['insulin_to_carb_ratio']
@@ -148,7 +148,8 @@ def calculate_suggested_insulin(user_id, nutrition, activities, blood_glucose=No
     target_glucose = patient_constants['target_glucose']
     protein_factor = patient_constants['protein_factor']
     fat_factor = patient_constants['fat_factor']
-    # Calculate timing factor
+
+    # Calculate timing factor using the enhanced method
     timing_factor = get_meal_timing_factor(meal_type)
 
     # Adjust carb calculation based on absorption factor
