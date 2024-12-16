@@ -53,7 +53,7 @@ def get_patient_constants(current_user, patient_id):
         if not patient:
             return jsonify({'message': 'Patient not found'}), 404
 
-        # Return the full set of constants matching the frontend structure
+        # Return the full set of constants including disease and medication factors
         constants = {
             'insulin_to_carb_ratio': patient.get('insulin_to_carb_ratio', 10),
             'correction_factor': patient.get('correction_factor', 50),
@@ -80,51 +80,21 @@ def get_patient_constants(current_user, patient_id):
                 "medium": {"timing_minutes": 10, "description": "Take insulin 10 minutes before meal"},
                 "fast": {"timing_minutes": 15, "description": "Take insulin 15 minutes before meal"},
                 "very_fast": {"timing_minutes": 20, "description": "Take insulin 20 minutes before meal"}
-            })
+            }),
+            'disease_factors': patient.get('disease_factors', {
+                'default': {'factor': 1.0, 'description': 'No disease impact'}
+            }),
+            'medication_factors': patient.get('medication_factors', {
+                'default': {'factor': 1.0, 'description': 'No medication impact'}
+            }),
+            'active_diseases': patient.get('active_diseases', ['default']),
+            'active_medications': patient.get('active_medications', ['default'])
         }
         return jsonify({'constants': constants}), 200
     except Exception as e:
         logger.error(f"Error fetching patient constants: {str(e)}")
         return jsonify({'message': 'Error fetching patient constants'}), 500
 
-@doctor_routes.route('/api/doctor/patient/<patient_id>/constants/reset', methods=['POST'])
-@token_required
-@api_error_handler
-def reset_patient_constants(current_user, patient_id):
-    if current_user.get('user_type') != 'doctor':
-        return jsonify({'message': 'Unauthorized access'}), 403
-
-    try:
-        # Get default constants from ConstantConfig
-        from constants import ConstantConfig
-        default_config = ConstantConfig()
-        default_constants = {
-            'insulin_to_carb_ratio': default_config.insulin_to_carb_ratio,
-            'correction_factor': default_config.correction_factor,
-            'target_glucose': default_config.target_glucose,
-            'protein_factor': default_config.protein_factor,
-            'fat_factor': default_config.fat_factor,
-            'activity_coefficients': default_config.activity_coefficients,
-            'absorption_modifiers': default_config.absorption_modifiers,
-            'insulin_timing_guidelines': default_config.insulin_timing_guidelines
-        }
-
-        # Update patient with default constants
-        result = mongo.db.users.update_one(
-            {"_id": ObjectId(patient_id)},
-            {"$set": default_constants}
-        )
-
-        if result.matched_count == 0:
-            return jsonify({'message': 'Patient not found'}), 404
-
-        return jsonify({
-            'message': 'Constants reset to defaults successfully',
-            'constants': default_constants
-        }), 200
-    except Exception as e:
-        logger.error(f"Error resetting patient constants: {str(e)}")
-        return jsonify({'message': 'Error resetting patient constants'}), 500
 
 @doctor_routes.route('/api/doctor/patient/<patient_id>/constants', methods=['PUT'])
 @token_required
@@ -149,13 +119,30 @@ def update_patient_constants(current_user, patient_id):
             'fat_factor',
             'activity_coefficients',
             'absorption_modifiers',
-            'insulin_timing_guidelines'
+            'insulin_timing_guidelines',
+            'disease_factors',
+            'medication_factors',
+            'active_diseases',
+            'active_medications'
         ]
 
         update_data = {}
         for field in required_fields:
             if field in constants:
-                update_data[field] = constants[field]
+                # Validate disease and medication factors format
+                if field in ['disease_factors', 'medication_factors']:
+                    update_data[field] = {
+                        k: {
+                            'factor': float(v.get('factor', 1.0)),
+                            'description': str(v.get('description', ''))
+                        }
+                        for k, v in constants[field].items()
+                    }
+                # Validate active conditions format
+                elif field in ['active_diseases', 'active_medications']:
+                    update_data[field] = list(set(constants[field]))
+                else:
+                    update_data[field] = constants[field]
 
         if not update_data:
             return jsonify({'message': 'No valid constants provided'}), 400
@@ -181,3 +168,47 @@ def update_patient_constants(current_user, patient_id):
     except Exception as e:
         logger.error(f"Error updating patient constants: {str(e)}")
         return jsonify({'message': 'Error updating patient constants'}), 500
+
+
+@doctor_routes.route('/api/doctor/patient/<patient_id>/constants/reset', methods=['POST'])
+@token_required
+@api_error_handler
+def reset_patient_constants(current_user, patient_id):
+    if current_user.get('user_type') != 'doctor':
+        return jsonify({'message': 'Unauthorized access'}), 403
+
+    try:
+        # Get default constants from ConstantConfig
+        from constants import ConstantConfig
+        default_config = ConstantConfig()
+        default_constants = {
+            'insulin_to_carb_ratio': default_config.insulin_to_carb_ratio,
+            'correction_factor': default_config.correction_factor,
+            'target_glucose': default_config.target_glucose,
+            'protein_factor': default_config.protein_factor,
+            'fat_factor': default_config.fat_factor,
+            'activity_coefficients': default_config.activity_coefficients,
+            'absorption_modifiers': default_config.absorption_modifiers,
+            'insulin_timing_guidelines': default_config.insulin_timing_guidelines,
+            'disease_factors': default_config.disease_factors,
+            'medication_factors': default_config.medication_factors,
+            'active_diseases': ['default'],
+            'active_medications': ['default']
+        }
+
+        # Update patient with default constants
+        result = mongo.db.users.update_one(
+            {"_id": ObjectId(patient_id)},
+            {"$set": default_constants}
+        )
+
+        if result.matched_count == 0:
+            return jsonify({'message': 'Patient not found'}), 404
+
+        return jsonify({
+            'message': 'Constants reset to defaults successfully',
+            'constants': default_constants
+        }), 200
+    except Exception as e:
+        logger.error(f"Error resetting patient constants: {str(e)}")
+        return jsonify({'message': 'Error resetting patient constants'}), 500

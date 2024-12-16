@@ -149,6 +149,28 @@ def calculate_suggested_insulin(user_id, nutrition, activities, blood_glucose=No
     protein_factor = patient_constants['protein_factor']
     fat_factor = patient_constants['fat_factor']
 
+    # Get disease and medication factors
+    disease_factors = patient_constants.get('disease_factors', {})
+    medication_factors = patient_constants.get('medication_factors', {})
+
+    # Calculate combined disease factor
+    # Get active diseases for the patient from the database
+    patient = mongo.db.users.find_one({'_id': ObjectId(user_id)})
+    active_diseases = patient.get('active_diseases', ['default'])
+    active_medications = patient.get('active_medications', ['default'])
+
+    # Calculate combined disease factor
+    disease_factor = 1.0
+    for disease in active_diseases:
+        if disease in disease_factors:
+            disease_factor *= disease_factors[disease].get('factor', 1.0)
+
+    # Calculate combined medication factor
+    medication_factor = 1.0
+    for medication in active_medications:
+        if medication in medication_factors:
+            medication_factor *= medication_factors[medication].get('factor', 1.0)
+
     # Calculate timing factor using the enhanced method
     timing_factor = get_meal_timing_factor(meal_type)
 
@@ -167,8 +189,11 @@ def calculate_suggested_insulin(user_id, nutrition, activities, blood_glucose=No
     # Apply timing factor to base insulin calculation
     base_insulin = (carb_insulin + protein_fat_insulin) * timing_factor
 
+    # Apply disease and medication factors
+    condition_adjusted_insulin = base_insulin * disease_factor * medication_factor
+
     # Activity adjustment
-    activity_adjusted_insulin = base_insulin * (1 + activity_coefficient)
+    activity_adjusted_insulin = condition_adjusted_insulin * (1 + activity_coefficient)
 
     # Add correction insulin if blood glucose is provided
     correction_insulin = 0
@@ -176,7 +201,10 @@ def calculate_suggested_insulin(user_id, nutrition, activities, blood_glucose=No
         glucose_difference = blood_glucose - target_glucose
         correction_insulin = max(0, glucose_difference / correction_factor)
 
-    total_insulin = activity_adjusted_insulin + correction_insulin
+    # Apply disease and medication factors to correction insulin as well
+    adjusted_correction_insulin = correction_insulin * disease_factor * medication_factor
+
+    total_insulin = activity_adjusted_insulin + adjusted_correction_insulin
 
     return {
         'total': round(max(0, total_insulin), 1),
@@ -185,11 +213,15 @@ def calculate_suggested_insulin(user_id, nutrition, activities, blood_glucose=No
             'protein_fat_insulin': round(protein_fat_insulin, 2),
             'timing_factor': round(timing_factor, 2),
             'activity_coefficient': round(activity_coefficient, 2),
+            'disease_factor': round(disease_factor, 2),
+            'medication_factor': round(medication_factor, 2),
             'correction_insulin': round(correction_insulin, 2),
-            'absorption_factor': nutrition.get('absorption_factor', 1.0)
+            'adjusted_correction_insulin': round(adjusted_correction_insulin, 2),
+            'absorption_factor': nutrition.get('absorption_factor', 1.0),
+            'active_diseases': active_diseases,
+            'active_medications': active_medications
         }
     }
-
 
 @meal_insulin_bp.route('/api/meal', methods=['POST'])
 @token_required
@@ -217,6 +249,11 @@ def submit_meal(current_user):
         # Calculate nutrition with new portion system
         nutrition = calculate_meal_nutrition(data['foodItems'])
 
+        # Get current patient data for active conditions
+        patient = mongo.db.users.find_one({'_id': ObjectId(str(current_user['_id']))})
+        active_diseases = patient.get('active_diseases', ['default'])
+        active_medications = patient.get('active_medications', ['default'])
+
         # Calculate suggested insulin with enhanced features
         insulin_calc = calculate_suggested_insulin(
             str(current_user['_id']),
@@ -226,7 +263,7 @@ def submit_meal(current_user):
             data['mealType']
         )
 
-        # Prepare meal document
+        # Prepare meal document with additional fields
         meal_doc = {
             'user_id': str(current_user['_id']),
             'timestamp': datetime.utcnow(),
@@ -238,7 +275,9 @@ def submit_meal(current_user):
             'intendedInsulin': data.get('intendedInsulin'),
             'suggestedInsulin': insulin_calc['total'],
             'insulinCalculation': insulin_calc['breakdown'],
-            'notes': data.get('notes', '')
+            'notes': data.get('notes', ''),
+            'active_diseases': active_diseases,
+            'active_medications': active_medications
         }
 
         # Insert into database
