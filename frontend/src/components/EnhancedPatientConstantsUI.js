@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import styles from './EnhancedPatientConstants.module.css';
-import { DEFAULT_PATIENT_CONSTANTS } from '../constants';
+import { DEFAULT_PATIENT_CONSTANTS, DISEASE_FACTORS, MEDICATION_FACTORS } from '../constants';
 
 const EnhancedPatientConstantsUI = ({ patientId }) => {
   const [constants, setConstants] = useState(DEFAULT_PATIENT_CONSTANTS);
@@ -10,7 +10,9 @@ const EnhancedPatientConstantsUI = ({ patientId }) => {
   const [expandedSections, setExpandedSections] = useState({
     basic: true,
     activity: true,
-    absorption: true
+    absorption: true,
+    diseases: true,
+    medications: true
   });
 
   const fetchPatientConstants = useCallback(async () => {
@@ -42,6 +44,52 @@ const EnhancedPatientConstantsUI = ({ patientId }) => {
       [key]: parseFloat(value) || 0
     }));
   };
+
+  // New handlers for disease and medication factors
+  const handleDiseaseFactorChange = (disease, value) => {
+    setConstants(prev => ({
+      ...prev,
+      disease_factors: {
+        ...prev.disease_factors,
+        [disease]: {
+          ...prev.disease_factors[disease],
+          factor: parseFloat(value) || 1.0
+        }
+      }
+    }));
+  };
+
+  const handleMedicationFactorChange = (medication, value) => {
+    setConstants(prev => ({
+      ...prev,
+      medication_factors: {
+        ...prev.medication_factors,
+        [medication]: {
+          ...prev.medication_factors[medication],
+          factor: parseFloat(value) || 1.0
+        }
+      }
+    }));
+  };
+
+  const handleActiveConditionToggle = (condition) => {
+    setConstants(prev => ({
+      ...prev,
+      active_conditions: prev.active_conditions.includes(condition)
+        ? prev.active_conditions.filter(c => c !== condition)
+        : [...prev.active_conditions, condition]
+    }));
+  };
+
+  const handleActiveMedicationToggle = (medication) => {
+    setConstants(prev => ({
+      ...prev,
+      active_medications: prev.active_medications.includes(medication)
+        ? prev.active_medications.filter(m => m !== medication)
+        : [...prev.active_medications, medication]
+    }));
+  };
+
 const resetToDefaults = async () => {
     try {
       setLoading(true);
@@ -242,6 +290,80 @@ const handleSubmit = async () => {
                     onChange={(e) => handleAbsorptionModifierChange(type, e.target.value)}
                     step="0.1"
                   />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+ {/* Health Conditions Section */}
+        <div className={styles.constantsSection}>
+          <h3 className={styles.subsectionTitle} onClick={() => toggleSection('diseases')}>
+            Health Conditions
+            <span style={{ float: 'right' }}>{expandedSections.diseases ? '▼' : '▶'}</span>
+          </h3>
+          {expandedSections.diseases && (
+            <div className={styles.constantsWrapper}>
+              {Object.entries(constants.disease_factors || {}).map(([disease, data]) => (
+                <div key={disease} className={styles.formGroup}>
+                  <div className={styles.factorHeader}>
+                    <input
+                      type="checkbox"
+                      checked={constants.active_conditions?.includes(disease)}
+                      onChange={() => handleActiveConditionToggle(disease)}
+                    />
+                    <label>{disease.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</label>
+                  </div>
+                  <div className={styles.factorInputs}>
+                    <input
+                      type="number"
+                      value={data.factor}
+                      onChange={(e) => handleDiseaseFactorChange(disease, e.target.value)}
+                      step="0.1"
+                      disabled={!constants.active_conditions?.includes(disease)}
+                    />
+                    <span className={styles.factorDescription}>{data.description}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Medications Section */}
+        <div className={styles.constantsSection}>
+          <h3 className={styles.subsectionTitle} onClick={() => toggleSection('medications')}>
+            Medications
+            <span style={{ float: 'right' }}>{expandedSections.medications ? '▼' : '▶'}</span>
+          </h3>
+          {expandedSections.medications && (
+            <div className={styles.constantsWrapper}>
+              {Object.entries(constants.medication_factors || {}).map(([medication, data]) => (
+                <div key={medication} className={styles.formGroup}>
+                  <div className={styles.factorHeader}>
+                    <input
+                      type="checkbox"
+                      checked={constants.active_medications?.includes(medication)}
+                      onChange={() => handleActiveMedicationToggle(medication)}
+                    />
+                    <label>{medication.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</label>
+                  </div>
+                  <div className={styles.factorInputs}>
+                    <input
+                      type="number"
+                      value={data.factor}
+                      onChange={(e) => handleMedicationFactorChange(medication, e.target.value)}
+                      step="0.1"
+                      disabled={!constants.active_medications?.includes(medication)}
+                    />
+                    <span className={styles.factorDescription}>
+                      {data.description}
+                      {data.duration_based && (
+                        <span className={styles.durationBased}>
+                          (Duration: {data.onset_hours}h onset, {data.peak_hours}h peak, {data.duration_hours}h total)
+                        </span>
+                      )}
+                    </span>
+                  </div>
                 </div>
               ))}
             </div>

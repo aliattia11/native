@@ -10,36 +10,42 @@ export function ConstantsProvider({ children }) {
   const [error, setError] = useState(null);
 
   const fetchPatientConstants = async () => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      throw new Error('No authentication token found');
-    }
+  const token = localStorage.getItem('token');
+  if (!token) {
+    throw new Error('No authentication token found');
+  }
 
-    try {
-      const response = await axios.get('http://localhost:5000/api/patient/constants', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      // Validate the response data
-      const constants = response.data.constants;
-      if (!constants) {
-        console.warn('No constants received from server, using defaults');
-        return DEFAULT_PATIENT_CONSTANTS;
+  try {
+    const response = await axios.get('http://localhost:5000/api/patient/constants', {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
       }
+    });
+
+    // Validate the response data
+    const constants = response.data.constants;
+    if (!constants) {
+      console.warn('No constants received from server, using defaults');
+      return DEFAULT_PATIENT_CONSTANTS;
+    }
 
       // Merge with defaults to ensure all required fields exist
-      return {
-        ...DEFAULT_PATIENT_CONSTANTS,
-        ...constants
-      };
-    } catch (error) {
-      console.error('Error fetching patient constants:', error);
-      throw new Error('Failed to fetch patient constants');
-    }
-  };
+        return {
+      ...DEFAULT_PATIENT_CONSTANTS,
+      ...constants,
+      // Ensure these fields exist with proper defaults
+      disease_factors: constants.disease_factors || DEFAULT_PATIENT_CONSTANTS.disease_factors,
+      medication_factors: constants.medication_factors || DEFAULT_PATIENT_CONSTANTS.medication_factors,
+      active_conditions: constants.active_conditions || [],
+      active_medications: constants.active_medications || []
+    };
+  } catch (error) {
+    console.error('Error fetching patient constants:', error);
+    throw new Error('Failed to fetch patient constants');
+  }
+};
+
 
   const refreshConstants = useCallback(async () => {
     try {

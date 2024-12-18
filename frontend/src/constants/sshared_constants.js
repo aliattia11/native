@@ -1,5 +1,5 @@
 // Auto-generated from backend constants - DO NOT EDIT DIRECTLY
-              export const SHARED_CONSTANTS = {
+          export const SHARED_CONSTANTS = {
   "MEASUREMENT_SYSTEMS": {
     "VOLUME": "volume",
     "WEIGHT": "weight"
@@ -153,65 +153,6 @@
         "factor": 0.9,
         "description": "Late night adjustment"
       }
-    },
-    "disease_factors": {
-      "type_1_diabetes": {
-        "factor": 1.0,
-        "description": "Standard insulin sensitivity for Type 1 Diabetes"
-      },
-      "type_2_diabetes": {
-        "factor": 0.8,
-        "description": "Reduced insulin sensitivity for Type 2 Diabetes"
-      },
-      "gestational_diabetes": {
-        "factor": 1.2,
-        "description": "Increased insulin sensitivity during pregnancy"
-      },
-      "insulin_resistance": {
-        "factor": 0.7,
-        "description": "Significant reduction in insulin sensitivity"
-      },
-      "thyroid_disorders": {
-        "factor": 1.1,
-        "description": "Slight increase in insulin requirements"
-      },
-      "celiac_disease": {
-        "factor": 1.1,
-        "description": "May require insulin adjustment due to absorption issues"
-      }
-    },
-    "medication_factors": {
-      "corticosteroids": {
-        "factor": 1.4,
-        "description": "Significant increase in insulin resistance",
-        "duration_based": true,
-        "onset_hours": 4,
-        "peak_hours": 8,
-        "duration_hours": 24
-      },
-      "beta_blockers": {
-        "factor": 1.2,
-        "description": "Moderate increase in insulin resistance",
-        "duration_based": false
-      },
-      "thiazide_diuretics": {
-        "factor": 1.1,
-        "description": "Slight increase in insulin resistance",
-        "duration_based": false
-      },
-      "metformin": {
-        "factor": 0.9,
-        "description": "Improved insulin sensitivity",
-        "duration_based": false
-      },
-      "thiazolidinediones": {
-        "factor": 0.8,
-        "description": "Significant improvement in insulin sensitivity",
-        "duration_based": true,
-        "onset_hours": 24,
-        "peak_hours": 48,
-        "duration_hours": 168
-      }
     }
   },
   "ACTIVITY_LEVELS": [
@@ -361,73 +302,14 @@
       "description": "Late night adjustment"
     }
   },
-  "DISEASE_FACTORS": {
-    "type_1_diabetes": {
-      "factor": 1.0,
-      "description": "Standard insulin sensitivity for Type 1 Diabetes"
-    },
-    "type_2_diabetes": {
-      "factor": 0.8,
-      "description": "Reduced insulin sensitivity for Type 2 Diabetes"
-    },
-    "gestational_diabetes": {
-      "factor": 1.2,
-      "description": "Increased insulin sensitivity during pregnancy"
-    },
-    "insulin_resistance": {
-      "factor": 0.7,
-      "description": "Significant reduction in insulin sensitivity"
-    },
-    "thyroid_disorders": {
-      "factor": 1.1,
-      "description": "Slight increase in insulin requirements"
-    },
-    "celiac_disease": {
-      "factor": 1.1,
-      "description": "May require insulin adjustment due to absorption issues"
-    }
-  },
-  "MEDICATION_FACTORS": {
-    "corticosteroids": {
-      "factor": 1.4,
-      "description": "Significant increase in insulin resistance",
-      "duration_based": true,
-      "onset_hours": 4,
-      "peak_hours": 8,
-      "duration_hours": 24
-    },
-    "beta_blockers": {
-      "factor": 1.2,
-      "description": "Moderate increase in insulin resistance",
-      "duration_based": false
-    },
-    "thiazide_diuretics": {
-      "factor": 1.1,
-      "description": "Slight increase in insulin resistance",
-      "duration_based": false
-    },
-    "metformin": {
-      "factor": 0.9,
-      "description": "Improved insulin sensitivity",
-      "duration_based": false
-    },
-    "thiazolidinediones": {
-      "factor": 0.8,
-      "description": "Significant improvement in insulin sensitivity",
-      "duration_based": true,
-      "onset_hours": 24,
-      "peak_hours": 48,
-      "duration_hours": 168
-    }
-  },
   "CONVERSION_UTILS": {
     "convertToGrams": "\n          function convertToGrams(amount, unit) {\n              const volumeMeasurements = SHARED_CONSTANTS.VOLUME_MEASUREMENTS;\n              const weightMeasurements = SHARED_CONSTANTS.WEIGHT_MEASUREMENTS;\n\n              if (weightMeasurements[unit]) {\n                  return amount * weightMeasurements[unit].grams;\n              }\n\n              if (volumeMeasurements[unit]) {\n                  // For volume, use a default density of 1g/ml for simplicity\n                  return amount * volumeMeasurements[unit].ml;\n              }\n\n              // If unit is not found, return the original amount\n              return amount;\n          }\n          ",
     "convertToMl": "\n          function convertToMl(amount, unit) {\n              const volumeMeasurements = SHARED_CONSTANTS.VOLUME_MEASUREMENTS;\n              const weightMeasurements = SHARED_CONSTANTS.WEIGHT_MEASUREMENTS;\n\n              if (volumeMeasurements[unit]) {\n                  return amount * volumeMeasurements[unit].ml;\n              }\n\n              if (weightMeasurements[unit]) {\n                  // For weight, use a default density of 1g/ml for simplicity\n                  return amount * weightMeasurements[unit].grams;\n              }\n\n              // If unit is not found, return the original amount\n              return amount;\n          }\n          "
   }
 };
 
-              // Utility Functions
-              export const convertToGrams = 
+          // Utility Functions
+          export const convertToGrams = 
           function convertToGrams(amount, unit) {
               const volumeMeasurements = SHARED_CONSTANTS.VOLUME_MEASUREMENTS;
               const weightMeasurements = SHARED_CONSTANTS.WEIGHT_MEASUREMENTS;
@@ -445,7 +327,7 @@
               return amount;
           }
           ;
-              export const convertToMl = 
+          export const convertToMl = 
           function convertToMl(amount, unit) {
               const volumeMeasurements = SHARED_CONSTANTS.VOLUME_MEASUREMENTS;
               const weightMeasurements = SHARED_CONSTANTS.WEIGHT_MEASUREMENTS;
@@ -463,27 +345,4 @@
               return amount;
           }
           ;
-
-              // New utility function for calculating disease and medication impacts
-              export const calculateHealthFactors = (diseases, medications) => {
-                  let totalFactor = 1.0;
-
-                  // Calculate disease impacts
-                  if (diseases && diseases.length > 0) {
-                      diseases.forEach(disease => {
-                          const diseaseFactor = SHARED_CONSTANTS.DISEASE_FACTORS[disease]?.factor || 1.0;
-                          totalFactor *= diseaseFactor;
-                      });
-                  }
-
-                  // Calculate medication impacts
-                  if (medications && medications.length > 0) {
-                      medications.forEach(med => {
-                          const medFactor = SHARED_CONSTANTS.MEDICATION_FACTORS[med]?.factor || 1.0;
-                          totalFactor *= medFactor;
-                      });
-                  }
-
-                  return totalFactor;
-              };
-              
+          

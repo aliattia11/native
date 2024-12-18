@@ -14,6 +14,7 @@ const PatientConstants = () => {
       <h3>Your Treatment Constants</h3>
 
       <div className={styles.constantsGrid}>
+        {/* Basic Constants Section */}
         <div className={styles.constantGroup}>
           <h4>Basic Constants</h4>
           <p>Insulin to Carb Ratio: {patientConstants.insulin_to_carb_ratio}</p>
@@ -23,6 +24,7 @@ const PatientConstants = () => {
           <p>Fat Factor: {patientConstants.fat_factor}</p>
         </div>
 
+        {/* Activity Impact Section */}
         <div className={styles.constantGroup}>
           <h4>Activity Impact</h4>
           {Object.entries(patientConstants.activity_coefficients || {}).map(([level, value]) => (
@@ -36,6 +38,7 @@ const PatientConstants = () => {
           ))}
         </div>
 
+        {/* Absorption Modifiers Section */}
         <div className={styles.constantGroup}>
           <h4>Absorption Modifiers</h4>
           {Object.entries(patientConstants.absorption_modifiers || {}).map(([type, value]) => (
@@ -43,6 +46,62 @@ const PatientConstants = () => {
               {type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}: {value}x
             </p>
           ))}
+        </div>
+
+        {/* Active Health Conditions Section */}
+        <div className={styles.constantGroup}>
+          <h4>Active Health Conditions</h4>
+          {patientConstants.active_conditions?.length > 0 ? (
+            patientConstants.active_conditions.map(condition => {
+              const conditionData = patientConstants.disease_factors?.[condition] || {};
+              return (
+                <p key={condition}>
+                  <strong>
+                    {condition.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                  </strong>
+                  <br />
+                  Impact Factor: {conditionData.factor}x
+                  <br />
+                  <span className={styles.description}>{conditionData.description}</span>
+                </p>
+              );
+            })
+          ) : (
+            <p>No active health conditions</p>
+          )}
+        </div>
+
+        {/* Active Medications Section */}
+        <div className={styles.constantGroup}>
+          <h4>Active Medications</h4>
+          {patientConstants.active_medications?.length > 0 ? (
+            patientConstants.active_medications.map(medication => {
+              const medData = patientConstants.medication_factors?.[medication] || {};
+              return (
+                <p key={medication}>
+                  <strong>
+                    {medication.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                  </strong>
+                  <br />
+                  Impact Factor: {medData.factor}x
+                  <br />
+                  <span className={styles.description}>{medData.description}</span>
+                  {medData.duration_based && (
+                    <span className={styles.durationInfo}>
+                      <br />
+                      Onset: {medData.onset_hours}h
+                      <br />
+                      Peak: {medData.peak_hours}h
+                      <br />
+                      Duration: {medData.duration_hours}h
+                    </span>
+                  )}
+                </p>
+              );
+            })
+          ) : (
+            <p>No active medications</p>
+          )}
         </div>
       </div>
 

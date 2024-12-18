@@ -1,5 +1,4 @@
 // EnhancedPatientConstantsCalc.js
-// EnhancedPatientConstantsCalc.js
 import {
   SHARED_CONSTANTS,
   MEASUREMENT_SYSTEMS,
@@ -7,7 +6,7 @@ import {
   WEIGHT_MEASUREMENTS
 } from '../constants';
 
-// Use shared utility functions if available, otherwise fall back to local implementation
+// Existing conversion functions remain the same
 export const convertToGrams = (amount, unit) => {
   if (SHARED_CONSTANTS.convertToGrams) {
     return SHARED_CONSTANTS.convertToGrams(amount, unit);
@@ -30,6 +29,39 @@ export const convertToMl = (amount, unit) => {
   return amount;
 };
 
+// New function to calculate health factors impact
+export const calculateHealthFactors = (patientConstants) => {
+  if (!patientConstants) return 1.0;
+
+  let healthMultiplier = 1.0;
+
+  // Calculate disease impacts
+  const activeConditions = patientConstants.active_conditions || [];
+  activeConditions.forEach(condition => {
+    const diseaseData = patientConstants.disease_factors[condition];
+    if (diseaseData && diseaseData.factor) {
+      healthMultiplier *= diseaseData.factor;
+    }
+  });
+
+  // Calculate medication impacts
+  const activeMedications = patientConstants.active_medications || [];
+  activeMedications.forEach(medication => {
+    const medData = patientConstants.medication_factors[medication];
+    if (medData && medData.factor) {
+      if (medData.duration_based) {
+        // For duration-based medications, we could implement more complex timing logic here
+        healthMultiplier *= medData.factor;
+      } else {
+        healthMultiplier *= medData.factor;
+      }
+    }
+  });
+
+  return healthMultiplier;
+};
+
+// Existing nutrient calculation functions remain the same
 export const calculateNutrients = (food) => {
   if (!food.details) return { carbs: 0, protein: 0, fat: 0, absorptionType: 'medium' };
 
@@ -58,6 +90,7 @@ export const calculateNutrients = (food) => {
     absorptionType: food.details.absorption_type || 'medium'
   };
 };
+
 export const calculateTotalNutrients = (selectedFoods) => {
   return selectedFoods.reduce((acc, food) => {
     const nutrients = calculateNutrients(food);
@@ -70,7 +103,7 @@ export const calculateTotalNutrients = (selectedFoods) => {
   }, { carbs: 0, protein: 0, fat: 0, absorptionType: 'medium' });
 };
 
-
+// Updated insulin calculation function with health factors
 export const calculateInsulinDose = ({
   carbs,
   protein,
@@ -103,9 +136,12 @@ export const calculateInsulinDose = ({
   const timeOfDayFactor = Object.values(patientConstants.time_of_day_factors || {})
     .find(factor => hour >= factor.hours[0] && hour < factor.hours[1])?.factor || 1.0;
 
+  // Calculate health factors impact
+  const healthMultiplier = calculateHealthFactors(patientConstants);
+
   // Calculate base insulin with all factors
   const baseInsulin = (carbInsulin + proteinContribution + fatContribution) *
-    absorptionFactor * mealTimingFactor * timeOfDayFactor;
+    absorptionFactor * mealTimingFactor * timeOfDayFactor * healthMultiplier;
 
   // Calculate activity impact and apply to base insulin
   const activityImpact = calculateActivityImpact(activities, patientConstants);
@@ -115,7 +151,8 @@ export const calculateInsulinDose = ({
   let correctionInsulin = 0;
   if (bloodSugar && patientConstants.target_glucose && patientConstants.correction_factor) {
     const glucoseDifference = bloodSugar - patientConstants.target_glucose;
-    correctionInsulin = glucoseDifference / patientConstants.correction_factor;
+    // Apply health multiplier to correction insulin as well
+    correctionInsulin = (glucoseDifference / patientConstants.correction_factor) * healthMultiplier;
   }
 
   // Calculate total insulin (ensuring it never goes below 0)
@@ -129,6 +166,7 @@ export const calculateInsulinDose = ({
       fatContribution: Math.round(fatContribution * 100) / 100,
       correctionInsulin: Math.round(correctionInsulin * 100) / 100,
       activityImpact: Math.round(activityImpact * 100) / 100,
+      healthMultiplier: Math.round(healthMultiplier * 100) / 100,
       absorptionFactor,
       mealTimingFactor,
       timeOfDayFactor

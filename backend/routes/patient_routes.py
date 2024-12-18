@@ -31,10 +31,11 @@ def patient_constants():
                 'fat_factor': user.get('fat_factor'),
                 'activity_coefficients': user.get('activity_coefficients'),
                 'absorption_modifiers': user.get('absorption_modifiers'),
-                'insulin_timing_guidelines': user.get('insulin_timing_guidelines')
+                'insulin_timing_guidelines': user.get('insulin_timing_guidelines'),
+                'disease_factors': user.get('disease_factors'),
+                'medication_factors': user.get('medication_factors'),
             }
 
-            # Get default constants
             default_constants = Constants().default_config
 
             # Merge with defaults, preferring user values when they exist

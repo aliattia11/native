@@ -64,7 +64,67 @@ class ConstantConfig:
             'description': 'Late night adjustment'
         }
     })
+    disease_factors: Dict[str, Dict[str, Any]] = field(default_factory=lambda: {
+        'type_1_diabetes': {
+            'factor': 1.0,
+            'description': 'Standard insulin sensitivity for Type 1 Diabetes'
+        },
+        'type_2_diabetes': {
+            'factor': 0.8,
+            'description': 'Reduced insulin sensitivity for Type 2 Diabetes'
+        },
+        'gestational_diabetes': {
+            'factor': 1.2,
+            'description': 'Increased insulin sensitivity during pregnancy'
+        },
+        'insulin_resistance': {
+            'factor': 0.7,
+            'description': 'Significant reduction in insulin sensitivity'
+        },
+        'thyroid_disorders': {
+            'factor': 1.1,
+            'description': 'Slight increase in insulin requirements'
+        },
+        'celiac_disease': {
+            'factor': 1.1,
+            'description': 'May require insulin adjustment due to absorption issues'
+        }
+    })
 
+    # New medication factors
+    medication_factors: Dict[str, Dict[str, Any]] = field(default_factory=lambda: {
+        'corticosteroids': {
+            'factor': 1.4,
+            'description': 'Significant increase in insulin resistance',
+            'duration_based': True,
+            'onset_hours': 4,
+            'peak_hours': 8,
+            'duration_hours': 24
+        },
+        'beta_blockers': {
+            'factor': 1.2,
+            'description': 'Moderate increase in insulin resistance',
+            'duration_based': False
+        },
+        'thiazide_diuretics': {
+            'factor': 1.1,
+            'description': 'Slight increase in insulin resistance',
+            'duration_based': False
+        },
+        'metformin': {
+            'factor': 0.9,
+            'description': 'Improved insulin sensitivity',
+            'duration_based': False
+        },
+        'thiazolidinediones': {
+            'factor': 0.8,
+            'description': 'Significant improvement in insulin sensitivity',
+            'duration_based': True,
+            'onset_hours': 24,
+            'peak_hours': 48,
+            'duration_hours': 168  # 1 week
+        }
+    })
 class Constants:
     """Enhanced constants management with dataclass support"""
 
@@ -182,6 +242,65 @@ class Constants:
                 'hours': (22, 24),
                 'factor': 0.9,
                 'description': 'Late night adjustment'
+            }
+        },
+        'disease_factors': {
+            'type_1_diabetes': {
+                'factor': 1.0,
+                'description': 'Standard insulin sensitivity for Type 1 Diabetes'
+            },
+            'type_2_diabetes': {
+                'factor': 0.8,
+                'description': 'Reduced insulin sensitivity for Type 2 Diabetes'
+            },
+            'gestational_diabetes': {
+                'factor': 1.2,
+                'description': 'Increased insulin sensitivity during pregnancy'
+            },
+            'insulin_resistance': {
+                'factor': 0.7,
+                'description': 'Significant reduction in insulin sensitivity'
+            },
+            'thyroid_disorders': {
+                'factor': 1.1,
+                'description': 'Slight increase in insulin requirements'
+            },
+            'celiac_disease': {
+                'factor': 1.1,
+                'description': 'May require insulin adjustment due to absorption issues'
+            }
+        },
+        'medication_factors': {
+            'corticosteroids': {
+                'factor': 1.4,
+                'description': 'Significant increase in insulin resistance',
+                'duration_based': True,
+                'onset_hours': 4,
+                'peak_hours': 8,
+                'duration_hours': 24
+            },
+            'beta_blockers': {
+                'factor': 1.2,
+                'description': 'Moderate increase in insulin resistance',
+                'duration_based': False
+            },
+            'thiazide_diuretics': {
+                'factor': 1.1,
+                'description': 'Slight increase in insulin resistance',
+                'duration_based': False
+            },
+            'metformin': {
+                'factor': 0.9,
+                'description': 'Improved insulin sensitivity',
+                'duration_based': False
+            },
+            'thiazolidinediones': {
+                'factor': 0.8,
+                'description': 'Significant improvement in insulin sensitivity',
+                'duration_based': True,
+                'onset_hours': 24,
+                'peak_hours': 48,
+                'duration_hours': 168  # 1 week
             }
         }
     }
@@ -421,7 +540,8 @@ class Constants:
             'FOOD_CATEGORIES': cls.FOOD_CATEGORIES,  # Use class constant
             'MEAL_TIMING_FACTORS': cls.DEFAULT_PATIENT_CONSTANTS['meal_timing_factors'],  # Use class constant
             'TIME_OF_DAY_FACTORS': cls.DEFAULT_PATIENT_CONSTANTS['time_of_day_factors'],  # Use class constant
-
+            'DISEASE_FACTORS': cls.DEFAULT_PATIENT_CONSTANTS['disease_factors'],
+            'MEDICATION_FACTORS': cls.DEFAULT_PATIENT_CONSTANTS['medication_factors'],
             # Conversion Utilities
             'CONVERSION_UTILS': {
                 'convertToGrams': '''
@@ -464,12 +584,35 @@ class Constants:
         }
 
         js_content = f"""// Auto-generated from backend constants - DO NOT EDIT DIRECTLY
-          export const SHARED_CONSTANTS = {json.dumps(constants, indent=2)};
+              export const SHARED_CONSTANTS = {json.dumps(constants, indent=2)};
 
-          // Utility Functions
-          export const convertToGrams = {constants['CONVERSION_UTILS']['convertToGrams']};
-          export const convertToMl = {constants['CONVERSION_UTILS']['convertToMl']};
-          """
+              // Utility Functions
+              export const convertToGrams = {constants['CONVERSION_UTILS']['convertToGrams']};
+              export const convertToMl = {constants['CONVERSION_UTILS']['convertToMl']};
+
+              // New utility function for calculating disease and medication impacts
+              export const calculateHealthFactors = (diseases, medications) => {{
+                  let totalFactor = 1.0;
+
+                  // Calculate disease impacts
+                  if (diseases && diseases.length > 0) {{
+                      diseases.forEach(disease => {{
+                          const diseaseFactor = SHARED_CONSTANTS.DISEASE_FACTORS[disease]?.factor || 1.0;
+                          totalFactor *= diseaseFactor;
+                      }});
+                  }}
+
+                  // Calculate medication impacts
+                  if (medications && medications.length > 0) {{
+                      medications.forEach(med => {{
+                          const medFactor = SHARED_CONSTANTS.MEDICATION_FACTORS[med]?.factor || 1.0;
+                          totalFactor *= medFactor;
+                      }});
+                  }}
+
+                  return totalFactor;
+              }};
+              """
 
         frontend_path = Path(output_path)
         frontend_path.parent.mkdir(parents=True, exist_ok=True)

@@ -25,6 +25,12 @@ export const FOOD_CATEGORIES = SHARED_CONSTANTS.FOOD_CATEGORIES || [];
 export const MEAL_TIMING_FACTORS = SHARED_CONSTANTS.MEAL_TIMING_FACTORS || {};
 export const TIME_OF_DAY_FACTORS = SHARED_CONSTANTS.TIME_OF_DAY_FACTORS || {};
 
-// Export utility functions if they exist
+// New exports for disease and medication factors
+export const DISEASE_FACTORS = SHARED_CONSTANTS.DISEASE_FACTORS || {};
+export const MEDICATION_FACTORS = SHARED_CONSTANTS.MEDICATION_FACTORS || {};
+
+// Export utility functions
 export const convertToGrams = SHARED_CONSTANTS.convertToGrams || ((amount, unit) => amount);
 export const convertToMl = SHARED_CONSTANTS.convertToMl || ((amount, unit) => amount);
+export const calculateHealthFactors = SHARED_CONSTANTS.calculateHealthFactors ||
+  ((diseases, medications) => 1.0);

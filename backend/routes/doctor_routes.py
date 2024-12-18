@@ -3,6 +3,7 @@ from bson.objectid import ObjectId
 from utils.auth import token_required
 from utils.error_handler import api_error_handler
 from config import mongo
+from constants import Constants, ConstantConfig
 import logging
 
 logger = logging.getLogger(__name__)
@@ -30,7 +31,10 @@ def get_doctor_patients(current_user):
                 'id': str(patient['_id']),
                 'firstName': patient.get('first_name', ''),
                 'lastName': patient.get('last_name', ''),
-                'email': patient.get('email', '')
+                'email': patient.get('email', ''),
+                # Add active diseases and medications to patient list view
+                'activeConditions': patient.get('active_conditions', []),
+                'activeMedications': patient.get('active_medications', [])
             }
             patient_list.append(patient_data)
         except Exception as e:
@@ -38,8 +42,6 @@ def get_doctor_patients(current_user):
             continue
 
     return jsonify(patient_list), 200
-
-
 
 @doctor_routes.route('/api/doctor/patient/<patient_id>/constants', methods=['GET'])
 @token_required
@@ -53,34 +55,25 @@ def get_patient_constants(current_user, patient_id):
         if not patient:
             return jsonify({'message': 'Patient not found'}), 404
 
+        # Get default constants
+        default_constants = Constants.DEFAULT_PATIENT_CONSTANTS
+
         # Return the full set of constants matching the frontend structure
         constants = {
-            'insulin_to_carb_ratio': patient.get('insulin_to_carb_ratio', 10),
-            'correction_factor': patient.get('correction_factor', 50),
-            'target_glucose': patient.get('target_glucose', 100),
-            'protein_factor': patient.get('protein_factor', 0.5),
-            'fat_factor': patient.get('fat_factor', 0.2),
-            'activity_coefficients': patient.get('activity_coefficients', {
-                "-2": 0.2,  # Sleep
-                "-1": 0.1,  # Very Low Activity
-                "0": 0,     # Normal Activity
-                "1": -0.1,  # High Activity
-                "2": -0.2   # Vigorous Activity
-            }),
-            'absorption_modifiers': patient.get('absorption_modifiers', {
-                "very_slow": 0.6,
-                "slow": 0.8,
-                "medium": 1.0,
-                "fast": 1.2,
-                "very_fast": 1.4
-            }),
-            'insulin_timing_guidelines': patient.get('insulin_timing_guidelines', {
-                "very_slow": {"timing_minutes": 0, "description": "Take insulin at the start of meal"},
-                "slow": {"timing_minutes": 5, "description": "Take insulin 5 minutes before meal"},
-                "medium": {"timing_minutes": 10, "description": "Take insulin 10 minutes before meal"},
-                "fast": {"timing_minutes": 15, "description": "Take insulin 15 minutes before meal"},
-                "very_fast": {"timing_minutes": 20, "description": "Take insulin 20 minutes before meal"}
-            })
+            'insulin_to_carb_ratio': patient.get('insulin_to_carb_ratio', default_constants['insulin_to_carb_ratio']),
+            'correction_factor': patient.get('correction_factor', default_constants['correction_factor']),
+            'target_glucose': patient.get('target_glucose', default_constants['target_glucose']),
+            'protein_factor': patient.get('protein_factor', default_constants['protein_factor']),
+            'fat_factor': patient.get('fat_factor', default_constants['fat_factor']),
+            'activity_coefficients': patient.get('activity_coefficients', default_constants['activity_coefficients']),
+            'absorption_modifiers': patient.get('absorption_modifiers', default_constants['absorption_modifiers']),
+            'insulin_timing_guidelines': patient.get('insulin_timing_guidelines', default_constants['insulin_timing_guidelines']),
+            # Add new disease and medication factors
+            'disease_factors': patient.get('disease_factors', default_constants['disease_factors']),
+            'medication_factors': patient.get('medication_factors', default_constants['medication_factors']),
+            # Add active conditions and medications
+            'active_conditions': patient.get('active_conditions', []),
+            'active_medications': patient.get('active_medications', [])
         }
         return jsonify({'constants': constants}), 200
     except Exception as e:
@@ -96,7 +89,6 @@ def reset_patient_constants(current_user, patient_id):
 
     try:
         # Get default constants from ConstantConfig
-        from constants import ConstantConfig
         default_config = ConstantConfig()
         default_constants = {
             'insulin_to_carb_ratio': default_config.insulin_to_carb_ratio,
@@ -106,7 +98,13 @@ def reset_patient_constants(current_user, patient_id):
             'fat_factor': default_config.fat_factor,
             'activity_coefficients': default_config.activity_coefficients,
             'absorption_modifiers': default_config.absorption_modifiers,
-            'insulin_timing_guidelines': default_config.insulin_timing_guidelines
+            'insulin_timing_guidelines': default_config.insulin_timing_guidelines,
+            # Add new disease and medication factors
+            'disease_factors': default_config.disease_factors,
+            'medication_factors': default_config.medication_factors,
+            # Reset active conditions and medications to empty lists
+            'active_conditions': [],
+            'active_medications': []
         }
 
         # Update patient with default constants
@@ -140,7 +138,7 @@ def update_patient_constants(current_user, patient_id):
         if not constants:
             return jsonify({'message': 'Missing required constants data'}), 400
 
-        # Validate the data structure
+        # Updated required fields to include new factors
         required_fields = [
             'insulin_to_carb_ratio',
             'correction_factor',
@@ -149,7 +147,11 @@ def update_patient_constants(current_user, patient_id):
             'fat_factor',
             'activity_coefficients',
             'absorption_modifiers',
-            'insulin_timing_guidelines'
+            'insulin_timing_guidelines',
+            'disease_factors',
+            'medication_factors',
+            'active_conditions',
+            'active_medications'
         ]
 
         update_data = {}
@@ -159,6 +161,26 @@ def update_patient_constants(current_user, patient_id):
 
         if not update_data:
             return jsonify({'message': 'No valid constants provided'}), 400
+
+        # Validate disease factors
+        if 'disease_factors' in update_data:
+            default_diseases = Constants.DEFAULT_PATIENT_CONSTANTS['disease_factors']
+            for disease, data in update_data['disease_factors'].items():
+                if disease not in default_diseases:
+                    return jsonify({
+                        'message': f'Invalid disease type: {disease}',
+                        'valid_diseases': list(default_diseases.keys())
+                    }), 400
+
+        # Validate medication factors
+        if 'medication_factors' in update_data:
+            default_medications = Constants.DEFAULT_PATIENT_CONSTANTS['medication_factors']
+            for medication, data in update_data['medication_factors'].items():
+                if medication not in default_medications:
+                    return jsonify({
+                        'message': f'Invalid medication type: {medication}',
+                        'valid_medications': list(default_medications.keys())
+                    }), 400
 
         result = mongo.db.users.update_one(
             {"_id": ObjectId(patient_id)},
@@ -181,3 +203,79 @@ def update_patient_constants(current_user, patient_id):
     except Exception as e:
         logger.error(f"Error updating patient constants: {str(e)}")
         return jsonify({'message': 'Error updating patient constants'}), 500
+
+    @doctor_routes.route('/api/doctor/patient/<patient_id>/conditions', methods=['PUT'])
+    @token_required
+    @api_error_handler
+    def update_patient_conditions(current_user, patient_id):
+        if current_user.get('user_type') != 'doctor':
+            return jsonify({'message': 'Unauthorized access'}), 403
+
+        try:
+            data = request.json
+            conditions = data.get('conditions', [])
+
+            # Validate conditions against available disease factors
+            valid_conditions = Constants.DEFAULT_PATIENT_CONSTANTS['disease_factors'].keys()
+            invalid_conditions = [c for c in conditions if c not in valid_conditions]
+
+            if invalid_conditions:
+                return jsonify({
+                    'message': f'Invalid conditions: {invalid_conditions}',
+                    'valid_conditions': list(valid_conditions)
+                }), 400
+
+            # Update patient's active conditions
+            result = mongo.db.users.update_one(
+                {"_id": ObjectId(patient_id)},
+                {"$set": {"active_conditions": conditions}}
+            )
+
+            if result.matched_count == 0:
+                return jsonify({'message': 'Patient not found'}), 404
+
+            return jsonify({
+                'message': 'Patient conditions updated successfully',
+                'active_conditions': conditions
+            }), 200
+        except Exception as e:
+            logger.error(f"Error updating patient conditions: {str(e)}")
+            return jsonify({'message': 'Error updating patient conditions'}), 500
+
+    @doctor_routes.route('/api/doctor/patient/<patient_id>/medications', methods=['PUT'])
+    @token_required
+    @api_error_handler
+    def update_patient_medications(current_user, patient_id):
+        if current_user.get('user_type') != 'doctor':
+            return jsonify({'message': 'Unauthorized access'}), 403
+
+        try:
+            data = request.json
+            medications = data.get('medications', [])
+
+            # Validate medications against available medication factors
+            valid_medications = Constants.DEFAULT_PATIENT_CONSTANTS['medication_factors'].keys()
+            invalid_medications = [m for m in medications if m not in valid_medications]
+
+            if invalid_medications:
+                return jsonify({
+                    'message': f'Invalid medications: {invalid_medications}',
+                    'valid_medications': list(valid_medications)
+                }), 400
+
+            # Update patient's active medications
+            result = mongo.db.users.update_one(
+                {"_id": ObjectId(patient_id)},
+                {"$set": {"active_medications": medications}}
+            )
+
+            if result.matched_count == 0:
+                return jsonify({'message': 'Patient not found'}), 404
+
+            return jsonify({
+                'message': 'Patient medications updated successfully',
+                'active_medications': medications
+            }), 200
+        except Exception as e:
+            logger.error(f"Error updating patient medications: {str(e)}")
+            return jsonify({'message': 'Error updating patient medications'}), 500

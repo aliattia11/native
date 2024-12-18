@@ -11,6 +11,56 @@ from config import mongo
 
 meal_insulin_bp = Blueprint('meal_insulin', __name__)
 
+
+def calculate_health_factors(user_id):
+    """Calculate combined impact of diseases and medications"""
+    try:
+        # Get user from database
+        user = mongo.db.users.find_one({"_id": ObjectId(user_id)})
+        if not user:
+            return 1.0  # Default multiplier if user not found
+
+        constants = Constants(user_id)
+        patient_constants = constants.get_patient_constants()
+
+        # Get active conditions and medications
+        active_conditions = user.get('active_conditions', [])
+        active_medications = user.get('active_medications', [])
+
+        # Get factors from constants
+        disease_factors = patient_constants.get('disease_factors', {})
+        medication_factors = patient_constants.get('medication_factors', {})
+
+        # Calculate combined disease impact
+        disease_multiplier = 1.0
+        for condition in active_conditions:
+            if condition in disease_factors:
+                disease_multiplier *= disease_factors[condition].get('factor', 1.0)
+
+        # Calculate combined medication impact
+        medication_multiplier = 1.0
+        current_time = datetime.utcnow()
+
+        for medication in active_medications:
+            if medication in medication_factors:
+                med_data = medication_factors[medication]
+                med_factor = med_data.get('factor', 1.0)
+
+                # If medication is duration-based, check timing
+                if med_data.get('duration_based', False):
+                    # For simplicity, assuming medication is active if duration-based
+                    # In a real application, you'd track medication administration times
+                    medication_multiplier *= med_factor
+                else:
+                    # For non-duration based medications, apply factor directly
+                    medication_multiplier *= med_factor
+
+        return disease_multiplier * medication_multiplier
+
+    except Exception as e:
+        logger.error(f"Error calculating health factors: {str(e)}")
+        return 1.0  # Default multiplier in case of error
+
 def calculate_activity_impact(activities):
     """Calculate the total activity impact coefficient"""
     total_coefficient = 0
@@ -164,17 +214,24 @@ def calculate_suggested_insulin(user_id, nutrition, activities, blood_glucose=No
     # Calculate activity impact
     activity_coefficient = calculate_activity_impact(activities)
 
+    # Calculate health factors impact (NEW)
+    health_multiplier = calculate_health_factors(user_id)
+
     # Apply timing factor to base insulin calculation
     base_insulin = (carb_insulin + protein_fat_insulin) * timing_factor
 
-    # Activity adjustment
-    activity_adjusted_insulin = base_insulin * (1 + activity_coefficient)
+    # Apply health factors to base insulin (NEW)
+    health_adjusted_insulin = base_insulin * health_multiplier
+
+    # Activity adjustment (applied after health factors)
+    activity_adjusted_insulin = health_adjusted_insulin * (1 + activity_coefficient)
 
     # Add correction insulin if blood glucose is provided
     correction_insulin = 0
     if blood_glucose is not None:
         glucose_difference = blood_glucose - target_glucose
-        correction_insulin = max(0, glucose_difference / correction_factor)
+        # Apply health multiplier to correction insulin as well
+        correction_insulin = max(0, (glucose_difference / correction_factor) * health_multiplier)
 
     total_insulin = activity_adjusted_insulin + correction_insulin
 
@@ -185,11 +242,11 @@ def calculate_suggested_insulin(user_id, nutrition, activities, blood_glucose=No
             'protein_fat_insulin': round(protein_fat_insulin, 2),
             'timing_factor': round(timing_factor, 2),
             'activity_coefficient': round(activity_coefficient, 2),
+            'health_multiplier': round(health_multiplier, 2),  # NEW
             'correction_insulin': round(correction_insulin, 2),
             'absorption_factor': nutrition.get('absorption_factor', 1.0)
         }
     }
-
 
 @meal_insulin_bp.route('/api/meal', methods=['POST'])
 @token_required
@@ -226,7 +283,12 @@ def submit_meal(current_user):
             data['mealType']
         )
 
-        # Prepare meal document
+        # Get active conditions and medications for the meal record
+        user = mongo.db.users.find_one({"_id": current_user['_id']})
+        active_conditions = user.get('active_conditions', [])
+        active_medications = user.get('active_medications', [])
+
+        # Prepare meal document with health factors
         meal_doc = {
             'user_id': str(current_user['_id']),
             'timestamp': datetime.utcnow(),
@@ -238,7 +300,10 @@ def submit_meal(current_user):
             'intendedInsulin': data.get('intendedInsulin'),
             'suggestedInsulin': insulin_calc['total'],
             'insulinCalculation': insulin_calc['breakdown'],
-            'notes': data.get('notes', '')
+            'notes': data.get('notes', ''),
+            'activeConditions': active_conditions,  # NEW
+            'activeMedications': active_medications,  # NEW
+            'healthMultiplier': insulin_calc['breakdown']['health_multiplier']  # NEW
         }
 
         # Insert into database
@@ -248,12 +313,16 @@ def submit_meal(current_user):
             "message": "Meal logged successfully",
             "id": str(result.inserted_id),
             "nutrition": nutrition,
-            "insulinCalculation": insulin_calc
+            "insulinCalculation": insulin_calc,
+            "healthFactors": {  # NEW
+                "activeConditions": active_conditions,
+                "activeMedications": active_medications,
+                "healthMultiplier": insulin_calc['breakdown']['health_multiplier']
+            }
         }), 201
 
     except Exception as e:
         return jsonify({"error": str(e)}), 400
-
 
 @meal_insulin_bp.route('/api/meals', methods=['GET'])
 @token_required
