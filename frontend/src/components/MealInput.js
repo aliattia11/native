@@ -65,31 +65,30 @@ const MealInput = () => {
 
   // Calculate insulin needs whenever relevant inputs change
   const calculateInsulinNeeds = useCallback(() => {
-    if (selectedFoods.length === 0 || !patientConstants) {
-      setSuggestedInsulin('');
-      setInsulinBreakdown(null);
-      return;
-    }
+  if (selectedFoods.length === 0 || !patientConstants) {
+    setSuggestedInsulin('');
+    setInsulinBreakdown(null);
+    return;
+  }
 
-    try {
-      const totalNutrition = calculateTotalNutrients(selectedFoods);
+  try {
+    const totalNutrition = calculateTotalNutrients(selectedFoods);
 
-      const insulinCalculation = calculateInsulinDose({
-        ...totalNutrition,
-        bloodSugar: parseFloat(bloodSugar) || 0,
-        activities,
-        patientConstants,
-        mealType
-      });
+    const insulinCalculation = calculateInsulinDose({
+      ...totalNutrition,
+      bloodSugar: parseFloat(bloodSugar) || 0,
+      activities,
+      patientConstants,
+      mealType});
 
-      setSuggestedInsulin(insulinCalculation.total);
-      setInsulinBreakdown(insulinCalculation.breakdown);
-      setActivityImpact(insulinCalculation.breakdown.activityImpact || 0);
-    } catch (error) {
-      console.error('Error calculating insulin:', error);
-      setMessage('Error calculating insulin needs: ' + error.message);
-    }
-  }, [selectedFoods, bloodSugar, activities, patientConstants, mealType]);
+    setSuggestedInsulin(insulinCalculation.total);
+    setInsulinBreakdown(insulinCalculation.breakdown);
+    setActivityImpact(insulinCalculation.breakdown.activityImpact || 0);
+  } catch (error) {
+    console.error('Error calculating insulin:', error);
+    setMessage('Error calculating insulin needs: ' + error.message);
+  }
+}, [selectedFoods, bloodSugar, activities, patientConstants, mealType]);
 
   useEffect(() => {
     if (!loading && patientConstants && (selectedFoods.length > 0 || bloodSugar)) {
@@ -353,6 +352,65 @@ const MealInput = () => {
         ).toFixed(2)} units</strong>
       </li>
 
+      {/* Health Factors Section */}
+      {insulinBreakdown.healthMultiplier !== 1 && (
+        <>
+          <li className={styles.breakdownSection}>
+            <strong>Health Factors:</strong>
+          </li>
+          {patientConstants.active_conditions?.length > 0 && (
+            <li>
+              <strong>Active Conditions:</strong>
+              <ul>
+                {patientConstants.active_conditions.map(condition => {
+                  const conditionData = patientConstants.disease_factors[condition];
+                  return (
+                    <li key={condition}>
+                      • {condition.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}:
+                      {((conditionData.factor - 1) * 100).toFixed(1)}%
+                      {conditionData.factor > 1
+                        ? ` (+${((conditionData.factor - 1) * 100).toFixed(1)}% increase)`
+                        : ` (${((conditionData.factor - 1) * 100).toFixed(1)}% decrease)`}
+                    </li>
+                  );
+                })}
+              </ul>
+            </li>
+          )}
+          {patientConstants.active_medications?.length > 0 && (
+            <li>
+              <strong>Active Medications:</strong>
+              <ul>
+                {patientConstants.active_medications.map(medication => {
+                  const medData = patientConstants.medication_factors[medication];
+                  return (
+                    <li key={medication}>
+                      • {medication.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}:
+                      {((medData.factor - 1) * 100).toFixed(1)}%
+                      {medData.factor > 1
+                        ? ` (+${((medData.factor - 1) * 100).toFixed(1)}% increase)`
+                        : ` (${((medData.factor - 1) * 100).toFixed(1)}% decrease)`}
+                      {medData.duration_based && (
+                        <span className={styles.durationNote}>
+                          (Duration-based: onset {medData.onset_hours}h, peak {medData.peak_hours}h)
+                        </span>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </li>
+          )}
+          <li className={styles.summaryLine}>
+            <strong>Combined Health Factor: {((insulinBreakdown.healthMultiplier - 1) * 100).toFixed(1)}%
+              {insulinBreakdown.healthMultiplier > 1
+                ? ` (+${((insulinBreakdown.healthMultiplier - 1) * 100).toFixed(1)}% increase)`
+                : ` (${((insulinBreakdown.healthMultiplier - 1) * 100).toFixed(1)}% decrease)`}
+            </strong>
+          </li>
+        </>
+      )}
+
       {/* Adjustment Factors Section */}
       <li className={styles.breakdownSection}>
         <strong>Adjustment Factors:</strong>
@@ -385,12 +443,15 @@ const MealInput = () => {
           ? ` (${(insulinBreakdown.activityImpact * 100).toFixed(1)}% decrease)`
           : ' (no adjustment)'}
       </li>
+
+      {/* Final Summary */}
       <li className={styles.summaryLine}>
-        <strong>Net Adjustment: {(
+        <strong>Total Net Adjustment: {(
           ((insulinBreakdown.absorptionFactor - 1) * 100) +
           ((insulinBreakdown.mealTimingFactor - 1) * 100) +
           ((insulinBreakdown.timeOfDayFactor - 1) * 100) +
-          (insulinBreakdown.activityImpact * 100)
+          (insulinBreakdown.activityImpact * 100) +
+          ((insulinBreakdown.healthMultiplier - 1) * 100)
         ).toFixed(1)}%</strong>
       </li>
     </ul>

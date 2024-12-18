@@ -279,3 +279,55 @@ def update_patient_constants(current_user, patient_id):
         except Exception as e:
             logger.error(f"Error updating patient medications: {str(e)}")
             return jsonify({'message': 'Error updating patient medications'}), 500
+
+@doctor_routes.route('/api/doctor/patient/<patient_id>/medication-log', methods=['POST'])
+@token_required
+@api_error_handler
+def log_medication(current_user, patient_id):
+            if current_user.get('user_type') != 'doctor':
+                return jsonify({'message': 'Unauthorized access'}), 403
+
+            try:
+                data = request.json
+                medication_log = {
+                    'patient_id': patient_id,
+                    'medication': data.get('medication'),
+                    'taken_at': datetime.fromisoformat(data.get('taken_at')),
+                    'next_dose': datetime.fromisoformat(data.get('next_dose')),
+                    'created_by': str(current_user['_id']),
+                    'created_at': datetime.utcnow()
+                }
+
+                result = mongo.db.medication_logs.insert_one(medication_log)
+
+                return jsonify({
+                    'message': 'Medication log created successfully',
+                    'id': str(result.inserted_id)
+                }), 201
+            except Exception as e:
+                logger.error(f"Error logging medication: {str(e)}")
+                return jsonify({'message': 'Error logging medication'}), 500
+
+@doctor_routes.route('/api/doctor/patient/<patient_id>/medication-log', methods=['GET'])
+@token_required
+@api_error_handler
+def get_medication_logs(current_user, patient_id):
+            if current_user.get('user_type') != 'doctor':
+                return jsonify({'message': 'Unauthorized access'}), 403
+
+            try:
+                logs = list(mongo.db.medication_logs.find(
+                    {'patient_id': patient_id}
+                ).sort('taken_at', -1))
+
+                return jsonify({
+                    'logs': [{
+                        'id': str(log['_id']),
+                        'medication': log['medication'],
+                        'taken_at': log['taken_at'].isoformat(),
+                        'next_dose': log['next_dose'].isoformat()
+                    } for log in logs]
+                }), 200
+            except Exception as e:
+                logger.error(f"Error fetching medication logs: {str(e)}")
+                return jsonify({'message': 'Error fetching medication logs'}), 500

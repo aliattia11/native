@@ -34,6 +34,8 @@ def patient_constants():
                 'insulin_timing_guidelines': user.get('insulin_timing_guidelines'),
                 'disease_factors': user.get('disease_factors'),
                 'medication_factors': user.get('medication_factors'),
+                'active_conditions': user.get('active_conditions', []),
+                'active_medications': user.get('active_medications', [])
             }
 
             default_constants = Constants().default_config

@@ -1,8 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import MedicationSchedule from './MedicationSchedule';
 import styles from './EnhancedPatientConstants.module.css';
-import { DEFAULT_PATIENT_CONSTANTS, DISEASE_FACTORS, MEDICATION_FACTORS } from '../constants';
+import { DEFAULT_PATIENT_CONSTANTS } from '../constants';
+
+import { useConstants } from '../contexts/ConstantsContext';
 
 const EnhancedPatientConstantsUI = ({ patientId }) => {
+  const { refreshConstants } = useConstants();
   const [constants, setConstants] = useState(DEFAULT_PATIENT_CONSTANTS);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -141,6 +145,8 @@ const resetToDefaults = async () => {
       }
     }));
   };
+
+
 
 const handleSubmit = async () => {
     try {
@@ -329,68 +335,75 @@ const handleSubmit = async () => {
           )}
         </div>
 
-        {/* Medications Section */}
-        <div className={styles.constantsSection}>
+         {/* Medications Section */}
+       <div className={styles.constantsSection}>
           <h3 className={styles.subsectionTitle} onClick={() => toggleSection('medications')}>
             Medications
             <span style={{ float: 'right' }}>{expandedSections.medications ? '▼' : '▶'}</span>
           </h3>
           {expandedSections.medications && (
-            <div className={styles.constantsWrapper}>
-              {Object.entries(constants.medication_factors || {}).map(([medication, data]) => (
-                <div key={medication} className={styles.formGroup}>
-                  <div className={styles.factorHeader}>
-                    <input
-                      type="checkbox"
-                      checked={constants.active_medications?.includes(medication)}
-                      onChange={() => handleActiveMedicationToggle(medication)}
-                    />
-                    <label>{medication.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</label>
-                  </div>
-                  <div className={styles.factorInputs}>
-                    <input
-                      type="number"
-                      value={data.factor}
-                      onChange={(e) => handleMedicationFactorChange(medication, e.target.value)}
-                      step="0.1"
-                      disabled={!constants.active_medications?.includes(medication)}
-                    />
-                    <span className={styles.factorDescription}>
+              <div className={styles.constantsWrapper}>
+                {Object.entries(constants.medication_factors || {}).map(([medication, data]) => (
+                    <div key={medication} className={styles.medicationGroup}>
+                      <div className={styles.factorHeader}>
+                        <input
+                            type="checkbox"
+                            checked={constants.active_medications?.includes(medication)}
+                            onChange={() => handleActiveMedicationToggle(medication)}
+                        />
+                        <label>{medication.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</label>
+                      </div>
+                      <div className={styles.factorInputs}>
+                        <input
+                            type="number"
+                            value={data.factor}
+                            onChange={(e) => handleMedicationFactorChange(medication, e.target.value)}
+                            step="0.1"
+                            min="0"
+                            disabled={!constants.active_medications?.includes(medication)}
+                        />
+                        <span className={styles.factorDescription}>
                       {data.description}
-                      {data.duration_based && (
-                        <span className={styles.durationBased}>
-                          (Duration: {data.onset_hours}h onset, {data.peak_hours}h peak, {data.duration_hours}h total)
+                          {data.duration_based && (
+                              <span className={styles.durationBased}>
+                          Duration: {data.onset_hours}h onset, {data.peak_hours}h peak, {data.duration_hours}h total
                         </span>
-                      )}
+                          )}
                     </span>
-                  </div>
-                </div>
-              ))}
-            </div>
+                      </div>
+                      {constants.active_medications?.includes(medication) && data.duration_based && (
+                          <MedicationSchedule
+    medication={medication}
+    medicationData={data}
+    patientId={patientId}
+    onScheduleUpdate={() => {
+      refreshConstants();  // This will update all constants
+    }}
+    className={styles.medicationScheduleWrapper}
+  />
+                      )}
+                    </div>
+                ))}
+              </div>
           )}
         </div>
 
-        {message && (
-          <div className={styles.message}>
-            {message}
-          </div>
-        )}
-
-          <div className={styles.buttonGroup}>
-              <button
-                  onClick={resetToDefaults}  // Changed from fetchPatientConstants to resetToDefaults
-                  className={styles.resetButton}
-              >
-                  Reset to Defaults
-              </button>
-              <button
-                  onClick={handleSubmit}
-                  className={styles.submitButton}
-                  disabled={loading}
-              >
-                  Save Changes
-              </button>
-          </div>
+        <div className={styles.buttonGroup}>
+          <button
+              onClick={resetToDefaults}
+              className={styles.resetButton}
+              disabled={loading}
+          >
+            Reset to Defaults
+          </button>
+          <button
+            onClick={handleSubmit}
+            className={styles.submitButton}
+            disabled={loading}
+          >
+            {loading ? 'Saving...' : 'Save Changes'}
+          </button>
+        </div>
       </div>
     </div>
   );

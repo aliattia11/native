@@ -149,3 +149,28 @@
     font-size: 1.3rem; /* Slightly smaller on mobile but still prominent */
   }
 }
+
+.medicationGroup {
+  padding: 15px;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  margin-bottom: 15px;
+}
+
+.medicationScheduleWrapper {
+  margin-top: 15px;
+  padding-top: 15px;
+  border-top: 1px dashed #e0e0e0;
+}
+
+.toggleIcon {
+  float: right;
+  transition: transform 0.3s ease;
+}
+
+.durationBased {
+  display: block;
+  font-size: 0.9em;
+  color: #666;
+  margin-top: 5px;
+}
