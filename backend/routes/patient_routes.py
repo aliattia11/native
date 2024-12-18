@@ -16,12 +16,13 @@ def patient_constants():
     def get_constants(current_user):
         try:
             user_id = str(current_user['_id'])
-            user = mongo.db.users.find_one({"_id": ObjectId(user_id)})
 
+            # Get user from database
+            user = mongo.db.users.find_one({"_id": ObjectId(user_id)})
             if not user:
                 return jsonify({'error': 'User not found'}), 404
 
-            # Get patient constants from user document (including disease and medication factors)
+            # Get patient constants from user document
             constants = {
                 'insulin_to_carb_ratio': user.get('insulin_to_carb_ratio'),
                 'correction_factor': user.get('correction_factor'),
@@ -30,11 +31,7 @@ def patient_constants():
                 'fat_factor': user.get('fat_factor'),
                 'activity_coefficients': user.get('activity_coefficients'),
                 'absorption_modifiers': user.get('absorption_modifiers'),
-                'insulin_timing_guidelines': user.get('insulin_timing_guidelines'),
-                'disease_factors': user.get('disease_factors'),
-                'medication_factors': user.get('medication_factors'),
-                'active_diseases': user.get('active_diseases', ['default']),
-                'active_medications': user.get('active_medications', ['default'])
+                'insulin_timing_guidelines': user.get('insulin_timing_guidelines')
             }
 
             # Get default constants

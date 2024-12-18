@@ -5,7 +5,6 @@ from bson import ObjectId
 import dataclasses
 from dataclasses import dataclass, asdict, field
 import json
-from typing import Dict, Any, Optional, List, Union
 from pathlib import Path
 
 @dataclass
@@ -66,48 +65,6 @@ class ConstantConfig:
         }
     })
 
-
-disease_factors: Dict[str, Dict[str, Union[float, str]]] = field(default_factory=lambda: {
-    'default': {
-        'factor': 1.0,
-        'description': 'No disease impact'
-    },
-    'infection': {
-        'factor': 1.3,
-        'description': 'Increased insulin resistance during infection'
-    },
-    'thyroid_high': {
-        'factor': 1.2,
-        'description': 'Hyperthyroidism impact'
-    },
-    'thyroid_low': {
-        'factor': 0.9,
-        'description': 'Hypothyroidism impact'
-    },
-    'celiac': {
-        'factor': 0.9,
-        'description': 'Celiac disease impact'
-    }
-})
-
-medication_factors: Dict[str, Dict[str, Union[float, str]]] = field(default_factory=lambda: {
-    'default': {
-        'factor': 1.0,
-        'description': 'No medication impact'
-    },
-    'steroids': {
-        'factor': 1.4,
-        'description': 'Increased insulin resistance due to steroid medication'
-    },
-    'metformin': {
-        'factor': 0.9,
-        'description': 'Increased insulin sensitivity with metformin'
-    },
-    'birth_control': {
-        'factor': 1.1,
-        'description': 'Slight insulin resistance from hormonal birth control'
-    }
-})
 class Constants:
     """Enhanced constants management with dataclass support"""
 
@@ -225,49 +182,8 @@ class Constants:
                 'hours': (22, 24),
                 'factor': 0.9,
                 'description': 'Late night adjustment'
-            },
-            'disease_factors': {
-                'default': {
-                    'factor': 1.0,
-                    'description': 'No disease impact'
-                },
-                'infection': {
-                    'factor': 1.3,
-                    'description': 'Increased insulin resistance during infection'
-                },
-                'thyroid_high': {
-                    'factor': 1.2,
-                    'description': 'Hyperthyroidism impact'
-                },
-                'thyroid_low': {
-                    'factor': 0.9,
-                    'description': 'Hypothyroidism impact'
-                },
-                'celiac': {
-                    'factor': 0.9,
-                    'description': 'Celiac disease impact'
-                }
-            },
-            'medication_factors': {
-                'default': {
-                    'factor': 1.0,
-                    'description': 'No medication impact'
-                },
-                'steroids': {
-                    'factor': 1.4,
-                    'description': 'Increased insulin resistance due to steroid medication'
-                },
-                'metformin': {
-                    'factor': 0.9,
-                    'description': 'Increased insulin sensitivity with metformin'
-                },
-                'birth_control': {
-                    'factor': 1.1,
-                    'description': 'Slight insulin resistance from hormonal birth control'
-                }
             }
         }
-
     }
 
     def __init__(self, patient_id: Optional[str] = None):
@@ -361,7 +277,7 @@ class Constants:
         """
         try:
             from config import mongo
-            print(f"Loading constants for patient: {self.patient_id}")
+            print(f"Loading constants for patient: {self.patient_id}")  # Debug log
             patient = mongo.db.users.find_one({'_id': ObjectId(self.patient_id)})
 
             if patient:
@@ -377,25 +293,22 @@ class Constants:
                         'fat_factor': patient.get('fat_factor'),
                         'activity_coefficients': patient.get('activity_coefficients'),
                         'absorption_modifiers': patient.get('absorption_modifiers'),
-                        'insulin_timing_guidelines': patient.get('insulin_timing_guidelines'),
-                        'disease_factors': patient.get('disease_factors'),  # Add new fields
-                        'medication_factors': patient.get('medication_factors')  # Add new fields
+                        'insulin_timing_guidelines': patient.get('insulin_timing_guidelines')
                     }
 
                 # Remove None values
                 constants_data = {k: v for k, v in constants_data.items() if v is not None}
 
                 if constants_data:
-                    print(f"Found patient constants: {constants_data}")
+                    print(f"Found patient constants: {constants_data}")  # Debug log
                     self.patient_config = dataclasses.replace(
                         self.default_config,
                         **constants_data
                     )
                 else:
-                    print("No patient constants found, using defaults")
+                    print("No patient constants found, using defaults")  # Debug log
         except Exception as e:
             print(f"Error loading patient constants: {e}")
-
 
     def get_patient_constants(self) -> Dict[str, Any]:
         """Get current patient or default constants as a dictionary"""
@@ -489,8 +402,6 @@ class Constants:
             'MEAL_TYPES': cls.MEAL_TYPES,
             'FOOD_CATEGORIES': cls.FOOD_CATEGORIES,
             'DEFAULT_PATIENT_CONSTANTS': cls.DEFAULT_PATIENT_CONSTANTS,
-            'DISEASE_FACTORS': cls.DEFAULT_PATIENT_CONSTANTS['disease_factors'],
-            'MEDICATION_FACTORS': cls.DEFAULT_PATIENT_CONSTANTS['medication_factors'],
             'MEAL_TIMING_FACTORS': cls.DEFAULT_PATIENT_CONSTANTS['meal_timing_factors'],
             'TIME_OF_DAY_FACTORS': cls.DEFAULT_PATIENT_CONSTANTS['time_of_day_factors']
         }
