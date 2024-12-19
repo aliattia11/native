@@ -1,5 +1,4 @@
 // frontend/src/components/MedicationSchedule.js
-
 import React, { useState, useEffect } from 'react';
 import { useConstants } from '../contexts/ConstantsContext';
 import styles from './MedicationSchedule.module.css';
@@ -11,25 +10,49 @@ const MedicationSchedule = ({
   onScheduleUpdate,
   className
 }) => {
-  const { updateMedicationSchedule, medicationSchedules } = useConstants();
+  const { updateMedicationSchedule, medicationSchedules, fetchMedicationSchedules } = useConstants();
   const [schedule, setSchedule] = useState({
     startDate: '',
     endDate: '',
     dailyTimes: [''],
   });
-  const [loading, setLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [currentSchedule, setCurrentSchedule] = useState(null);
 
   // Use the current date for validation
-  const currentDate = new Date('2024-12-18');
+  const currentDate = new Date();
   currentDate.setHours(0, 0, 0, 0);
 
   useEffect(() => {
-    fetchMedicationSchedule();
-  }, [medication, patientId, medicationSchedules]);
+    const loadSchedule = async () => {
+      try {
+        const existingSchedule = medicationSchedules[medication];
+        if (existingSchedule) {
+          setCurrentSchedule(existingSchedule);
+          setSchedule({
+            startDate: existingSchedule.startDate.slice(0, 10),
+            endDate: existingSchedule.endDate.slice(0, 10),
+            dailyTimes: existingSchedule.dailyTimes
+          });
+        } else {
+          // Initialize with default values if no schedule exists
+          setSchedule({
+            startDate: currentDate.toISOString().slice(0, 10),
+            endDate: new Date(currentDate.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+            dailyTimes: ['']
+          });
+        }
+      } catch (error) {
+        console.error('Error loading schedule:', error);
+        setError(error.message);
+      }
+    };
 
-  const fetchMedicationSchedule = async () => {
+    loadSchedule();
+  }, [medication, medicationSchedules]);
+
+  const fetchCurrentSchedule = async () => {
     try {
       const existingSchedule = medicationSchedules[medication];
       if (existingSchedule) {
@@ -44,14 +67,16 @@ const MedicationSchedule = ({
         setSchedule(prev => ({
           ...prev,
           startDate: currentDate.toISOString().slice(0, 10),
-          endDate: new Date(currentDate.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+          endDate: new Date(currentDate.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+          dailyTimes: ['']
         }));
       }
     } catch (error) {
-      console.error('Error fetching medication schedule:', error);
+      console.error('Error fetching current schedule:', error);
       setError(error.message);
     }
   };
+
 
   const validateSchedule = () => {
     const errors = [];
@@ -107,39 +132,45 @@ const MedicationSchedule = ({
     }));
   };
 
-  const handleScheduleUpdate = async () => {
+    const handleScheduleUpdate = async () => {
     try {
-      setLoading(true);
+      setIsSubmitting(true);
       setError(null);
 
-      // Validate schedule
       const validationErrors = validateSchedule();
       if (validationErrors.length > 0) {
         throw new Error(validationErrors.join('\n'));
       }
 
       const updatedSchedule = {
-        startDate: schedule.startDate,
-        endDate: schedule.endDate,
-        dailyTimes: schedule.dailyTimes.sort()
+        startDate: new Date(schedule.startDate).toISOString(),
+        endDate: new Date(schedule.endDate).toISOString(),
+        dailyTimes: schedule.dailyTimes.filter(time => time).sort()
       };
+       await updateMedicationSchedule(patientId, medication, updatedSchedule);
 
-      // Use the context function to update the schedule
-      await updateMedicationSchedule(patientId, medication, updatedSchedule);
+      // Fetch the updated schedules
+      await fetchMedicationSchedules(patientId);
 
+      // Set the current schedule
+      setCurrentSchedule({
+        ...updatedSchedule,
+        medication
+      });
+
+      // Notify parent component
       if (onScheduleUpdate) {
-        onScheduleUpdate();
+        await onScheduleUpdate();
       }
 
-      // Show success message
-      setError(null);
     } catch (error) {
       console.error('Error updating medication schedule:', error);
       setError(error.message);
     } finally {
-      setLoading(false);
+      setIsSubmitting(false);
     }
   };
+
 
   return (
     <div className={`${styles.medicationSchedule} ${className || ''}`}>
@@ -148,23 +179,23 @@ const MedicationSchedule = ({
           <div className={styles.inputGroup}>
             <label htmlFor={`startDate-${medication}`}>Start Date:</label>
             <input
-              id={`startDate-${medication}`}
-              type="date"
-              value={schedule.startDate}
-              onChange={(e) => setSchedule(prev => ({...prev, startDate: e.target.value}))}
-              min={currentDate.toISOString().slice(0, 10)}
-              className={styles.dateInput}
+                id={`startDate-${medication}`}
+                type="date"
+                value={schedule.startDate}
+                onChange={(e) => setSchedule(prev => ({...prev, startDate: e.target.value}))}
+                min={currentDate.toISOString().slice(0, 10)}
+                className={styles.dateInput}
             />
           </div>
           <div className={styles.inputGroup}>
             <label htmlFor={`endDate-${medication}`}>End Date:</label>
             <input
-              id={`endDate-${medication}`}
-              type="date"
-              value={schedule.endDate}
-              onChange={(e) => setSchedule(prev => ({...prev, endDate: e.target.value}))}
-              min={schedule.startDate}
-              className={styles.dateInput}
+                id={`endDate-${medication}`}
+                type="date"
+                value={schedule.endDate}
+                onChange={(e) => setSchedule(prev => ({...prev, endDate: e.target.value}))}
+                min={schedule.startDate}
+                className={styles.dateInput}
             />
           </div>
         </div>
@@ -173,56 +204,56 @@ const MedicationSchedule = ({
           <label>Daily Times:</label>
           <div className={styles.timesList}>
             {schedule.dailyTimes.map((time, index) => (
-              <div key={index} className={styles.timeInput}>
-                <input
-                  type="time"
-                  value={time}
-                  onChange={(e) => handleTimeChange(index, e.target.value)}
-                  className={styles.timeInput}
-                />
-                <button
-                  type="button"
-                  onClick={() => handleRemoveTime(index)}
-                  className={styles.removeTimeButton}
-                  disabled={schedule.dailyTimes.length === 1}
-                  title="Remove time"
-                >
-                  ✕
-                </button>
-              </div>
+                <div key={index} className={styles.timeInput}>
+                  <input
+                      type="time"
+                      value={time}
+                      onChange={(e) => handleTimeChange(index, e.target.value)}
+                      className={styles.timeInput}
+                  />
+                  <button
+                      type="button"
+                      onClick={() => handleRemoveTime(index)}
+                      className={styles.removeTimeButton}
+                      disabled={schedule.dailyTimes.length === 1}
+                      title="Remove time"
+                  >
+                    ✕
+                  </button>
+                </div>
             ))}
           </div>
           <button
-            type="button"
-            onClick={handleAddTime}
-            className={styles.addTimeButton}
-            title="Add another time"
+              type="button"
+              onClick={handleAddTime}
+              className={styles.addTimeButton}
+              title="Add another time"
           >
             + Add Time
           </button>
         </div>
 
         <button
-          onClick={handleScheduleUpdate}
-          disabled={loading || !schedule.startDate || !schedule.endDate || schedule.dailyTimes.some(time => !time)}
-          className={`${styles.updateButton} ${loading ? styles.loading : ''}`}
+            onClick={handleScheduleUpdate}
+            disabled={isSubmitting || !schedule.startDate || !schedule.endDate || schedule.dailyTimes.some(time => !time)}
+            className={`${styles.updateButton} ${isSubmitting ? styles.loading : ''}`}
         >
-          {loading ? 'Updating...' : 'Update Schedule'}
+          {isSubmitting ? 'Updating...' : 'Update Schedule'}
         </button>
       </div>
 
       {error && (
-        <div className={styles.error}>
-          {error.split('\n').map((err, index) => (
-            <p key={index}>{err}</p>
-          ))}
-        </div>
+          <div className={styles.error}>
+            {error.split('\n').map((err, index) => (
+                <p key={index}>{err}</p>
+            ))}
+          </div>
       )}
 
       {currentSchedule && (
-        <div className={styles.currentSchedule}>
-          <h4>Current Schedule:</h4>
-          <p>From: {new Date(currentSchedule.startDate).toLocaleDateString()}</p>
+          <div className={styles.currentSchedule}>
+            <h4>Current Schedule:</h4>
+            <p>From: {new Date(currentSchedule.startDate).toLocaleDateString()}</p>
           <p>To: {new Date(currentSchedule.endDate).toLocaleDateString()}</p>
           <p>Daily times: {currentSchedule.dailyTimes.join(', ')}</p>
         </div>

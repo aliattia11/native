@@ -2,11 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import MedicationSchedule from './MedicationSchedule';
 import styles from './EnhancedPatientConstants.module.css';
 import { DEFAULT_PATIENT_CONSTANTS } from '../constants';
-
 import { useConstants } from '../contexts/ConstantsContext';
 
 const EnhancedPatientConstantsUI = ({ patientId }) => {
-  const { refreshConstants } = useConstants();
+  const { refreshConstants, fetchMedicationSchedules } = useConstants();
   const [constants, setConstants] = useState(DEFAULT_PATIENT_CONSTANTS);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -31,6 +30,9 @@ const EnhancedPatientConstantsUI = ({ patientId }) => {
 
       const data = await response.json();
       setConstants(data.constants);
+
+      if (!response.ok) throw new Error('Failed to fetch patient constants');
+
     } catch (err) {
       setError(err.message);
     } finally {
@@ -371,17 +373,20 @@ const handleSubmit = async () => {
                           )}
                     </span>
                       </div>
-                      {constants.active_medications?.includes(medication) && data.duration_based && (
-                          <MedicationSchedule
-    medication={medication}
-    medicationData={data}
-    patientId={patientId}
-    onScheduleUpdate={() => {
-      refreshConstants();  // This will update all constants
-    }}
-    className={styles.medicationScheduleWrapper}
-  />
-                      )}
+ {constants.active_medications?.includes(medication) && data.duration_based && (
+    <MedicationSchedule
+      medication={medication}
+      medicationData={data}
+      patientId={patientId}
+      onScheduleUpdate={async () => {
+        await Promise.all([
+          refreshConstants(),
+          fetchMedicationSchedules(patientId)
+        ]);
+      }}
+      className={styles.medicationScheduleWrapper}
+    />
+  )}
                     </div>
                 ))}
               </div>
