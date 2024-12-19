@@ -1,5 +1,4 @@
 // frontend/src/contexts/ConstantsContext.js
-
 import React, { createContext, useState, useContext, useCallback, useEffect } from 'react';
 import { DEFAULT_PATIENT_CONSTANTS } from '../constants';
 import axios from 'axios';
@@ -53,7 +52,7 @@ export function ConstantsProvider({ children }) {
     try {
       const token = localStorage.getItem('token');
       const response = await axios.get(
-        `http://localhost:5000/api/medication-schedules/${patientId}`,
+        `http://localhost:5000/api/medication-schedule/${patientId}`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -82,19 +81,25 @@ export function ConstantsProvider({ children }) {
       setError(null);
 
       const token = localStorage.getItem('token');
-      const response = await axios.post(
-        `http://localhost:5000/api/medication-schedule/${patientId}`,
-        {
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+
+      const response = await axios({
+        method: 'post',
+        url: `http://localhost:5000/api/medication-schedule/${patientId}`,
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        data: {
           medication,
           schedule: scheduleData
         },
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
+        timeout: 10000, // 10 second timeout
+        withCredentials: true
+      });
 
       if (response.data.schedule) {
         // Update local state
@@ -103,20 +108,22 @@ export function ConstantsProvider({ children }) {
           [medication]: response.data.schedule
         }));
 
-        // Dispatch event for other components
-        window.dispatchEvent(new CustomEvent('medicationScheduleUpdated', {
-          detail: {
-            patientId,
-            medication,
-            schedule: response.data.schedule
-          }
-        }));
-
         return response.data.schedule;
       }
     } catch (error) {
       console.error('Error updating medication schedule:', error);
-      setError(error.response?.data?.message || 'Failed to update medication schedule');
+
+      // Improved error handling with specific messages
+      let errorMessage = 'Failed to update medication schedule';
+      if (error.response) {
+        errorMessage = error.response.data.message || errorMessage;
+      } else if (error.request) {
+        errorMessage = 'Server not responding. Please check your connection.';
+      } else {
+        errorMessage = error.message;
+      }
+
+      setError(errorMessage);
       throw error;
     } finally {
       setLoading(false);
