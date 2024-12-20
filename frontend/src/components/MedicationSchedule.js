@@ -1,7 +1,9 @@
 // frontend/src/components/MedicationSchedule.js
+
 import React, { useState, useEffect } from 'react';
 import { useConstants } from '../contexts/ConstantsContext';
 import styles from './MedicationSchedule.module.css';
+import axios from 'axios';
 
 const MedicationSchedule = ({
   medication,
@@ -26,18 +28,45 @@ const MedicationSchedule = ({
   const [error, setError] = useState(null);
   const [currentSchedule, setCurrentSchedule] = useState(null);
 
- useEffect(() => {
-    const loadSchedule = async () => {
-      try {
-        // First check medicationSchedules
-        const existingSchedule = medicationSchedules[medication];
+  useEffect(() => {
+const loadInitialSchedule = async () => {
+  try {
+    // First check medication schedules from context
+    const existingSchedule = medicationSchedules[medication];
 
-        if (existingSchedule) {
-          setCurrentSchedule(existingSchedule);
+    if (existingSchedule) {
+      setCurrentSchedule(existingSchedule);
+      setSchedule({
+        startDate: existingSchedule.startDate.slice(0, 10),
+        endDate: existingSchedule.endDate.slice(0, 10),
+        dailyTimes: existingSchedule.dailyTimes
+      });
+    } else {
+      // Try to fetch from backend directly
+      const token = localStorage.getItem('token');
+
+      // First try to get all schedules for the patient
+      const response = await axios.get(
+        `http://localhost:5000/api/medication-schedule/${patientId}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      if (response.data.schedules) {
+        const medicationSchedule = response.data.schedules.find(
+          schedule => schedule.medication === medication
+        );
+
+        if (medicationSchedule) {
+          setCurrentSchedule(medicationSchedule);
           setSchedule({
-            startDate: existingSchedule.startDate.slice(0, 10),
-            endDate: existingSchedule.endDate.slice(0, 10),
-            dailyTimes: existingSchedule.dailyTimes
+            startDate: medicationSchedule.startDate.slice(0, 10),
+            endDate: medicationSchedule.endDate.slice(0, 10),
+            dailyTimes: medicationSchedule.dailyTimes
           });
         } else {
           // Initialize with default values if no schedule exists
@@ -45,26 +74,37 @@ const MedicationSchedule = ({
           currentDate.setHours(0, 0, 0, 0);
           setSchedule({
             startDate: currentDate.toISOString().slice(0, 10),
-            endDate: new Date(currentDate.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+            endDate: new Date(currentDate.getTime() + 30 * 24 * 60 * 60 * 1000)
+              .toISOString().slice(0, 10),
             dailyTimes: ['']
           });
         }
-      } catch (error) {
-        console.error('Error loading schedule:', error);
-        setError(error.message);
       }
-    };
+    }
+  } catch (error) {
+    console.error('Error loading schedule:', error);
+    setError(error.message);
 
-    loadSchedule();
-  }, [medication, medicationSchedules]);
-
-  const currentDate = new Date();
-  currentDate.setHours(0, 0, 0, 0);
+    // Set default values on error
+    const currentDate = new Date();
+    currentDate.setHours(0, 0, 0, 0);
+    setSchedule({
+      startDate: currentDate.toISOString().slice(0, 10),
+      endDate: new Date(currentDate.getTime() + 30 * 24 * 60 * 60 * 1000)
+        .toISOString().slice(0, 10),
+      dailyTimes: ['']
+    });
+  }
+};
+    loadInitialSchedule();
+  }, [medication, medicationSchedules, patientId]);
 
   const validateSchedule = () => {
     const errors = [];
     const startDateObj = new Date(schedule.startDate);
     const endDateObj = new Date(schedule.endDate);
+    const currentDate = new Date();
+    currentDate.setHours(0, 0, 0, 0);
 
     // Validate dates
     if (!schedule.startDate || !schedule.endDate) {
@@ -115,49 +155,65 @@ const MedicationSchedule = ({
     }));
   };
 
-  const handleScheduleUpdate = async () => {
-    try {
-      setIsSubmitting(true);
-      setError(null);
+ const handleScheduleUpdate = async () => {
+  try {
+    setIsSubmitting(true);
+    setError(null);
 
-      const validationErrors = validateSchedule();
-      if (validationErrors.length > 0) {
-        throw new Error(validationErrors.join('\n'));
+    const validationErrors = validateSchedule();
+    if (validationErrors.length > 0) {
+      throw new Error(validationErrors.join('\n'));
+    }
+
+    const updatedSchedule = {
+      startDate: new Date(schedule.startDate).toISOString(),
+      endDate: new Date(schedule.endDate).toISOString(),
+      dailyTimes: schedule.dailyTimes.filter(time => time).sort()
+    };
+
+    const token = localStorage.getItem('token');
+
+    // Update the schedule
+    const response = await axios({
+      method: 'post',
+      url: `http://localhost:5000/api/medication-schedule/${patientId}`,
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      data: {
+        medication,
+        schedule: updatedSchedule
       }
+    });
 
-      const updatedSchedule = {
-        startDate: new Date(schedule.startDate).toISOString(),
-        endDate: new Date(schedule.endDate).toISOString(),
-        dailyTimes: schedule.dailyTimes.filter(time => time).sort()
-      };
+    if (response.data.schedule) {
+      setCurrentSchedule(response.data.schedule);
 
-      // Update the schedule
-      await updateMedicationSchedule(patientId, medication, updatedSchedule);
-
-      // Fetch updated data
+      // Update context
       await Promise.all([
         refreshConstants(),
         fetchMedicationSchedules(patientId)
       ]);
-
-      // Set the current schedule
-      setCurrentSchedule({
-        ...updatedSchedule,
-        medication
-      });
 
       // Notify parent component
       if (onScheduleUpdate) {
         await onScheduleUpdate();
       }
 
-    } catch (error) {
-      console.error('Error updating medication schedule:', error);
-      setError(error.message);
-    } finally {
-      setIsSubmitting(false);
+      // Emit custom event for other components
+      window.dispatchEvent(new CustomEvent('medicationScheduleUpdated', {
+        detail: { medication, schedule: response.data.schedule }
+      }));
     }
-  };
+
+  } catch (error) {
+    console.error('Error updating medication schedule:', error);
+    setError(error.response?.data?.message || error.message);
+  } finally {
+    setIsSubmitting(false);
+  }
+};
 
   return (
     <div className={`${styles.medicationSchedule} ${className || ''}`}>
@@ -170,7 +226,7 @@ const MedicationSchedule = ({
               type="date"
               value={schedule.startDate}
               onChange={(e) => setSchedule(prev => ({...prev, startDate: e.target.value}))}
-              min={currentDate.toISOString().slice(0, 10)}
+              min={new Date().toISOString().slice(0, 10)}
               className={styles.dateInput}
             />
           </div>

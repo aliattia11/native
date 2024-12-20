@@ -1,9 +1,18 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useConstants } from '../contexts/ConstantsContext';
 import styles from './PatientConstants.module.css';
 
 const PatientConstants = () => {
   const { patientConstants, loading, error, refreshConstants } = useConstants();
+
+  useEffect(() => {
+    // Refresh constants periodically to keep medication schedules up to date
+    const intervalId = setInterval(() => {
+      refreshConstants();
+    }, 60000); // Refresh every minute
+
+    return () => clearInterval(intervalId);
+  }, [refreshConstants]);
 
   if (loading) return <div>Loading constants...</div>;
   if (error) return <div>Error loading constants: {error}</div>;

@@ -1,8 +1,10 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import MedicationSchedule from './MedicationSchedule';
 import styles from './EnhancedPatientConstants.module.css';
 import { DEFAULT_PATIENT_CONSTANTS } from '../constants';
 import { useConstants } from '../contexts/ConstantsContext';
+import axios from 'axios';
 
 const EnhancedPatientConstantsUI = ({ patientId }) => {
   const { refreshConstants, fetchMedicationSchedules } = useConstants();
@@ -22,18 +24,34 @@ const EnhancedPatientConstantsUI = ({ patientId }) => {
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:5000/api/doctor/patient/${patientId}/constants`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
 
-      if (!response.ok) throw new Error('Failed to fetch patient constants');
+      // Fetch constants and medication schedules in parallel
+      const [constantsResponse, schedulesResponse] = await Promise.all([
+        axios.get(`http://localhost:5000/api/doctor/patient/${patientId}/constants`, {
+          headers: { Authorization: `Bearer ${token}` }
+        }),
+        axios.get(`http://localhost:5000/api/medication-schedule/${patientId}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+      ]);
 
-      const data = await response.json();
-      setConstants(data.constants);
+      const constantsData = constantsResponse.data.constants;
+      const schedulesData = schedulesResponse.data.schedules;
 
-      if (!response.ok) throw new Error('Failed to fetch patient constants');
+      // Merge medication schedules into constants
+      const mergedConstants = {
+        ...constantsData,
+        medication_schedules: schedulesData.reduce((acc, schedule) => {
+          acc[schedule.medication] = schedule;
+          return acc;
+        }, {})
+      };
+
+      setConstants(mergedConstants);
+      setError(null);
 
     } catch (err) {
+      console.error('Error fetching patient data:', err);
       setError(err.message);
     } finally {
       setLoading(false);
@@ -42,6 +60,18 @@ const EnhancedPatientConstantsUI = ({ patientId }) => {
 
   useEffect(() => {
     fetchPatientConstants();
+
+    // Set up event listener for medication schedule updates
+    const handleScheduleUpdate = () => {
+      fetchPatientConstants();
+    };
+
+    window.addEventListener('medicationScheduleUpdated', handleScheduleUpdate);
+
+    // Cleanup
+    return () => {
+      window.removeEventListener('medicationScheduleUpdated', handleScheduleUpdate);
+    };
   }, [fetchPatientConstants]);
 
   const handleBasicConstantChange = (key, value) => {
@@ -51,7 +81,6 @@ const EnhancedPatientConstantsUI = ({ patientId }) => {
     }));
   };
 
-  // New handlers for disease and medication factors
   const handleDiseaseFactorChange = (disease, value) => {
     setConstants(prev => ({
       ...prev,
@@ -78,56 +107,6 @@ const EnhancedPatientConstantsUI = ({ patientId }) => {
     }));
   };
 
-  const handleActiveConditionToggle = (condition) => {
-    setConstants(prev => ({
-      ...prev,
-      active_conditions: prev.active_conditions.includes(condition)
-        ? prev.active_conditions.filter(c => c !== condition)
-        : [...prev.active_conditions, condition]
-    }));
-  };
-
-  const handleActiveMedicationToggle = (medication) => {
-    setConstants(prev => ({
-      ...prev,
-      active_medications: prev.active_medications.includes(medication)
-        ? prev.active_medications.filter(m => m !== medication)
-        : [...prev.active_medications, medication]
-    }));
-  };
-
-const resetToDefaults = async () => {
-    try {
-      setLoading(true);
-      const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:5000/api/doctor/patient/${patientId}/constants/reset`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (!response.ok) throw new Error('Failed to reset patient constants');
-
-      const data = await response.json();
-      setConstants(data.constants);
-
-      // Emit an event to notify other components
-      const event = new CustomEvent('patientConstantsUpdated', {
-        detail: { patientId, constants: data.constants }
-      });
-      window.dispatchEvent(event);
-
-      setMessage('Patient constants reset to defaults successfully');
-      setTimeout(() => setMessage(''), 3000);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleActivityCoefficientChange = (level, value) => {
     setConstants(prev => ({
       ...prev,
@@ -148,41 +127,94 @@ const resetToDefaults = async () => {
     }));
   };
 
+  const handleActiveConditionToggle = (condition) => {
+    setConstants(prev => ({
+      ...prev,
+      active_conditions: prev.active_conditions.includes(condition)
+        ? prev.active_conditions.filter(c => c !== condition)
+        : [...prev.active_conditions, condition]
+    }));
+  };
 
+  const handleActiveMedicationToggle = (medication) => {
+    setConstants(prev => ({
+      ...prev,
+      active_medications: prev.active_medications.includes(medication)
+        ? prev.active_medications.filter(m => m !== medication)
+        : [...prev.active_medications, medication]
+    }));
+  };
 
-const handleSubmit = async () => {
+  const handleMedicationScheduleUpdate = async () => {
     try {
-        setLoading(true);
-        const token = localStorage.getItem('token');
-
-        // First save the constants
-        const response = await fetch(`http://localhost:5000/api/doctor/patient/${patientId}/constants`, {
-            method: 'PUT',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                constants: constants
-            })
-        });
-
-        if (!response.ok) throw new Error('Failed to update patient constants');
-
-        // Then refresh the constants and medication schedules
-        await Promise.all([
-            refreshConstants(),
-            fetchMedicationSchedules(patientId)
-        ]);
-
-        setMessage('Patient constants updated successfully');
-        setTimeout(() => setMessage(''), 3000);
-    } catch (err) {
-        setError(err.message);
-    } finally {
-        setLoading(false);
+      await Promise.all([
+        refreshConstants(),
+        fetchMedicationSchedules(patientId)
+      ]);
+      await fetchPatientConstants();
+    } catch (error) {
+      console.error('Error updating medication schedules:', error);
+      setError('Failed to update medication schedules');
     }
-};
+  };
+
+  const resetToDefaults = async () => {
+    try {
+      setLoading(true);
+      const token = localStorage.getItem('token');
+      const response = await axios.post(
+        `http://localhost:5000/api/doctor/patient/${patientId}/constants/reset`,
+        {},
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      setConstants(response.data.constants);
+      setMessage('Patient constants reset to defaults successfully');
+      setTimeout(() => setMessage(''), 3000);
+
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmit = async () => {
+    try {
+      setLoading(true);
+      const token = localStorage.getItem('token');
+
+      await axios.put(
+        `http://localhost:5000/api/doctor/patient/${patientId}/constants`,
+        { constants },
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      await Promise.all([
+        refreshConstants(),
+        fetchMedicationSchedules(patientId),
+        fetchPatientConstants()
+      ]);
+
+      setMessage('Patient constants updated successfully');
+      setTimeout(() => setMessage(''), 3000);
+
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const toggleSection = (section) => {
     setExpandedSections(prev => ({
@@ -191,17 +223,24 @@ const handleSubmit = async () => {
     }));
   };
 
-  if (loading) return <div className={styles.patientConstants}>Loading...</div>;
-  if (error) return <div className={styles.patientConstants}>Error: {error}</div>;
+  if (loading) return <div className={styles.loading}>Loading...</div>;
+  if (error) return <div className={styles.error}>Error: {error}</div>;
 
-  return (
+
+return (
     <div className={styles.patientConstants}>
+      {message && (
+        <div className={styles.message}>
+          {message}
+        </div>
+      )}
+
       <div className={styles.form}>
         {/* Basic Constants Section */}
         <div className={styles.constantsSection}>
           <h3 className={styles.subsectionTitle} onClick={() => toggleSection('basic')}>
             Basic Constants
-            <span style={{ float: 'right' }}>{expandedSections.basic ? '▼' : '▶'}</span>
+            <span>{expandedSections.basic ? '▼' : '▶'}</span>
           </h3>
           {expandedSections.basic && (
             <div className={styles.constantsWrapper}>
@@ -258,7 +297,7 @@ const handleSubmit = async () => {
         <div className={styles.constantsSection}>
           <h3 className={styles.subsectionTitle} onClick={() => toggleSection('activity')}>
             Activity Coefficients
-            <span style={{ float: 'right' }}>{expandedSections.activity ? '▼' : '▶'}</span>
+            <span>{expandedSections.activity ? '▼' : '▶'}</span>
           </h3>
           {expandedSections.activity && (
             <div className={styles.constantsWrapper}>
@@ -287,7 +326,7 @@ const handleSubmit = async () => {
         <div className={styles.constantsSection}>
           <h3 className={styles.subsectionTitle} onClick={() => toggleSection('absorption')}>
             Absorption Modifiers
-            <span style={{ float: 'right' }}>{expandedSections.absorption ? '▼' : '▶'}</span>
+            <span>{expandedSections.absorption ? '▼' : '▶'}</span>
           </h3>
           {expandedSections.absorption && (
             <div className={styles.constantsWrapper}>
@@ -305,11 +344,11 @@ const handleSubmit = async () => {
             </div>
           )}
         </div>
- {/* Health Conditions Section */}
+    {/* Health Conditions Section */}
         <div className={styles.constantsSection}>
           <h3 className={styles.subsectionTitle} onClick={() => toggleSection('diseases')}>
             Health Conditions
-            <span style={{ float: 'right' }}>{expandedSections.diseases ? '▼' : '▶'}</span>
+            <span>{expandedSections.diseases ? '▼' : '▶'}</span>
           </h3>
           {expandedSections.diseases && (
             <div className={styles.constantsWrapper}>
@@ -339,67 +378,64 @@ const handleSubmit = async () => {
           )}
         </div>
 
-         {/* Medications Section */}
-       <div className={styles.constantsSection}>
+        {/* Medications Section */}
+        <div className={styles.constantsSection}>
           <h3 className={styles.subsectionTitle} onClick={() => toggleSection('medications')}>
             Medications
-            <span style={{ float: 'right' }}>{expandedSections.medications ? '▼' : '▶'}</span>
+            <span>{expandedSections.medications ? '▼' : '▶'}</span>
           </h3>
           {expandedSections.medications && (
-              <div className={styles.constantsWrapper}>
-                {Object.entries(constants.medication_factors || {}).map(([medication, data]) => (
-                    <div key={medication} className={styles.medicationGroup}>
-                      <div className={styles.factorHeader}>
-                        <input
-                            type="checkbox"
-                            checked={constants.active_medications?.includes(medication)}
-                            onChange={() => handleActiveMedicationToggle(medication)}
-                        />
-                        <label>{medication.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</label>
-                      </div>
-                      <div className={styles.factorInputs}>
-                        <input
-                            type="number"
-                            value={data.factor}
-                            onChange={(e) => handleMedicationFactorChange(medication, e.target.value)}
-                            step="0.1"
-                            min="0"
-                            disabled={!constants.active_medications?.includes(medication)}
-                        />
-                        <span className={styles.factorDescription}>
+            <div className={styles.constantsWrapper}>
+              {Object.entries(constants.medication_factors || {}).map(([medication, data]) => (
+                <div key={medication} className={styles.medicationGroup}>
+                  <div className={styles.factorHeader}>
+                    <input
+                      type="checkbox"
+                      checked={constants.active_medications?.includes(medication)}
+                      onChange={() => handleActiveMedicationToggle(medication)}
+                    />
+                    <label>{medication.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</label>
+                  </div>
+                  <div className={styles.factorInputs}>
+                    <input
+                      type="number"
+                      value={data.factor}
+                      onChange={(e) => handleMedicationFactorChange(medication, e.target.value)}
+                      step="0.1"
+                      disabled={!constants.active_medications?.includes(medication)}
+                    />
+                    <span className={styles.factorDescription}>
                       {data.description}
-                          {data.duration_based && (
-                              <span className={styles.durationBased}>
+                      {data.duration_based && (
+                        <span className={styles.durationBased}>
                           Duration: {data.onset_hours}h onset, {data.peak_hours}h peak, {data.duration_hours}h total
                         </span>
-                          )}
+                      )}
                     </span>
-                      </div>
- {constants.active_medications?.includes(medication) && data.duration_based && (
-    <MedicationSchedule
-      medication={medication}
-      medicationData={data}
-      patientId={patientId}
-      onScheduleUpdate={async () => {
-        await Promise.all([
-          refreshConstants(),
-          fetchMedicationSchedules(patientId)
-        ]);
-      }}
-      className={styles.medicationScheduleWrapper}
-    />
-  )}
-                    </div>
-                ))}
-              </div>
+                  </div>
+
+                  {/* Medication Schedule Component */}
+                  {constants.active_medications?.includes(medication) && data.duration_based && (
+                    <MedicationSchedule
+                      medication={medication}
+                      medicationData={data}
+                      patientId={patientId}
+                      onScheduleUpdate={handleMedicationScheduleUpdate}
+                      className={styles.medicationScheduleWrapper}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
           )}
         </div>
 
+        {/* Action Buttons */}
         <div className={styles.buttonGroup}>
           <button
-              onClick={resetToDefaults}
-              className={styles.resetButton}
-              disabled={loading}
+            onClick={resetToDefaults}
+            className={styles.resetButton}
+            disabled={loading}
           >
             Reset to Defaults
           </button>
@@ -411,6 +447,13 @@ const handleSubmit = async () => {
             {loading ? 'Saving...' : 'Save Changes'}
           </button>
         </div>
+
+        {/* Error Display */}
+        {error && (
+          <div className={styles.errorMessage}>
+            {error}
+          </div>
+        )}
       </div>
     </div>
   );
