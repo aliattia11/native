@@ -13,12 +13,12 @@ meal_insulin_bp = Blueprint('meal_insulin', __name__)
 
 
 def calculate_health_factors(user_id):
-    """Calculate combined impact of diseases and medications"""
+    """Calculate combined impact of diseases and medications with timing considerations"""
     try:
         # Get user from database
         user = mongo.db.users.find_one({"_id": ObjectId(user_id)})
         if not user:
-            return 1.0  # Default multiplier if user not found
+            return 1.0
 
         constants = Constants(user_id)
         patient_constants = constants.get_patient_constants()
@@ -26,36 +26,86 @@ def calculate_health_factors(user_id):
         # Get active conditions and medications
         active_conditions = user.get('active_conditions', [])
         active_medications = user.get('active_medications', [])
+        medication_schedules = user.get('medication_schedules', {})
 
-        # Get factors from constants
-        disease_factors = patient_constants.get('disease_factors', {})
-        medication_factors = patient_constants.get('medication_factors', {})
-
-        # Calculate combined disease impact
+        # Calculate disease impact
         disease_multiplier = 1.0
         for condition in active_conditions:
-            if condition in disease_factors:
-                disease_multiplier *= disease_factors[condition].get('factor', 1.0)
+            if condition in patient_constants.get('disease_factors', {}):
+                disease_multiplier *= patient_constants['disease_factors'][condition].get('factor', 1.0)
 
-        # Calculate combined medication impact
+        # Calculate medication impact with timing
         medication_multiplier = 1.0
         current_time = datetime.utcnow()
 
         for medication in active_medications:
-            if medication in medication_factors:
-                med_data = medication_factors[medication]
-                med_factor = med_data.get('factor', 1.0)
+            if medication not in patient_constants.get('medication_factors', {}):
+                continue
 
-                # If medication is duration-based, check timing
-                if med_data.get('duration_based', False):
-                    # For simplicity, assuming medication is active if duration-based
-                    # In a real application, you'd track medication administration times
-                    medication_multiplier *= med_factor
-                else:
-                    # For non-duration based medications, apply factor directly
-                    medication_multiplier *= med_factor
+            med_data = patient_constants['medication_factors'][medication]
+            med_factor = med_data.get('factor', 1.0)
+
+            # Handle duration-based medications
+            if med_data.get('duration_based', False):
+                schedule = medication_schedules.get(medication)
+
+                if schedule:
+                    # Convert schedule times to datetime
+                    schedule_start = datetime.fromisoformat(schedule['startDate'].replace('Z', '+00:00'))
+                    schedule_end = datetime.fromisoformat(schedule['endDate'].replace('Z', '+00:00'))
+
+                    # Check if current time is within schedule period
+                    if schedule_start <= current_time <= schedule_end:
+                        # Calculate time since last dose
+                        daily_times = schedule.get('dailyTimes', [])
+                        if daily_times:
+                            # Convert daily times to current date
+                            today_doses = []
+                            for time_str in daily_times:
+                                hour, minute = map(int, time_str.split(':'))
+                                dose_time = current_time.replace(hour=hour, minute=minute)
+                                if dose_time > current_time:
+                                    # If time hasn't occurred today, check yesterday's dose
+                                    dose_time -= timedelta(days=1)
+                                today_doses.append(dose_time)
+
+                            if today_doses:
+                                # Find most recent dose
+                                last_dose = max(today_doses)
+                                hours_since_dose = (current_time - last_dose).total_seconds() / 3600
+
+                                # Apply timing-based factor
+                                onset_hours = med_data.get('onset_hours', 0)
+                                peak_hours = med_data.get('peak_hours', 0)
+                                duration_hours = med_data.get('duration_hours', 24)
+
+                                if hours_since_dose < onset_hours:
+                                    # Ramping up phase
+                                    timing_factor = (hours_since_dose / onset_hours) * med_factor
+                                elif hours_since_dose < peak_hours:
+                                    # Peak phase
+                                    timing_factor = med_factor
+                                elif hours_since_dose < duration_hours:
+                                    # Tapering phase
+                                    remaining_effect = (duration_hours - hours_since_dose) / (
+                                                duration_hours - peak_hours)
+                                    timing_factor = max(1.0, med_factor * remaining_effect)
+                                else:
+                                    # Outside duration window
+                                    timing_factor = 1.0
+
+                                medication_multiplier *= timing_factor
+                                continue
+
+            # For non-duration based or no schedule, apply factor directly
+            medication_multiplier *= med_factor
 
         return disease_multiplier * medication_multiplier
+
+    except Exception as e:
+        logger.error(f"Error calculating health factors: {str(e)}")
+        return 1.0
+
 
     except Exception as e:
         logger.error(f"Error calculating health factors: {str(e)}")

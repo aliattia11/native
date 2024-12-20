@@ -143,6 +143,33 @@ const MealInput = () => {
     setActivities(prev => prev.filter((_, i) => i !== index));
   }, []);
 
+  function getPhaseInfo(hoursSinceLastDose, medData) {
+  const { onset_hours, peak_hours, duration_hours, factor } = medData;
+
+  if (hoursSinceLastDose < onset_hours) {
+    return {
+      phase: 'Ramping up',
+      factor: (hoursSinceLastDose / onset_hours) * factor
+    };
+  } else if (hoursSinceLastDose < peak_hours) {
+    return {
+      phase: 'Peak effect',
+      factor: factor
+    };
+  } else if (hoursSinceLastDose < duration_hours) {
+    const remainingEffect = (duration_hours - hoursSinceLastDose) / (duration_hours - peak_hours);
+    return {
+      phase: 'Tapering',
+      factor: Math.max(1.0, factor * remainingEffect)
+    };
+  }
+
+  return {
+    phase: 'No current effect',
+    factor: 1.0
+  };
+}
+
   // Form submission handler
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -159,6 +186,8 @@ const MealInput = () => {
       if (!token) {
         throw new Error('Authentication token not found');
       }
+
+
 
       const mealData = {
         mealType,
@@ -377,30 +406,119 @@ const MealInput = () => {
               </ul>
             </li>
           )}
-          {patientConstants.active_medications?.length > 0 && (
-            <li>
-              <strong>Active Medications:</strong>
-              <ul>
-                {patientConstants.active_medications.map(medication => {
-                  const medData = patientConstants.medication_factors[medication];
-                  return (
-                    <li key={medication}>
-                      • {medication.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}:
-                      {((medData.factor - 1) * 100).toFixed(1)}%
-                      {medData.factor > 1
-                        ? ` (+${((medData.factor - 1) * 100).toFixed(1)}% increase)`
-                        : ` (${((medData.factor - 1) * 100).toFixed(1)}% decrease)`}
-                      {medData.duration_based && (
-                        <span className={styles.durationNote}>
-                          (Duration-based: onset {medData.onset_hours}h, peak {medData.peak_hours}h)
-                        </span>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            </li>
-          )}
+     {patientConstants.active_medications?.length > 0 && (
+  <div className={styles.medicationTimingInfo}>
+    <h4>Medication Effects:</h4>
+    {patientConstants.active_medications.map(medication => {
+      const medData = patientConstants.medication_factors[medication];
+      const schedule = patientConstants.medication_schedules?.[medication];
+      const currentDate = new Date();
+
+      let medicationEffect = null;
+
+      if (medData) {
+        if (medData.duration_based && schedule) {
+          const startDate = new Date(schedule.startDate);
+          const endDate = new Date(schedule.endDate);
+
+          if (currentDate < startDate) {
+            medicationEffect = {
+              status: 'Scheduled to start',
+              startDate: startDate.toLocaleDateString(),
+              factor: 1.0
+            };
+          } else if (currentDate > endDate) {
+            medicationEffect = {
+              status: 'Schedule ended',
+              endDate: endDate.toLocaleDateString(),
+              factor: 1.0
+            };
+          } else {
+            // Calculate time since last dose
+            const lastDoseTime = schedule.dailyTimes
+              .map(time => {
+                const [hours, minutes] = time.split(':');
+                const doseTime = new Date(currentDate);
+                doseTime.setHours(hours, minutes, 0, 0);
+                if (doseTime > currentDate) {
+                  doseTime.setDate(doseTime.getDate() - 1);
+                }
+                return doseTime;
+              })
+              .sort((a, b) => b - a)[0];
+
+            const hoursSinceLastDose = (currentDate - lastDoseTime) / (1000 * 60 * 60);
+
+            let phase, factor;
+            if (hoursSinceLastDose < medData.onset_hours) {
+              phase = 'Ramping up';
+              factor = 1.0 + ((medData.factor - 1.0) * (hoursSinceLastDose / medData.onset_hours));
+            } else if (hoursSinceLastDose < medData.peak_hours) {
+              phase = 'Peak effect';
+              factor = medData.factor;
+            } else if (hoursSinceLastDose < medData.duration_hours) {
+              phase = 'Tapering';
+              const remainingEffect = (medData.duration_hours - hoursSinceLastDose) /
+                                   (medData.duration_hours - medData.peak_hours);
+              factor = 1.0 + ((medData.factor - 1.0) * remainingEffect);
+            } else {
+              phase = 'No current effect';
+              factor = 1.0;
+            }
+
+            medicationEffect = {
+              status: phase,
+              lastDose: lastDoseTime.toLocaleString(),
+              factor: factor,
+              hoursSinceLastDose: Math.round(hoursSinceLastDose * 10) / 10
+            };
+          }
+        } else {
+          // Non-duration based medications
+          medicationEffect = {
+            status: 'Constant effect',
+            factor: medData.factor
+          };
+        }
+
+        return (
+          <div key={medication} className={styles.medicationEffect}>
+            <h5>{medication.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</h5>
+            <div className={styles.effectDetails}>
+              {medicationEffect.status === 'Scheduled to start' && (
+                <>
+                  <p>Status: Scheduled to start on {medicationEffect.startDate}</p>
+                  <p>Current Effect: None</p>
+                </>
+              )}
+              {medicationEffect.status === 'Schedule ended' && (
+                <>
+                  <p>Status: Schedule ended on {medicationEffect.endDate}</p>
+                  <p>Current Effect: None</p>
+                </>
+              )}
+              {['Ramping up', 'Peak effect', 'Tapering', 'No current effect'].includes(medicationEffect.status) && (
+                <>
+                  <p>Last dose: {medicationEffect.lastDose}</p>
+                  <p>Hours since last dose: {medicationEffect.hoursSinceLastDose}h</p>
+                  <p>Current phase: {medicationEffect.status}</p>
+                  <p>Current effect strength: {((medicationEffect.factor - 1) * 100).toFixed(1)}%
+                     {medicationEffect.factor > 1 ? ' increase' : ' decrease'}</p>
+                </>
+              )}
+              {medicationEffect.status === 'Constant effect' && (
+                <p>Effect: {((medicationEffect.factor - 1) * 100).toFixed(1)}%
+                   {medicationEffect.factor > 1 ? ' increase' : ' decrease'} in insulin resistance</p>
+              )}
+            </div>
+          </div>
+        );
+      }
+      return null;
+    })}
+  </div>
+)}
+
           <li className={styles.summaryLine}>
             <strong>Combined Health Factor: {((insulinBreakdown.healthMultiplier - 1) * 100).toFixed(1)}%
               {insulinBreakdown.healthMultiplier > 1

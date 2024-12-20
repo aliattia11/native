@@ -34,6 +34,7 @@ export const calculateHealthFactors = (patientConstants) => {
   if (!patientConstants) return 1.0;
 
   let healthMultiplier = 1.0;
+  const currentDate = new Date();
 
   // Calculate disease impacts
   const activeConditions = patientConstants.active_conditions || [];
@@ -48,13 +49,57 @@ export const calculateHealthFactors = (patientConstants) => {
   const activeMedications = patientConstants.active_medications || [];
   activeMedications.forEach(medication => {
     const medData = patientConstants.medication_factors[medication];
-    if (medData && medData.factor) {
-      if (medData.duration_based) {
-        // For duration-based medications, we could implement more complex timing logic here
-        healthMultiplier *= medData.factor;
+    if (!medData || !medData.factor) return;
+
+    if (medData.duration_based) {
+      const schedule = patientConstants.medication_schedules?.[medication];
+      if (schedule) {
+        const startDate = new Date(schedule.startDate);
+        const endDate = new Date(schedule.endDate);
+
+        // Check if current date is within schedule period
+        if (currentDate < startDate || currentDate > endDate) {
+          return; // Skip this medication if outside schedule period
+        }
+
+        // Calculate time since last dose
+        const lastDoseTime = schedule.dailyTimes
+          .map(time => {
+            const [hours, minutes] = time.split(':');
+            const doseTime = new Date(currentDate);
+            doseTime.setHours(hours, minutes, 0, 0);
+            if (doseTime > currentDate) {
+              doseTime.setDate(doseTime.getDate() - 1);
+            }
+            return doseTime;
+          })
+          .sort((a, b) => b - a)[0];
+
+        const hoursSinceLastDose = (currentDate - lastDoseTime) / (1000 * 60 * 60);
+
+        // Calculate timing-based factor
+        let timingFactor = 1.0;
+        if (hoursSinceLastDose < medData.onset_hours) {
+          // Ramping up phase
+          timingFactor = 1.0 + ((medData.factor - 1.0) * (hoursSinceLastDose / medData.onset_hours));
+        } else if (hoursSinceLastDose < medData.peak_hours) {
+          // Peak phase
+          timingFactor = medData.factor;
+        } else if (hoursSinceLastDose < medData.duration_hours) {
+          // Tapering phase
+          const remainingEffect = (medData.duration_hours - hoursSinceLastDose) /
+                                (medData.duration_hours - medData.peak_hours);
+          timingFactor = 1.0 + ((medData.factor - 1.0) * remainingEffect);
+        }
+
+        healthMultiplier *= timingFactor;
       } else {
+        // If no schedule exists, use base factor
         healthMultiplier *= medData.factor;
       }
+    } else {
+      // For non-duration based medications, apply factor directly
+      healthMultiplier *= medData.factor;
     }
   });
 
