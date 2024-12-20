@@ -10,7 +10,13 @@ const MedicationSchedule = ({
   onScheduleUpdate,
   className
 }) => {
-  const { updateMedicationSchedule, medicationSchedules, fetchMedicationSchedules } = useConstants();
+  const {
+    updateMedicationSchedule,
+    medicationSchedules,
+    fetchMedicationSchedules,
+    refreshConstants
+  } = useConstants();
+
   const [schedule, setSchedule] = useState({
     startDate: '',
     endDate: '',
@@ -20,14 +26,12 @@ const MedicationSchedule = ({
   const [error, setError] = useState(null);
   const [currentSchedule, setCurrentSchedule] = useState(null);
 
-  // Use the current date for validation
-  const currentDate = new Date();
-  currentDate.setHours(0, 0, 0, 0);
-
-  useEffect(() => {
+ useEffect(() => {
     const loadSchedule = async () => {
       try {
+        // First check medicationSchedules
         const existingSchedule = medicationSchedules[medication];
+
         if (existingSchedule) {
           setCurrentSchedule(existingSchedule);
           setSchedule({
@@ -37,6 +41,8 @@ const MedicationSchedule = ({
           });
         } else {
           // Initialize with default values if no schedule exists
+          const currentDate = new Date();
+          currentDate.setHours(0, 0, 0, 0);
           setSchedule({
             startDate: currentDate.toISOString().slice(0, 10),
             endDate: new Date(currentDate.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
@@ -52,31 +58,8 @@ const MedicationSchedule = ({
     loadSchedule();
   }, [medication, medicationSchedules]);
 
-  const fetchCurrentSchedule = async () => {
-    try {
-      const existingSchedule = medicationSchedules[medication];
-      if (existingSchedule) {
-        setCurrentSchedule(existingSchedule);
-        setSchedule({
-          startDate: existingSchedule.startDate.slice(0, 10),
-          endDate: existingSchedule.endDate.slice(0, 10),
-          dailyTimes: existingSchedule.dailyTimes
-        });
-      } else {
-        // Initialize with default values if no schedule exists
-        setSchedule(prev => ({
-          ...prev,
-          startDate: currentDate.toISOString().slice(0, 10),
-          endDate: new Date(currentDate.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
-          dailyTimes: ['']
-        }));
-      }
-    } catch (error) {
-      console.error('Error fetching current schedule:', error);
-      setError(error.message);
-    }
-  };
-
+  const currentDate = new Date();
+  currentDate.setHours(0, 0, 0, 0);
 
   const validateSchedule = () => {
     const errors = [];
@@ -132,7 +115,7 @@ const MedicationSchedule = ({
     }));
   };
 
-    const handleScheduleUpdate = async () => {
+  const handleScheduleUpdate = async () => {
     try {
       setIsSubmitting(true);
       setError(null);
@@ -147,10 +130,15 @@ const MedicationSchedule = ({
         endDate: new Date(schedule.endDate).toISOString(),
         dailyTimes: schedule.dailyTimes.filter(time => time).sort()
       };
-       await updateMedicationSchedule(patientId, medication, updatedSchedule);
 
-      // Fetch the updated schedules
-      await fetchMedicationSchedules(patientId);
+      // Update the schedule
+      await updateMedicationSchedule(patientId, medication, updatedSchedule);
+
+      // Fetch updated data
+      await Promise.all([
+        refreshConstants(),
+        fetchMedicationSchedules(patientId)
+      ]);
 
       // Set the current schedule
       setCurrentSchedule({
@@ -171,7 +159,6 @@ const MedicationSchedule = ({
     }
   };
 
-
   return (
     <div className={`${styles.medicationSchedule} ${className || ''}`}>
       <div className={styles.scheduleInputs}>
@@ -179,23 +166,23 @@ const MedicationSchedule = ({
           <div className={styles.inputGroup}>
             <label htmlFor={`startDate-${medication}`}>Start Date:</label>
             <input
-                id={`startDate-${medication}`}
-                type="date"
-                value={schedule.startDate}
-                onChange={(e) => setSchedule(prev => ({...prev, startDate: e.target.value}))}
-                min={currentDate.toISOString().slice(0, 10)}
-                className={styles.dateInput}
+              id={`startDate-${medication}`}
+              type="date"
+              value={schedule.startDate}
+              onChange={(e) => setSchedule(prev => ({...prev, startDate: e.target.value}))}
+              min={currentDate.toISOString().slice(0, 10)}
+              className={styles.dateInput}
             />
           </div>
           <div className={styles.inputGroup}>
             <label htmlFor={`endDate-${medication}`}>End Date:</label>
             <input
-                id={`endDate-${medication}`}
-                type="date"
-                value={schedule.endDate}
-                onChange={(e) => setSchedule(prev => ({...prev, endDate: e.target.value}))}
-                min={schedule.startDate}
-                className={styles.dateInput}
+              id={`endDate-${medication}`}
+              type="date"
+              value={schedule.endDate}
+              onChange={(e) => setSchedule(prev => ({...prev, endDate: e.target.value}))}
+              min={schedule.startDate}
+              className={styles.dateInput}
             />
           </div>
         </div>
@@ -204,56 +191,56 @@ const MedicationSchedule = ({
           <label>Daily Times:</label>
           <div className={styles.timesList}>
             {schedule.dailyTimes.map((time, index) => (
-                <div key={index} className={styles.timeInput}>
-                  <input
-                      type="time"
-                      value={time}
-                      onChange={(e) => handleTimeChange(index, e.target.value)}
-                      className={styles.timeInput}
-                  />
-                  <button
-                      type="button"
-                      onClick={() => handleRemoveTime(index)}
-                      className={styles.removeTimeButton}
-                      disabled={schedule.dailyTimes.length === 1}
-                      title="Remove time"
-                  >
-                    ✕
-                  </button>
-                </div>
+              <div key={index} className={styles.timeInput}>
+                <input
+                  type="time"
+                  value={time}
+                  onChange={(e) => handleTimeChange(index, e.target.value)}
+                  className={styles.timeInput}
+                />
+                <button
+                  type="button"
+                  onClick={() => handleRemoveTime(index)}
+                  className={styles.removeTimeButton}
+                  disabled={schedule.dailyTimes.length === 1}
+                  title="Remove time"
+                >
+                  ✕
+                </button>
+              </div>
             ))}
           </div>
           <button
-              type="button"
-              onClick={handleAddTime}
-              className={styles.addTimeButton}
-              title="Add another time"
+            type="button"
+            onClick={handleAddTime}
+            className={styles.addTimeButton}
+            title="Add another time"
           >
             + Add Time
           </button>
         </div>
 
         <button
-            onClick={handleScheduleUpdate}
-            disabled={isSubmitting || !schedule.startDate || !schedule.endDate || schedule.dailyTimes.some(time => !time)}
-            className={`${styles.updateButton} ${isSubmitting ? styles.loading : ''}`}
+          onClick={handleScheduleUpdate}
+          disabled={isSubmitting || !schedule.startDate || !schedule.endDate || schedule.dailyTimes.some(time => !time)}
+          className={`${styles.updateButton} ${isSubmitting ? styles.loading : ''}`}
         >
           {isSubmitting ? 'Updating...' : 'Update Schedule'}
         </button>
       </div>
 
       {error && (
-          <div className={styles.error}>
-            {error.split('\n').map((err, index) => (
-                <p key={index}>{err}</p>
-            ))}
-          </div>
+        <div className={styles.error}>
+          {error.split('\n').map((err, index) => (
+            <p key={index}>{err}</p>
+          ))}
+        </div>
       )}
 
       {currentSchedule && (
-          <div className={styles.currentSchedule}>
-            <h4>Current Schedule:</h4>
-            <p>From: {new Date(currentSchedule.startDate).toLocaleDateString()}</p>
+        <div className={styles.currentSchedule}>
+          <h4>Current Schedule:</h4>
+          <p>From: {new Date(currentSchedule.startDate).toLocaleDateString()}</p>
           <p>To: {new Date(currentSchedule.endDate).toLocaleDateString()}</p>
           <p>Daily times: {currentSchedule.dailyTimes.join(', ')}</p>
         </div>

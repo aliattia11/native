@@ -38,19 +38,24 @@ def get_all_medication_schedules(current_user, patient_id):
         return jsonify({'message': 'Unauthorized access'}), 403
 
     try:
+        # Find all active schedules
         schedules = list(mongo.db.medication_schedules.find({
             'patient_id': patient_id,
             'endDate': {'$gte': datetime.utcnow()}
         }))
 
+        # Format schedules for response
+        formatted_schedules = [format_schedule(schedule) for schedule in schedules]
+
         return jsonify({
-            'schedules': [format_schedule(schedule) for schedule in schedules]
+            'schedules': formatted_schedules,
+            'count': len(formatted_schedules)
         }), 200
     except Exception as e:
         logger.error(f"Error fetching medication schedules: {str(e)}")
-        return jsonify({'message': 'Error fetching medication schedules'}), 500
+        return (jsonify({'message': 'Error fetching medication schedules'}), 500
 
-@medication_routes.route('/api/medication-schedule/<patient_id>/<medication>', methods=['GET'])
+@medication_routes.route('/api/medication-schedule/<patient_id>/<medication>', methods=['GET']))
 @token_required
 @api_error_handler
 def get_medication_schedule(current_user, patient_id, medication):
@@ -71,6 +76,7 @@ def get_medication_schedule(current_user, patient_id, medication):
     except Exception as e:
         logger.error(f"Error fetching medication schedule: {str(e)}")
         return jsonify({'message': 'Error fetching medication schedule'}), 500
+
 
 @medication_routes.route('/api/medication-schedule/<patient_id>', methods=['POST'])
 @token_required
@@ -96,22 +102,23 @@ def create_or_update_schedule(current_user, patient_id):
 
         # Validate required fields
         if not all([medication, schedule_data, schedule_data.get('startDate'),
-                   schedule_data.get('endDate'), schedule_data.get('dailyTimes')]):
+                    schedule_data.get('endDate'), schedule_data.get('dailyTimes')]):
             return jsonify({'message': 'Missing required fields'}), 400
 
-        # Validate dates
         try:
-            start_date = datetime.fromisoformat(schedule_data['startDate'])
-            end_date = datetime.fromisoformat(schedule_data['endDate'])
+            start_date = datetime.fromisoformat(schedule_data['startDate'].replace('Z', '+00:00'))
+            end_date = datetime.fromisoformat(schedule_data['endDate'].replace('Z', '+00:00'))
+
             if end_date < start_date:
                 return jsonify({'message': 'End date must be after start date'}), 400
+
         except ValueError as e:
             logger.error(f"Date validation error: {str(e)}")
             return jsonify({'message': 'Invalid date format'}), 400
 
-        # Validate times
+        # Validate times format
         daily_times = schedule_data['dailyTimes']
-        if not all(validate_time_format(t) for t in daily_times):
+        if not all(isinstance(t, str) and len(t.split(':')) == 2 for t in daily_times):
             return jsonify({'message': 'Invalid time format'}), 400
 
         # Sort daily times
@@ -128,7 +135,7 @@ def create_or_update_schedule(current_user, patient_id):
             'updated_by': str(current_user['_id'])
         }
 
-        # Update existing or create new schedule
+        # Update in medication_schedules collection
         result = mongo.db.medication_schedules.update_one(
             {
                 'patient_id': patient_id,
@@ -145,7 +152,24 @@ def create_or_update_schedule(current_user, patient_id):
             upsert=True
         )
 
+        # Update in user's document
+        user_update_result = mongo.db.users.update_one(
+            {'_id': ObjectId(patient_id)},
+            {
+                '$set': {
+                    f'medication_schedules.{medication}': {
+                        'id': str(result.upserted_id) if result.upserted_id else None,
+                        'startDate': start_date,
+                        'endDate': end_date,
+                        'dailyTimes': daily_times,
+                        'updated_at': datetime.utcnow()
+                    }
+                }
+            }
+        )
+
         if result.upserted_id:
+            # Create initial medication logs for new schedule
             create_initial_medication_logs(patient_id, medication, schedule)
 
         # Get the updated/created schedule
@@ -155,14 +179,25 @@ def create_or_update_schedule(current_user, patient_id):
             'endDate': {'$gte': datetime.utcnow()}
         })
 
-        return jsonify({
+        if not updated_schedule:
+            logger.error("Failed to retrieve updated schedule")
+            return jsonify({'message': 'Error retrieving updated schedule'}), 500
+
+        # Format response
+        response_data = {
             'message': 'Medication schedule updated successfully',
             'schedule': format_schedule(updated_schedule)
-        }), 200
+        }
+
+        # Log success
+        logger.info(f"Successfully updated medication schedule for patient {patient_id}, medication {medication}")
+
+        return jsonify(response_data), 200
 
     except Exception as e:
         logger.error(f"Error updating medication schedule: {str(e)}", exc_info=True)
         return jsonify({'message': f'Error updating medication schedule: {str(e)}'}), 500
+
 
 def create_initial_medication_logs(patient_id, medication, schedule):
     """Create initial medication logs for the next occurrence of each daily time."""
@@ -171,24 +206,54 @@ def create_initial_medication_logs(patient_id, medication, schedule):
         current_datetime = datetime.utcnow()
 
         for daily_time in schedule['dailyTimes']:
-            time_obj = datetime.strptime(daily_time, '%H:%M').time()
-            next_dose_datetime = datetime.combine(current_date, time_obj)
+            try:
+                # Parse the time string
+                time_parts = daily_time.split(':')
+                hour = int(time_parts[0])
+                minute = int(time_parts[1])
 
-            # If the time has passed today, schedule for tomorrow
-            if next_dose_datetime < current_datetime:
-                next_dose_datetime += timedelta(days=1)
+                # Create datetime for the scheduled time
+                time_obj = datetime.strptime(daily_time, '%H:%M').time()
+                next_dose_datetime = datetime.combine(current_date, time_obj)
 
-            mongo.db.medication_logs.insert_one({
-                'patient_id': patient_id,
-                'medication': medication,
-                'scheduled_time': next_dose_datetime,
-                'taken_at': None,
-                'status': 'scheduled',
-                'created_at': current_datetime
-            })
+                # If the time has passed today, schedule for tomorrow
+                if next_dose_datetime < current_datetime:
+                    next_dose_datetime += timedelta(days=1)
+
+                # Create the medication log
+                mongo.db.medication_logs.insert_one({
+                    'patient_id': patient_id,
+                    'medication': medication,
+                    'scheduled_time': next_dose_datetime,
+                    'taken_at': None,
+                    'status': 'scheduled',
+                    'created_at': current_datetime
+                })
+
+            except ValueError as e:
+                logger.error(f"Error processing time {daily_time}: {str(e)}")
+                continue
+
     except Exception as e:
         logger.error(f"Error creating initial medication logs: {str(e)}")
         raise
+
+
+def format_schedule(schedule):
+    """Helper function to format schedule for JSON response"""
+    try:
+        return {
+            'id': str(schedule['_id']),
+            'medication': schedule['medication'],
+            'startDate': schedule['startDate'].isoformat(),
+            'endDate': schedule['endDate'].isoformat(),
+            'dailyTimes': schedule['dailyTimes'],
+            'created_at': schedule['created_at'].isoformat(),
+            'updated_at': schedule.get('updated_at', '').isoformat() if schedule.get('updated_at') else None
+        }
+    except Exception as e:
+        logger.error(f"Error formatting schedule: {str(e)}")
+        return None
 
 @medication_routes.route('/api/medication-schedule/<patient_id>/<schedule_id>', methods=['DELETE'])
 @token_required

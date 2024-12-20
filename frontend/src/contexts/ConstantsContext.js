@@ -19,8 +19,7 @@ export function ConstantsProvider({ children }) {
     }
 
     try {
-const response = await axios.get('http://localhost:5000/api/patient/constants', {
-
+      const response = await axios.get('http://localhost:5000/api/patient/constants', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -34,6 +33,14 @@ const response = await axios.get('http://localhost:5000/api/patient/constants', 
         return DEFAULT_PATIENT_CONSTANTS;
       }
 
+      // Get the patient ID from the response if available
+      const patientId = constants.patient_id;
+
+      // Fetch medication schedules if we have a patient ID
+      if (patientId) {
+        await fetchMedicationSchedules(patientId);
+      }
+
       // Merge with defaults to ensure all required fields exist
       return {
         ...DEFAULT_PATIENT_CONSTANTS,
@@ -41,15 +48,16 @@ const response = await axios.get('http://localhost:5000/api/patient/constants', 
         disease_factors: constants.disease_factors || DEFAULT_PATIENT_CONSTANTS.disease_factors,
         medication_factors: constants.medication_factors || DEFAULT_PATIENT_CONSTANTS.medication_factors,
         active_conditions: constants.active_conditions || [],
-        active_medications: constants.active_medications || []
+        active_medications: constants.active_medications || [],
+        medication_schedules: constants.medication_schedules || {}
       };
     } catch (error) {
       console.error('Error fetching patient constants:', error);
       throw new Error('Failed to fetch patient constants');
     }
   };
+  // Continuing from part 1...
 
-  // Function to fetch medication schedules for a patient
   const fetchMedicationSchedules = async (patientId) => {
     try {
       setLoading(true);
@@ -71,7 +79,14 @@ const response = await axios.get('http://localhost:5000/api/patient/constants', 
           acc[schedule.medication] = schedule;
           return acc;
         }, {});
+
         setMedicationSchedules(schedulesMap);
+
+        // Update patient constants with medication schedules
+        setPatientConstants(prev => ({
+          ...prev,
+          medication_schedules: schedulesMap
+        }));
       }
     } catch (error) {
       console.error('Error fetching medication schedules:', error);
@@ -80,8 +95,8 @@ const response = await axios.get('http://localhost:5000/api/patient/constants', 
       setLoading(false);
     }
   };
-  // Function to update medication schedule
- const updateMedicationSchedule = async (patientId, medication, scheduleData) => {
+
+  const updateMedicationSchedule = async (patientId, medication, scheduleData) => {
     try {
       setLoading(true);
       setError(null);
@@ -118,11 +133,12 @@ const response = await axios.get('http://localhost:5000/api/patient/constants', 
           [medication]: response.data.schedule
         }));
 
-        // Dispatch event for other components
-        window.dispatchEvent(new CustomEvent('medicationScheduleUpdated', {
-          detail: {
-            medication,
-            schedule: response.data.schedule
+        // Update patient constants
+        setPatientConstants(prev => ({
+          ...prev,
+          medication_schedules: {
+            ...(prev.medication_schedules || {}),
+            [medication]: response.data.schedule
           }
         }));
 
@@ -135,66 +151,57 @@ const response = await axios.get('http://localhost:5000/api/patient/constants', 
       setLoading(false);
     }
   };
+  // Continuing from part 2...
 
-
-
-  // Function to delete medication schedule
-  const deleteMedicationSchedule = async (patientId, scheduleId) => {
+  const deleteMedicationSchedule = async (patientId, medication) => {
     try {
       setLoading(true);
       setError(null);
 
       const token = localStorage.getItem('token');
-      const response = await axios.delete(
-        `http://localhost:5000/api/medication-schedule/${patientId}/${scheduleId}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        }
-      );
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
 
-      if (response.data.deleted_schedule_id) {
-        // Update local state by removing the deleted schedule
+      const response = await axios({
+        method: 'delete',
+        url: `http://localhost:5000/api/medication-schedule/${patientId}/${medication}`,
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.status === 200) {
+        // Remove schedule from local state
         setMedicationSchedules(prev => {
           const updated = { ...prev };
-          // Find and remove the deleted schedule
-          Object.keys(updated).forEach(key => {
-            if (updated[key].id === scheduleId) {
-              delete updated[key];
-            }
-          });
+          delete updated[medication];
           return updated;
         });
 
-        // Dispatch event for other components
-        window.dispatchEvent(new CustomEvent('medicationScheduleDeleted', {
-          detail: {
-            patientId,
-            scheduleId
-          }
-        }));
+        // Remove from patient constants
+        setPatientConstants(prev => {
+          const updatedSchedules = { ...prev.medication_schedules };
+          delete updatedSchedules[medication];
+          return {
+            ...prev,
+            medication_schedules: updatedSchedules
+          };
+        });
       }
     } catch (error) {
       console.error('Error deleting medication schedule:', error);
-      setError(error.response?.data?.message || 'Failed to delete medication schedule');
       throw error;
     } finally {
       setLoading(false);
     }
   };
 
-   const refreshConstants = useCallback(async () => {
+  const refreshConstants = useCallback(async () => {
     try {
       setLoading(true);
       const constants = await fetchPatientConstants();
       setPatientConstants(constants);
-
-      // Always fetch medication schedules if we have a patient ID
-      if (constants.patient_id) {
-        await fetchMedicationSchedules(constants.patient_id);
-      }
-
       setError(null);
     } catch (err) {
       console.error('Error refreshing data:', err);
@@ -205,40 +212,35 @@ const response = await axios.get('http://localhost:5000/api/patient/constants', 
     }
   }, []);
 
-     useEffect(() => {
-    if (patientConstants.patient_id) {
-      fetchMedicationSchedules(patientConstants.patient_id);
-    }
-  }, [patientConstants.patient_id]);
-
   // Initial fetch of constants
   useEffect(() => {
     refreshConstants();
   }, [refreshConstants]);
 
-  // Listen for constants updates from other components
+  // Event listener for medication schedule updates
   useEffect(() => {
-    const handleConstantsUpdate = (event) => {
-      const { constants } = event.detail;
-      setPatientConstants(constants);
-    };
-
     const handleScheduleUpdate = (event) => {
       const { medication, schedule } = event.detail;
       setMedicationSchedules(prev => ({
         ...prev,
         [medication]: schedule
       }));
+
+      setPatientConstants(prev => ({
+        ...prev,
+        medication_schedules: {
+          ...(prev.medication_schedules || {}),
+          [medication]: schedule
+        }
+      }));
     };
 
-    window.addEventListener('patientConstantsUpdated', handleConstantsUpdate);
     window.addEventListener('medicationScheduleUpdated', handleScheduleUpdate);
-
     return () => {
-      window.removeEventListener('patientConstantsUpdated', handleConstantsUpdate);
       window.removeEventListener('medicationScheduleUpdated', handleScheduleUpdate);
     };
   }, []);
+  // Continuing from part 3...
 
   const contextValue = {
     patientConstants,
@@ -259,6 +261,7 @@ const response = await axios.get('http://localhost:5000/api/patient/constants', 
   );
 }
 
+// Custom hook to use the constants context
 export function useConstants() {
   const context = useContext(ConstantsContext);
   if (!context) {
@@ -266,3 +269,5 @@ export function useConstants() {
   }
   return context;
 }
+
+export default ConstantsContext;

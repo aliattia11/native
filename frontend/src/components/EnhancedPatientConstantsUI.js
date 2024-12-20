@@ -154,6 +154,8 @@ const handleSubmit = async () => {
     try {
         setLoading(true);
         const token = localStorage.getItem('token');
+
+        // First save the constants
         const response = await fetch(`http://localhost:5000/api/doctor/patient/${patientId}/constants`, {
             method: 'PUT',
             headers: {
@@ -161,17 +163,17 @@ const handleSubmit = async () => {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                constants: constants // Remove the nesting
+                constants: constants
             })
         });
 
         if (!response.ok) throw new Error('Failed to update patient constants');
 
-        // Emit an event to notify other components
-        const event = new CustomEvent('patientConstantsUpdated', {
-            detail: { patientId, constants }
-        });
-        window.dispatchEvent(event);
+        // Then refresh the constants and medication schedules
+        await Promise.all([
+            refreshConstants(),
+            fetchMedicationSchedules(patientId)
+        ]);
 
         setMessage('Patient constants updated successfully');
         setTimeout(() => setMessage(''), 3000);
