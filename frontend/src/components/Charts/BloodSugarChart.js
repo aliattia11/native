@@ -146,7 +146,7 @@ const BloodSugarChart = ({ isDoctor = false, patientId = null }) => {
         <button onClick={fetchData} className={styles.button}>Update Chart</button>
       </div>
 
-      {error && <div className={styles.error}>{error}</div>}
+       {error && <div className={styles.error}>{error}</div>}
 
       <div className={styles.chartContainer}>
         <ResponsiveContainer width="100%" height={400}>
@@ -165,6 +165,17 @@ const BloodSugarChart = ({ isDoctor = false, patientId = null }) => {
               textAnchor="end"
               height={70}
               interval="preserveStartEnd"
+              allowDataOverflow={false}
+              allowDecimals={true}
+              allowDuplicatedCategory={true}
+              hide={false}
+              mirror={false}
+              orientation="bottom"
+              padding={{ left: 0, right: 0 }}
+              reversed={false}
+              tick={{ fontSize: 12 }}
+              tickCount={5}
+              xAxisId={0}
             />
             <YAxis
               tickFormatter={formatYAxis}
@@ -172,6 +183,17 @@ const BloodSugarChart = ({ isDoctor = false, patientId = null }) => {
                 dataMin => Math.max(0, dataMin * 0.8),
                 dataMax => dataMax * 1.2
               ]}
+              allowDataOverflow={false}
+              allowDecimals={true}
+              allowDuplicatedCategory={true}
+              hide={false}
+              mirror={false}
+              orientation="left"
+              padding={{ top: 0, bottom: 0 }}
+              reversed={false}
+              tick={{ fontSize: 12 }}
+              tickCount={5}
+              yAxisId={0}
             />
             <Tooltip content={<CustomTooltip />} />
             <Legend />
@@ -180,16 +202,31 @@ const BloodSugarChart = ({ isDoctor = false, patientId = null }) => {
               label="Target"
               stroke="#666"
               strokeDasharray="3 3"
+              isFront={false}
+              labelPosition="right"
+              segment={[]}
+              xAxisId={0}
+              yAxisId={0}
             />
             <ReferenceLine
               y={targetGlucose * 0.7}
               stroke="#ff4444"
               strokeDasharray="3 3"
+              isFront={false}
+              labelPosition="right"
+              segment={[]}
+              xAxisId={0}
+              yAxisId={0}
             />
             <ReferenceLine
               y={targetGlucose * 1.3}
               stroke="#ff8800"
               strokeDasharray="3 3"
+              isFront={false}
+              labelPosition="right"
+              segment={[]}
+              xAxisId={0}
+              yAxisId={0}
             />
             <Line
               type="monotone"

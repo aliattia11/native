@@ -1,17 +1,21 @@
 // EnhancedPatientConstantsCalc.js
 import {
-  SHARED_CONSTANTS,
+  DEFAULT_PATIENT_CONSTANTS,
   MEASUREMENT_SYSTEMS,
   VOLUME_MEASUREMENTS,
-  WEIGHT_MEASUREMENTS
+  WEIGHT_MEASUREMENTS,
+  convertToGrams as baseConvertToGrams,
+  convertToMl as baseConvertToMl
 } from '../constants';
 
-// Existing conversion functions remain the same
+// Use the imported conversion functions
 export const convertToGrams = (amount, unit) => {
-  if (SHARED_CONSTANTS.convertToGrams) {
-    return SHARED_CONSTANTS.convertToGrams(amount, unit);
+  // First try using the base conversion function
+  if (baseConvertToGrams) {
+    return baseConvertToGrams(amount, unit);
   }
 
+  // Fallback to direct calculation
   if (WEIGHT_MEASUREMENTS[unit]) {
     return amount * WEIGHT_MEASUREMENTS[unit].grams;
   }
@@ -19,17 +23,19 @@ export const convertToGrams = (amount, unit) => {
 };
 
 export const convertToMl = (amount, unit) => {
-  if (SHARED_CONSTANTS.convertToMl) {
-    return SHARED_CONSTANTS.convertToMl(amount, unit);
+  // First try using the base conversion function
+  if (baseConvertToMl) {
+    return baseConvertToMl(amount, unit);
   }
 
+  // Fallback to direct calculation
   if (VOLUME_MEASUREMENTS[unit]) {
     return amount * VOLUME_MEASUREMENTS[unit].ml;
   }
   return amount;
 };
 
-// New function to calculate health factors impact
+// Rest of the file remains the same...
 export const calculateHealthFactors = (patientConstants) => {
   if (!patientConstants) return 1.0;
 

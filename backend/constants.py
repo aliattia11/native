@@ -93,6 +93,47 @@ class ConstantConfig:
 
     # New medication factors
     medication_factors: Dict[str, Dict[str, Any]] = field(default_factory=lambda: {
+        'oral_contraceptives': {
+            'factor': 1.2,  # 20% increase in insulin resistance
+            'description': 'Oral contraceptives may increase insulin resistance',
+            'duration_based': True,
+            'onset_hours': 24,
+            'peak_hours': 72,
+            'duration_hours': 720  # 30 days
+        },
+        'injectable_contraceptives': {
+            'factor': 1.3,  # 30% increase in insulin resistance
+            'description': 'Injectable contraceptives can significantly increase insulin resistance',
+            'duration_based': True,
+            'onset_hours': 48,
+            'peak_hours': 168,  # 1 week
+            'duration_hours': 2160  # 90 days for quarterly injections
+        },
+        # Keep existing medications...
+        'corticosteroids': {
+            'factor': 1.4,
+            'description': 'Significant increase in insulin resistance',
+            'duration_based': True,
+            'onset_hours': 4,
+            'peak_hours': 8,
+            'duration_hours': 24
+        },
+        'oral_contraceptives': {
+            'factor': 1.2,  # 20% increase in insulin resistance
+            'description': 'Oral contraceptives may increase insulin resistance',
+            'duration_based': True,
+            'onset_hours': 24,
+            'peak_hours': 72,
+            'duration_hours': 720  # 30 days
+        },
+        'injectable_contraceptives': {
+            'factor': 1.3,  # 30% increase in insulin resistance
+            'description': 'Injectable contraceptives can significantly increase insulin resistance',
+            'duration_based': True,
+            'onset_hours': 48,
+            'peak_hours': 168,  # 1 week
+            'duration_hours': 2160  # 90 days for quarterly injections
+        },
         'corticosteroids': {
             'factor': 1.4,
             'description': 'Significant increase in insulin resistance',
@@ -271,6 +312,22 @@ class Constants:
             }
         },
         'medication_factors': {
+            'oral_contraceptives': {
+                'factor': 1.2,
+                'description': 'Oral contraceptives may increase insulin resistance',
+                'duration_based': True,
+                'onset_hours': 24,
+                'peak_hours': 72,
+                'duration_hours': 720  # 30 days
+            },
+            'injectable_contraceptives': {
+                'factor': 1.3,
+                'description': 'Injectable contraceptives can significantly increase insulin resistance',
+                'duration_based': True,
+                'onset_hours': 48,
+                'peak_hours': 168,  # 1 week
+                'duration_hours': 2160  # 90 days for quarterly injections
+            },
             'corticosteroids': {
                 'factor': 1.4,
                 'description': 'Significant increase in insulin resistance',

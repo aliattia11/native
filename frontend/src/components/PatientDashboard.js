@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import MealInput from './MealInput';
 import MealHistory from './MealHistory';
 import BloodSugarInput from './BloodSugarInput';
@@ -14,118 +14,136 @@ import styles from './PatientDashboard.module.css';
 const PatientDashboard = ({ handleLogout }) => {
   const [userName, setUserName] = useState('');
   const [activeComponent, setActiveComponent] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    const firstName = localStorage.getItem('firstName') || '';
-    const lastName = localStorage.getItem('lastName') || '';
-    setUserName(`${firstName} ${lastName}`.trim());
+  // Use useCallback for stable function reference
+  const loadUserData = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const firstName = localStorage.getItem('firstName') || '';
+      const lastName = localStorage.getItem('lastName') || '';
+      setUserName(`${firstName} ${lastName}`.trim());
+    } catch (error) {
+      console.error('Error loading user data:', error);
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
-  const renderActiveComponent = () => {
+  useEffect(() => {
+    let mounted = true;
+
+    const initDashboard = async () => {
+      try {
+        if (mounted) {
+          await loadUserData();
+        }
+      } catch (error) {
+        console.error('Dashboard initialization error:', error);
+      }
+    };
+
+    initDashboard();
+
+    // Cleanup function
+    return () => {
+      mounted = false;
+    };
+  }, [loadUserData]);
+
+  // Memoize the component switch to prevent unnecessary re-renders
+  const renderActiveComponent = useCallback(() => {
+    if (isLoading) {
+      return <div>Loading...</div>;
+    }
+
     switch (activeComponent) {
       case 'MealInput':
-        return <MealInput />;
+        return <MealInput key="meal-input" />;
       case 'PatientConstants':
-        return <PatientConstants />;
+        return <PatientConstants key="patient-constants" />;
       case 'FoodDatabase':
-        return <FoodDatabase />;
+        return <FoodDatabase key="food-database" />;
       case 'mealHistory':
-        return <MealHistory />;
+        return <MealHistory key="meal-history" />;
       case 'bloodSugarTable':
-        return <BloodSugarTable />;
-        case 'BloodGlucoseAnalytics':
-        return <BloodGlucoseAnalytics />;
+        return <BloodSugarTable key="blood-sugar-table" />;
+      case 'BloodGlucoseAnalytics':
+        return <BloodGlucoseAnalytics key="blood-glucose-analytics" />;
       case 'bloodSugarChart':
-        return <BloodSugarChart />;
+        return <BloodSugarChart key="blood-sugar-chart" />;
       case 'activityRecording':
-        return <ActivityRecording userType="patient" />;
+        return <ActivityRecording key="activity-recording" userType="patient" />;
       case 'ActivityDataTable':
-        return <ActivityDataTable userType="patient" />;
+        return <ActivityDataTable key="activity-data-table" userType="patient" />;
       default:
         return null;
     }
-  };
+  }, [activeComponent, isLoading]);
+
+  // Handler for component switching
+  const handleComponentChange = useCallback((componentName) => {
+    setActiveComponent(componentName);
+  }, []);
 
   return (
     <div className={styles.patientDashboard}>
       <header className={styles.dashboardHeader}>
-        <h1 className={styles.welcomeText}>Welcome, {userName}</h1>
-        <button onClick={handleLogout} className={styles.logoutButton}>Logout</button>
+        <h1 className={styles.welcomeText}>
+          {isLoading ? 'Loading...' : `Welcome, ${userName}`}
+        </h1>
+        <button
+          onClick={handleLogout}
+          className={styles.logoutButton}
+          disabled={isLoading}
+        >
+          Logout
+        </button>
       </header>
 
       <div className={styles.dashboardGrid}>
-        <div className={styles.dashboardCard}>
-          <h2 className={styles.cardTitle}>Blood Sugar Input</h2>
-          <BloodSugarInput />
-        </div>
-        <div className={styles.dashboardCard}>
-          <h2 className={styles.cardTitle}>Meal Input</h2>
-          <MealInput />
-        </div>
-        <div className={styles.dashboardCard}>
-          <h2 className={styles.cardTitle}>Activity Recording</h2>
-          <ActivityRecording userType="patient" />
-        </div>
+        {!isLoading && (
+          <>
+            <div className={styles.dashboardCard}>
+              <h2 className={styles.cardTitle}>Blood Sugar Input</h2>
+              <BloodSugarInput />
+            </div>
+            <div className={styles.dashboardCard}>
+              <h2 className={styles.cardTitle}>Meal Input</h2>
+              <MealInput />
+            </div>
+            <div className={styles.dashboardCard}>
+              <h2 className={styles.cardTitle}>Activity Recording</h2>
+              <ActivityRecording userType="patient" />
+            </div>
+          </>
+        )}
       </div>
 
       <div className={styles.quickAccess}>
         <h2 className={styles.cardTitle}>Quick Access</h2>
         <div className={styles.quickAccessButtons}>
-
-
-          <button
-              onClick={() => setActiveComponent('MealInput')}
-              className={`${styles.quickAccessButton} ${activeComponent === 'MealInput' ? styles.active : ''}`}
-          >
-            Meal Input
-          </button>
-
-          <button
-              onClick={() => setActiveComponent('PatientConstants')}
-              className={`${styles.quickAccessButton} ${activeComponent === 'PatientConstants' ? styles.active : ''}`}
-          >
-            PatientConstants
-          </button>
-
-          <button
-              onClick={() => setActiveComponent('FoodDatabase')}
-              className={`${styles.quickAccessButton} ${activeComponent === 'FoodDatabase' ? styles.active : ''}`}
-          >
-            Meal Management
-          </button>
-
-          <button
-              onClick={() => setActiveComponent('mealHistory')}
-              className={`${styles.quickAccessButton} ${activeComponent === 'mealHistory' ? styles.active : ''}`}
-          >
-            Meal History
-          </button>
-
-          <button
-              onClick={() => setActiveComponent('bloodSugarTable')}
-              className={`${styles.quickAccessButton} ${activeComponent === 'bloodSugarTable' ? styles.active : ''}`}
-          >
-            Blood Sugar Table
-          </button>
-          <button
-              onClick={() => setActiveComponent('BloodGlucoseAnalytics')}
-              className={`${styles.quickAccessButton} ${activeComponent === 'BloodGlucoseAnalytics' ? styles.active : ''}`}
-          >
-            Blood Glucose Analytics
-          </button>
-          <button
-              onClick={() => setActiveComponent('bloodSugarChart')}
-              className={`${styles.quickAccessButton} ${activeComponent === 'bloodSugarChart' ? styles.active : ''}`}
-          >
-            Blood Sugar Chart
-          </button>
-
-          <button
-              onClick={() => setActiveComponent('ActivityDataTable')}
-              className={`${styles.quickAccessButton} ${activeComponent === 'ActivityDataTable' ? styles.active : ''}`}
-          >
-            Activity Data Table
-          </button>
+          {[
+            { name: 'MealInput', label: 'Meal Input' },
+            { name: 'PatientConstants', label: 'Patient Constants' },
+            { name: 'FoodDatabase', label: 'Meal Management' },
+            { name: 'mealHistory', label: 'Meal History' },
+            { name: 'bloodSugarTable', label: 'Blood Sugar Table' },
+            { name: 'BloodGlucoseAnalytics', label: 'Blood Glucose Analytics' },
+            { name: 'bloodSugarChart', label: 'Blood Sugar Chart' },
+            { name: 'ActivityDataTable', label: 'Activity Data Table' }
+          ].map(({ name, label }) => (
+            <button
+              key={name}
+              onClick={() => handleComponentChange(name)}
+              className={`${styles.quickAccessButton} ${
+                activeComponent === name ? styles.active : ''
+              }`}
+              disabled={isLoading}
+            >
+              {label}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -136,4 +154,4 @@ const PatientDashboard = ({ handleLogout }) => {
   );
 };
 
-export default PatientDashboard;
+export default React.memo(PatientDashboard);

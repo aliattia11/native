@@ -181,6 +181,22 @@
       }
     },
     "medication_factors": {
+      "oral_contraceptives": {
+        "factor": 1.2,
+        "description": "Oral contraceptives may increase insulin resistance",
+        "duration_based": true,
+        "onset_hours": 24,
+        "peak_hours": 72,
+        "duration_hours": 720
+      },
+      "injectable_contraceptives": {
+        "factor": 1.3,
+        "description": "Injectable contraceptives can significantly increase insulin resistance",
+        "duration_based": true,
+        "onset_hours": 48,
+        "peak_hours": 168,
+        "duration_hours": 2160
+      },
       "corticosteroids": {
         "factor": 1.4,
         "description": "Significant increase in insulin resistance",
@@ -388,6 +404,22 @@
     }
   },
   "MEDICATION_FACTORS": {
+    "oral_contraceptives": {
+      "factor": 1.2,
+      "description": "Oral contraceptives may increase insulin resistance",
+      "duration_based": true,
+      "onset_hours": 24,
+      "peak_hours": 72,
+      "duration_hours": 720
+    },
+    "injectable_contraceptives": {
+      "factor": 1.3,
+      "description": "Injectable contraceptives can significantly increase insulin resistance",
+      "duration_based": true,
+      "onset_hours": 48,
+      "peak_hours": 168,
+      "duration_hours": 2160
+    },
     "corticosteroids": {
       "factor": 1.4,
       "description": "Significant increase in insulin resistance",

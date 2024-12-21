@@ -58,7 +58,13 @@ def get_patient_constants(current_user, patient_id):
         # Get default constants
         default_constants = Constants.DEFAULT_PATIENT_CONSTANTS
 
-        # Return the full set of constants matching the frontend structure
+        # Get medication factors ensuring both defaults and patient overrides
+        medication_factors = {
+            **default_constants['medication_factors'],  # Start with defaults
+            **(patient.get('medication_factors', {}))  # Override with patient specifics
+        }
+
+        # Return the full set of constants
         constants = {
             'insulin_to_carb_ratio': patient.get('insulin_to_carb_ratio', default_constants['insulin_to_carb_ratio']),
             'correction_factor': patient.get('correction_factor', default_constants['correction_factor']),
@@ -68,13 +74,16 @@ def get_patient_constants(current_user, patient_id):
             'activity_coefficients': patient.get('activity_coefficients', default_constants['activity_coefficients']),
             'absorption_modifiers': patient.get('absorption_modifiers', default_constants['absorption_modifiers']),
             'insulin_timing_guidelines': patient.get('insulin_timing_guidelines', default_constants['insulin_timing_guidelines']),
-            # Add new disease and medication factors
             'disease_factors': patient.get('disease_factors', default_constants['disease_factors']),
-            'medication_factors': patient.get('medication_factors', default_constants['medication_factors']),
-            # Add active conditions and medications
+            'medication_factors': medication_factors,  # Use the merged medication factors
             'active_conditions': patient.get('active_conditions', []),
             'active_medications': patient.get('active_medications', [])
         }
+
+        # Add debug logging
+        logger.debug(f"Sending medication factors: {medication_factors}")
+        logger.debug(f"Full constants being sent: {constants}")
+
         return jsonify({'constants': constants}), 200
     except Exception as e:
         logger.error(f"Error fetching patient constants: {str(e)}")
@@ -204,10 +213,10 @@ def update_patient_constants(current_user, patient_id):
         logger.error(f"Error updating patient constants: {str(e)}")
         return jsonify({'message': 'Error updating patient constants'}), 500
 
-    @doctor_routes.route('/api/doctor/patient/<patient_id>/conditions', methods=['PUT'])
-    @token_required
-    @api_error_handler
-    def update_patient_conditions(current_user, patient_id):
+@doctor_routes.route('/api/doctor/patient/<patient_id>/conditions', methods=['PUT'])
+@token_required
+@api_error_handler
+def update_patient_conditions(current_user, patient_id):
         if current_user.get('user_type') != 'doctor':
             return jsonify({'message': 'Unauthorized access'}), 403
 
@@ -241,11 +250,10 @@ def update_patient_constants(current_user, patient_id):
         except Exception as e:
             logger.error(f"Error updating patient conditions: {str(e)}")
             return jsonify({'message': 'Error updating patient conditions'}), 500
-
-    @doctor_routes.route('/api/doctor/patient/<patient_id>/medications', methods=['PUT'])
-    @token_required
-    @api_error_handler
-    def update_patient_medications(current_user, patient_id):
+@doctor_routes.route('/api/doctor/patient/<patient_id>/medications', methods=['PUT'])
+@token_required
+@api_error_handler
+def update_patient_medications(current_user, patient_id):
         if current_user.get('user_type') != 'doctor':
             return jsonify({'message': 'Unauthorized access'}), 403
 

@@ -8,7 +8,10 @@ from utils.error_handler import api_error_handler
 from constants import Constants
 from services.food_service import get_food_details
 from config import mongo
+from datetime import datetime, timedelta  # Add timedelta import
+import logging  # Add this import
 
+logger = logging.getLogger(__name__)
 meal_insulin_bp = Blueprint('meal_insulin', __name__)
 
 
@@ -151,9 +154,10 @@ def get_meal_timing_factor(meal_type, time=None):
 
     hour = time.hour
 
-    # Get timing factors from Constants class
-    meal_timing_factors = Constants.MEAL_TIMING_FACTORS
-    time_of_day_factors = Constants.TIME_OF_DAY_FACTORS
+    # Get timing factors from Constants instance instead of class
+    constants = current_app.constants
+    meal_timing_factors = constants.get_constant('meal_timing_factors')
+    time_of_day_factors = constants.get_constant('time_of_day_factors')
 
     # Get base factor for meal type
     base_factor = meal_timing_factors.get(meal_type, 1.0)
@@ -184,19 +188,23 @@ def calculate_meal_nutrition(food_items):
         if not food_details:
             continue
 
-        portion = food.get('portion', 1)
-        measurement = food.get('measurement', 'serving')
-        details = food_details['details']
+        # Extract portion information from the new structure
+        portion_data = food.get('portion', {})
+        amount = portion_data.get('amount', 1)
+        unit = portion_data.get('unit', 'serving')
+        measurement_type = portion_data.get('measurement_type', 'volume')
+        details = food.get('details', {})
 
         # Convert to standard units using Constants class methods
-        standard_amount = constants.convert_to_standard(portion, measurement)
+        standard_amount = constants.convert_to_standard(amount, unit)
         if standard_amount is None:
             continue
 
         # Calculate ratio based on serving size
+        serving_size = details.get('serving_size', {})
         base_amount = constants.convert_to_standard(
-            details['serving_size']['amount'],
-            details['serving_size']['unit']
+            serving_size.get('amount', 1),
+            serving_size.get('unit', 'serving')
         )
         if base_amount is None or base_amount == 0:
             continue
@@ -298,6 +306,7 @@ def calculate_suggested_insulin(user_id, nutrition, activities, blood_glucose=No
         }
     }
 
+
 @meal_insulin_bp.route('/api/meal', methods=['POST'])
 @token_required
 def submit_meal(current_user):
@@ -312,14 +321,33 @@ def submit_meal(current_user):
 
         # Validate measurements for each food item
         for item in data['foodItems']:
-            measurement = item.get('measurement')
-            if measurement not in supported_measurements['volume'] and \
-                    measurement not in supported_measurements['weight'] and \
-                    measurement not in supported_measurements['standard_portions']:
-                return jsonify({
-                    "error": f"Unsupported measurement: {measurement}",
-                    "supported_measurements": supported_measurements
-                }), 400
+            portion = item.get('portion', {})
+            unit = portion.get('unit')
+            measurement_type = portion.get('measurement_type', 'volume')
+
+            # Skip validation if portion structure is missing
+            if not portion or not unit:
+                continue
+
+            # Check measurement type and corresponding unit
+            if measurement_type == 'weight':
+                if unit not in supported_measurements['weight']:
+                    return jsonify({
+                        "error": f"Unsupported weight measurement: {unit}",
+                        "supported_measurements": supported_measurements
+                    }), 400
+            elif measurement_type == 'volume':
+                if unit not in supported_measurements['volume']:
+                    return jsonify({
+                        "error": f"Unsupported volume measurement: {unit}",
+                        "supported_measurements": supported_measurements
+                    }), 400
+            else:
+                if unit not in supported_measurements['standard_portions']:
+                    return jsonify({
+                        "error": f"Unsupported standard portion: {unit}",
+                        "supported_measurements": supported_measurements
+                    }), 400
 
         # Calculate nutrition with new portion system
         nutrition = calculate_meal_nutrition(data['foodItems'])

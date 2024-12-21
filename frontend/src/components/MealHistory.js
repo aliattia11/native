@@ -164,48 +164,60 @@ const MealHistory = ({ isDoctor = false, patientId = null }) => {
       <div>
         <table {...getTableProps()} style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
-            {headerGroups.map(headerGroup => (
-              <tr {...headerGroup.getHeaderGroupProps()}>
-                {headerGroup.headers.map(column => (
-                  <th
-                    {...column.getHeaderProps(column.getSortByToggleProps())}
-                    style={{
-                      borderBottom: 'solid 3px #ddd',
-                      background: '#f0f0f0',
-                      padding: '8px',
-                      textAlign: 'left'
-                    }}
-                  >
-                    {column.render('Header')}
+            {headerGroups.map(headerGroup => {
+              const { key: headerGroupKey, ...headerGroupProps } = headerGroup.getHeaderGroupProps();
+              return (
+                <tr key={headerGroupKey} {...headerGroupProps}>
+                  {headerGroup.headers.map(column => {
+                    const { key, ...headerProps } = column.getHeaderProps(column.getSortByToggleProps());
+                    return (
+                      <th
+                        key={key}
+                        {...headerProps}
+                        style={{
+                          borderBottom: 'solid 3px #ddd',
+                          background: '#f0f0f0',
+                          padding: '8px',
+                          textAlign: 'left'
+                        }}
+                      >
+                        {column.render('Header')}
+                      </th>
+                    );
+                  })}
+                  <th style={{
+                    borderBottom: 'solid 3px #ddd',
+                    background: '#f0f0f0',
+                    padding: '8px',
+                    textAlign: 'left'
+                  }}>
+                    Actions
                   </th>
-                ))}
-                <th style={{
-                  borderBottom: 'solid 3px #ddd',
-                  background: '#f0f0f0',
-                  padding: '8px',
-                  textAlign: 'left'
-                }}>
-                  Actions
-                </th>
-              </tr>
-            ))}
+                </tr>
+              );
+            })}
           </thead>
           <tbody {...getTableBodyProps()}>
             {page.map(row => {
               prepareRow(row);
+              const { key: rowKey, ...rowProps } = row.getRowProps();
               return (
-                <tr {...row.getRowProps()}>
-                  {row.cells.map(cell => (
-                    <td
-                      {...cell.getCellProps()}
-                      style={{
-                        padding: '8px',
-                        borderBottom: 'solid 1px #ddd'
-                      }}
-                    >
-                      {cell.render('Cell')}
-                    </td>
-                  ))}
+                <tr key={rowKey} {...rowProps}>
+                  {row.cells.map(cell => {
+                    const { key, ...cellProps } = cell.getCellProps();
+                    return (
+                      <td
+                        key={key}
+                        {...cellProps}
+                        style={{
+                          padding: '8px',
+                          borderBottom: 'solid 1px #ddd'
+                        }}
+                      >
+                        {cell.render('Cell')}
+                      </td>
+                    );
+                  })}
                   <td style={{
                     padding: '8px',
                     borderBottom: 'solid 1px #ddd'

@@ -143,63 +143,61 @@ const MealInput = () => {
     setActivities(prev => prev.filter((_, i) => i !== index));
   }, []);
 
-  function getPhaseInfo(hoursSinceLastDose, medData) {
-  const { onset_hours, peak_hours, duration_hours, factor } = medData;
 
-  if (hoursSinceLastDose < onset_hours) {
-    return {
-      phase: 'Ramping up',
-      factor: (hoursSinceLastDose / onset_hours) * factor
-    };
-  } else if (hoursSinceLastDose < peak_hours) {
-    return {
-      phase: 'Peak effect',
-      factor: factor
-    };
-  } else if (hoursSinceLastDose < duration_hours) {
-    const remainingEffect = (duration_hours - hoursSinceLastDose) / (duration_hours - peak_hours);
-    return {
-      phase: 'Tapering',
-      factor: Math.max(1.0, factor * remainingEffect)
-    };
-  }
-
-  return {
-    phase: 'No current effect',
-    factor: 1.0
-  };
-}
 
   // Form submission handler
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!patientConstants) {
-      setMessage('Error: Patient constants not loaded');
-      return;
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  if (!patientConstants) {
+    setMessage('Error: Patient constants not loaded');
+    return;
+  }
+
+  // Add validation
+  if (!mealType) {
+    setMessage('Please select a meal type');
+    return;
+  }
+
+  if (selectedFoods.length === 0) {
+    setMessage('Please add at least one food item');
+    return;
+  }
+
+  setIsSubmitting(true);
+  setMessage('Submitting meal...');
+
+  try {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      throw new Error('Authentication token not found');
     }
 
-    setIsSubmitting(true);
-    setMessage('Submitting meal...');
+    // Create a more structured mealData object with measurement validation
+    const mealData = {
+      mealType,
+      foodItems: selectedFoods.map(food => {
+        // Determine the measurement type and values
+        const isWeightMeasurement = food.portion.activeMeasurement === 'weight';
+        const amount = isWeightMeasurement ? food.portion.w_amount : food.portion.amount;
+        const unit = isWeightMeasurement ? food.portion.w_unit : food.portion.unit;
 
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        throw new Error('Authentication token not found');
-      }
+        // Validate measurements
+        if (!amount || !unit) {
+          throw new Error(`Invalid measurement for food item: ${food.name}`);
+        }
 
-
-
-      const mealData = {
-        mealType,
-        foodItems: selectedFoods.map(food => ({
-    name: food.name,
-    portion: food.portion.activeMeasurement === 'weight' ? food.portion.w_amount : food.portion.amount,
-    measurement: food.portion.activeMeasurement === 'weight' ? food.portion.w_unit : food.portion.unit,
-    measurement_type: food.portion.activeMeasurement,
+        return {
+          name: food.name,
+          portion: {
+            amount: parseFloat(amount) || 1, // Ensure numeric value with fallback
+            unit: unit || (isWeightMeasurement ? 'g' : 'ml'), // Ensure valid unit with fallback
+            measurement_type: food.portion.activeMeasurement || 'weight'
+          },
           details: {
-            carbs: food.details.carbs,
-            protein: food.details.protein,
-            fat: food.details.fat,
+            carbs: parseFloat(food.details.carbs) || 0,
+            protein: parseFloat(food.details.protein) || 0,
+            fat: parseFloat(food.details.fat) || 0,
             absorption_type: food.details.absorption_type || 'medium',
             serving_size: {
               amount: food.details.serving_size?.amount || 1,
@@ -208,52 +206,59 @@ const MealInput = () => {
               w_unit: food.details.serving_size?.w_unit
             }
           }
-        })),
-        activities: activities.map(activity => ({
-          level: parseInt(activity.level),
-          duration: typeof activity.duration === 'string'
-            ? activity.duration
-            : `${Math.floor(activity.duration)}:${Math.round((activity.duration % 1) * 60).toString().padStart(2, '0')}`
-        })),
-        bloodSugar: bloodSugar ? parseFloat(bloodSugar) : null,
-        intendedInsulin: intendedInsulin ? parseFloat(intendedInsulin) : null,
-        suggestedInsulin: suggestedInsulin ? parseFloat(suggestedInsulin) : null,
-        notes,
-        constants: patientConstants,
-        timestamp: new Date().toISOString()
-      };
+        };
+      }),
+      activities: activities.map(activity => ({
+        level: parseInt(activity.level) || 0,
+        duration: typeof activity.duration === 'string'
+          ? activity.duration
+          : `${Math.floor(activity.duration)}:${Math.round((activity.duration % 1) * 60).toString().padStart(2, '0')}`
+      })),
+      bloodSugar: bloodSugar ? parseFloat(bloodSugar) : null,
+      intendedInsulin: intendedInsulin ? parseFloat(intendedInsulin) : null,
+      notes
+    };
 
-      await axios.post(
-        'http://localhost:5000/api/meal',
-        mealData,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
+    // Debug log to see what's being sent
+    console.log('Submitting meal data:', JSON.stringify(mealData, null, 2));
+
+    const response = await axios.post(
+      'http://localhost:5000/api/meal',
+      mealData,
+      {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
         }
-      );
+      }
+    );
 
-      setMessage('Meal logged successfully!');
+    console.log('Server response:', response.data);
+    setMessage('Meal logged successfully!');
 
-      // Reset form
-      setMealType('');
-      setSelectedFoods([]);
-      setActivities([{ level: 0, duration: 0 }]);
-      setBloodSugar('');
-      setIntendedInsulin('');
-      setSuggestedInsulin('');
-      setInsulinBreakdown(null);
-      setActivityImpact(0);
-      setNotes('');
+    // Reset form
+    setMealType('');
+    setSelectedFoods([]);
+    setActivities([{ level: 0, duration: 0 }]);
+    setBloodSugar('');
+    setIntendedInsulin('');
+    setSuggestedInsulin('');
+    setInsulinBreakdown(null);
+    setActivityImpact(0);
+    setNotes('');
 
-    } catch (error) {
-      console.error('Error submitting meal:', error);
-      setMessage(`Error: ${error.response?.data?.error || error.message}`);
-    } finally {
-      setIsSubmitting(false);
+  } catch (error) {
+    console.error('Error submitting meal:', error);
+    const errorMessage = error.response?.data?.error || error.message;
+    setMessage(`Error: ${errorMessage}`);
+    // Log the full error response for debugging
+    if (error.response?.data) {
+      console.log('Full error response:', error.response.data);
     }
-  };
+  } finally {
+    setIsSubmitting(false);
+  }
+};
 
   if (loading) {
     return <div className={styles.loading}>Loading patient constants...</div>;

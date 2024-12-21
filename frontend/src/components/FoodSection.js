@@ -6,30 +6,31 @@ import { MEASUREMENT_SYSTEMS, VOLUME_MEASUREMENTS, WEIGHT_MEASUREMENTS } from '.
 
 import styles from './MealInput.module.css';
 
+
 const FoodItem = ({ item, updatePortion, removeItem, onPortionChange }) => {
-  const [amount, setAmount] = React.useState(() => {
+  const [amount, setAmount] = useState(() => {
     return item.portion?.activeMeasurement === MEASUREMENT_SYSTEMS.VOLUME
       ? item.portion?.amount || 1
       : item.portion?.w_amount || item.details?.serving_size?.w_amount || 1;
   });
 
-  const [unit, setUnit] = React.useState(() => {
+  const [unit, setUnit] = useState(() => {
     return item.portion?.activeMeasurement === MEASUREMENT_SYSTEMS.VOLUME
       ? item.portion?.unit || 'ml'
       : item.portion?.w_unit || item.details?.serving_size?.w_unit || 'g';
   });
 
-  const [measurementSystem, setMeasurementSystem] = React.useState(
+  const [measurementSystem, setMeasurementSystem] = useState(
     item.portion?.activeMeasurement || MEASUREMENT_SYSTEMS.WEIGHT
   );
 
-  const [nutrients, setNutrients] = React.useState({ carbs: 0, protein: 0, fat: 0 });
+  const [nutrients, setNutrients] = useState({ carbs: 0, protein: 0, fat: 0 });
 
   const getMeasurementData = useCallback((system) => {
     return system === MEASUREMENT_SYSTEMS.VOLUME ? VOLUME_MEASUREMENTS : WEIGHT_MEASUREMENTS;
   }, []);
 
-  // Move nutrient calculation to useEffect
+  // Calculate nutrients when item changes
   useEffect(() => {
     const newNutrients = calculateNutrients(item);
     setNutrients({
@@ -39,21 +40,26 @@ const FoodItem = ({ item, updatePortion, removeItem, onPortionChange }) => {
     });
   }, [item]);
 
-  // Separate useEffect for portion updates
+  // Update portion only when amount, unit, or measurementSystem changes
   useEffect(() => {
     const newPortion = {
-      amount: measurementSystem === MEASUREMENT_SYSTEMS.VOLUME ? amount : item.portion.amount,
-      unit: measurementSystem === MEASUREMENT_SYSTEMS.VOLUME ? unit : item.portion.unit,
-      w_amount: measurementSystem === MEASUREMENT_SYSTEMS.WEIGHT ? amount : item.portion.w_amount,
-      w_unit: measurementSystem === MEASUREMENT_SYSTEMS.WEIGHT ? unit : item.portion.w_unit,
+      amount: measurementSystem === MEASUREMENT_SYSTEMS.VOLUME ? amount : null,
+      unit: measurementSystem === MEASUREMENT_SYSTEMS.VOLUME ? unit : null,
+      w_amount: measurementSystem === MEASUREMENT_SYSTEMS.WEIGHT ? amount : null,
+      w_unit: measurementSystem === MEASUREMENT_SYSTEMS.WEIGHT ? unit : null,
       activeMeasurement: measurementSystem
     };
 
-    updatePortion(item.id, newPortion);
-    if (onPortionChange) {
-      onPortionChange(item.id, newPortion);
+    // Only update if the values have actually changed
+    const hasChanged = JSON.stringify(newPortion) !== JSON.stringify(item.portion);
+
+    if (hasChanged) {
+      updatePortion(item.id, newPortion);
+      if (onPortionChange) {
+        onPortionChange(item.id, newPortion);
+      }
     }
-  }, [amount, unit, measurementSystem, item.id, item.portion, updatePortion, onPortionChange]);
+  }, [amount, unit, measurementSystem, item.id, updatePortion, onPortionChange]);
 
   const handleMeasurementSystemChange = (newSystem) => {
     if (newSystem === measurementSystem) return;

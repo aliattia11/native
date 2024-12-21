@@ -96,7 +96,7 @@ const ActivityDataTable = ({ isDoctor = false, patientId = null }) => {
     []
   );
 
-  const {
+ const {
     getTableProps,
     getTableBodyProps,
     headerGroups,
@@ -130,31 +130,43 @@ const ActivityDataTable = ({ isDoctor = false, patientId = null }) => {
       <div className="table-responsive">
         <table {...getTableProps()} className="activity-data-table">
           <thead>
-            {headerGroups.map(headerGroup => (
-              <tr {...headerGroup.getHeaderGroupProps()}>
-                {headerGroup.headers.map(column => (
-                  <th {...column.getHeaderProps(column.getSortByToggleProps())}>
-                    {column.render('Header')}
-                    <span className="sort-indicator">
-                      {column.isSorted
-                        ? column.isSortedDesc
-                          ? ' 🔽'
-                          : ' 🔼'
-                        : ''}
-                    </span>
-                  </th>
-                ))}
-              </tr>
-            ))}
+            {headerGroups.map(headerGroup => {
+              const { key, ...headerGroupProps } = headerGroup.getHeaderGroupProps();
+              return (
+                <tr key={key} {...headerGroupProps}>
+                  {headerGroup.headers.map(column => {
+                    const { key, ...columnProps } = column.getHeaderProps(column.getSortByToggleProps());
+                    return (
+                      <th key={key} {...columnProps}>
+                        {column.render('Header')}
+                        <span className="sort-indicator">
+                          {column.isSorted
+                            ? column.isSortedDesc
+                              ? ' 🔽'
+                              : ' 🔼'
+                            : ''}
+                        </span>
+                      </th>
+                    );
+                  })}
+                </tr>
+              );
+            })}
           </thead>
           <tbody {...getTableBodyProps()}>
             {page.map(row => {
               prepareRow(row);
+              const { key, ...rowProps } = row.getRowProps();
               return (
-                <tr {...row.getRowProps()}>
-                  {row.cells.map(cell => (
-                    <td {...cell.getCellProps()}>{cell.render('Cell')}</td>
-                  ))}
+                <tr key={key} {...rowProps}>
+                  {row.cells.map(cell => {
+                    const { key, ...cellProps } = cell.getCellProps();
+                    return (
+                      <td key={key} {...cellProps}>
+                        {cell.render('Cell')}
+                      </td>
+                    );
+                  })}
                 </tr>
               );
             })}
