@@ -247,13 +247,7 @@ const loadInitialSchedule = async () => {
           </button>
         </div>
 
-        <button
-          onClick={handleScheduleUpdate}
-          disabled={isSubmitting || !schedule.startDate || !schedule.endDate || schedule.dailyTimes.some(time => !time)}
-          className={`${styles.updateButton} ${isSubmitting ? styles.loading : ''}`}
-        >
-          {isSubmitting ? 'Updating...' : 'Update Schedule'}
-        </button>
+
       </div>
 
       {error && (

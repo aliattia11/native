@@ -9,7 +9,7 @@ import {
   calculateInsulinDose,
   getHealthFactorsBreakdown  // Add this import
 } from './EnhancedPatientConstantsCalc';
-import { MEAL_TYPES, ACTIVITY_LEVELS } from '../constants'; // Remove SHARED_CONSTANTS since it's unused
+import { MEAL_TYPES, ACTIVITY_LEVELS } from '../constants';
 import styles from './MealInput.module.css';
 
 // Update ActivityItem to use ACTIVITY_LEVELS from shared constants

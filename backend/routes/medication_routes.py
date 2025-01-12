@@ -251,6 +251,24 @@ def format_schedule(schedule):
         logger.error(f"Error formatting schedule: {str(e)}")
         return None
 
+@medication_routes.route('/api/my-medication-schedule', methods=['GET'])
+@token_required
+@api_error_handler
+def get_my_schedules(current_user):
+    try:
+        # Find all active schedules for the current user
+        schedules = list(mongo.db.medication_schedules.find({
+            'patient_id': str(current_user['_id']),
+            'endDate': {'$gte': datetime.utcnow()}
+        }))
+
+        formatted_schedules = [format_schedule(schedule) for schedule in schedules]
+        return jsonify({'schedules': formatted_schedules}), 200
+
+    except Exception as e:
+        logger.error(f"Error fetching medication schedules: {str(e)}")
+        return jsonify({'message': 'Error fetching medication schedules'}), 500
+
 @medication_routes.route('/api/medication-schedule/<patient_id>/<schedule_id>', methods=['DELETE'])
 @token_required
 @api_error_handler
@@ -289,3 +307,4 @@ def delete_medication_schedule(current_user, patient_id, schedule_id):
     except Exception as e:
         logger.error(f"Error deleting medication schedule: {str(e)}")
         return jsonify({'message': f'Error deleting medication schedule: {str(e)}'}), 500
+

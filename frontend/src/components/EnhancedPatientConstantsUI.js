@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import MedicationSchedule from './MedicationSchedule';
 import styles from './EnhancedPatientConstants.module.css';
 import { DEFAULT_PATIENT_CONSTANTS } from '../constants';
+import { ACTIVITY_LEVELS } from '../constants';
 import { useConstants } from '../contexts/ConstantsContext';
 import axios from 'axios';
 
@@ -293,35 +294,41 @@ return (
           )}
         </div>
 
-        {/* Activity Coefficients Section */}
-        <div className={styles.constantsSection}>
-          <h3 className={styles.subsectionTitle} onClick={() => toggleSection('activity')}>
-            Activity Coefficients
-            <span>{expandedSections.activity ? '▼' : '▶'}</span>
-          </h3>
-          {expandedSections.activity && (
-            <div className={styles.constantsWrapper}>
-              {Object.entries(constants.activity_coefficients).map(([level, value]) => (
-                <div key={level} className={styles.formGroup}>
-                  <label>
-                    {level === "-2" ? "Sleep" :
-                     level === "-1" ? "Very Low Activity" :
-                     level === "0" ? "Normal Activity" :
-                     level === "1" ? "High Activity" :
-                     "Vigorous Activity"}
-                  </label>
-                  <input
-                    type="number"
-                    value={value}
-                    onChange={(e) => handleActivityCoefficientChange(level, e.target.value)}
-                    step="0.1"
-                  />
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+<div className={styles.constantsSection}>
+  <h3 className={styles.subsectionTitle} onClick={() => toggleSection('activity')}>
+    Activity Coefficients
+    <span>{expandedSections.activity ? '▼' : '▶'}</span>
+  </h3>
+  {expandedSections.activity && (
+    <div className={styles.constantsWrapper}>
+      {ACTIVITY_LEVELS.map(activityLevel => {
+        const level = activityLevel.value.toString();
+        const currentValue = constants.activity_coefficients[level] || activityLevel.impact;
 
+        return (
+          <div key={level} className={styles.formGroup}>
+            <label>
+              {activityLevel.label}
+              {currentValue !== activityLevel.impact && (
+                <span className={styles.defaultValue}>
+                  (Default: {activityLevel.impact.toFixed(2)}x)
+                </span>
+              )}
+            </label>
+            <input
+              type="number"
+              value={currentValue}
+              onChange={(e) => handleActivityCoefficientChange(level, e.target.value)}
+              step="0.1"
+              min="0"
+              className={styles.numberInput}
+            />
+          </div>
+        );
+      })}
+    </div>
+  )}
+</div>
         {/* Absorption Modifiers Section */}
         <div className={styles.constantsSection}>
           <h3 className={styles.subsectionTitle} onClick={() => toggleSection('absorption')}>
@@ -329,44 +336,44 @@ return (
             <span>{expandedSections.absorption ? '▼' : '▶'}</span>
           </h3>
           {expandedSections.absorption && (
-            <div className={styles.constantsWrapper}>
-              {Object.entries(constants.absorption_modifiers).map(([type, value]) => (
-                <div key={type} className={styles.formGroup}>
-                  <label>{type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</label>
-                  <input
-                    type="number"
-                    value={value}
-                    onChange={(e) => handleAbsorptionModifierChange(type, e.target.value)}
-                    step="0.1"
-                  />
-                </div>
-              ))}
-            </div>
+              <div className={styles.constantsWrapper}>
+                {Object.entries(constants.absorption_modifiers).map(([type, value]) => (
+                    <div key={type} className={styles.formGroup}>
+                      <label>{type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</label>
+                      <input
+                          type="number"
+                          value={value}
+                          onChange={(e) => handleAbsorptionModifierChange(type, e.target.value)}
+                          step="0.1"
+                      />
+                    </div>
+                ))}
+              </div>
           )}
         </div>
-    {/* Health Conditions Section */}
+        {/* Health Conditions Section */}
         <div className={styles.constantsSection}>
           <h3 className={styles.subsectionTitle} onClick={() => toggleSection('diseases')}>
             Health Conditions
             <span>{expandedSections.diseases ? '▼' : '▶'}</span>
           </h3>
           {expandedSections.diseases && (
-            <div className={styles.constantsWrapper}>
-              {Object.entries(constants.disease_factors || {}).map(([disease, data]) => (
-                <div key={disease} className={styles.formGroup}>
-                  <div className={styles.factorHeader}>
-                    <input
-                      type="checkbox"
-                      checked={constants.active_conditions?.includes(disease)}
-                      onChange={() => handleActiveConditionToggle(disease)}
-                    />
-                    <label>{disease.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</label>
-                  </div>
-                  <div className={styles.factorInputs}>
-                    <input
-                      type="number"
-                      value={data.factor}
-                      onChange={(e) => handleDiseaseFactorChange(disease, e.target.value)}
+              <div className={styles.constantsWrapper}>
+                {Object.entries(constants.disease_factors || {}).map(([disease, data]) => (
+                    <div key={disease} className={styles.formGroup}>
+                      <div className={styles.factorHeader}>
+                        <input
+                            type="checkbox"
+                            checked={constants.active_conditions?.includes(disease)}
+                            onChange={() => handleActiveConditionToggle(disease)}
+                        />
+                        <label>{disease.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</label>
+                      </div>
+                      <div className={styles.factorInputs}>
+                        <input
+                            type="number"
+                            value={data.factor}
+                            onChange={(e) => handleDiseaseFactorChange(disease, e.target.value)}
                       step="0.1"
                       disabled={!constants.active_conditions?.includes(disease)}
                     />

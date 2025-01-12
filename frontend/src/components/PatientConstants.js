@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useConstants } from '../contexts/ConstantsContext';
-import styles from './PatientConstants.module.css';
+import { ACTIVITY_LEVELS } from '../constants'; // Import from index.js
 import axios from 'axios';
+import styles from './PatientConstants.module.css';
 
 const PatientConstants = () => {
   const { patientConstants, loading, error, refreshConstants } = useConstants();
@@ -9,6 +10,50 @@ const PatientConstants = () => {
   const [scheduleError, setScheduleError] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [tempSchedule, setTempSchedule] = useState(null);
+
+    const renderActivitySection = () => {
+    if (loading) {
+      return (
+        <div className={styles.constantGroup}>
+          <h4>Activity Impact</h4>
+          <div className={styles.loading}>Loading activity impacts...</div>
+        </div>
+      );
+    }
+
+    if (error) {
+      return (
+        <div className={styles.constantGroup}>
+          <h4>Activity Impact</h4>
+          <div className={styles.error}>Error loading activity impacts: {error}</div>
+        </div>
+      );
+    }
+
+    const coefficients = patientConstants.activity_coefficients || {};
+
+    return (
+      <div className={styles.constantGroup}>
+        <h4>Activity Impact</h4>
+        {ACTIVITY_LEVELS.map(level => {
+          const value = coefficients[level.value] || level.impact;
+          return (
+            <div key={level.value} className={styles.activityRow}>
+              <span className={styles.activityLabel}>{level.label}</span>
+              <span className={styles.activityValue}>
+                {value.toFixed(2)}x
+                {level.impact !== value && (
+                  <span className={styles.defaultValue}>
+                    (Default: {level.impact.toFixed(2)}x)
+                  </span>
+                )}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
 
   useEffect(() => {
     console.log('Current user ID:', localStorage.getItem('userId'));
@@ -82,18 +127,7 @@ const PatientConstants = () => {
         </div>
 
         {/* Activity Impact Section */}
-        <div className={styles.constantGroup}>
-          <h4>Activity Impact</h4>
-          {Object.entries(patientConstants.activity_coefficients || {}).map(([level, value]) => (
-            <p key={level}>
-              {level === "-2" ? "Sleep" :
-                level === "-1" ? "Very Low Activity" :
-                  level === "0" ? "Normal Activity" :
-                    level === "1" ? "High Activity" :
-                      "Vigorous Activity"}: {value}
-            </p>
-          ))}
-        </div>
+         {renderActivitySection()}
 
         {/* Absorption Modifiers Section */}
         <div className={styles.constantGroup}>
