@@ -166,20 +166,17 @@ export const calculateInsulinDose = ({
   absorptionType = 'medium'
 }) => {
   if (!patientConstants) {
-    throw new Error('Patient constants are required for insulin calculation');
+    throw new Error('Patient constants are required');
   }
 
-  // Calculate base insulin from carbs
+  // Base insulin calculation
   const carbInsulin = carbs / patientConstants.insulin_to_carb_ratio;
-
-  // Calculate protein and fat contributions
   const proteinContribution = (protein * patientConstants.protein_factor) / patientConstants.insulin_to_carb_ratio;
   const fatContribution = (fat * patientConstants.fat_factor) / patientConstants.insulin_to_carb_ratio;
+  const baseInsulin = carbInsulin + proteinContribution + fatContribution;
 
-  // Get absorption factor based on food type
+  // Calculate adjustment factors
   const absorptionFactor = patientConstants.absorption_modifiers[absorptionType] || 1.0;
-
-  // Apply meal timing factor if available
   const mealTimingFactor = mealType && patientConstants.meal_timing_factors?.[mealType] || 1.0;
 
   // Get time-based factor
@@ -187,27 +184,23 @@ export const calculateInsulinDose = ({
   const timeOfDayFactor = Object.values(patientConstants.time_of_day_factors || {})
     .find(factor => hour >= factor.hours[0] && hour < factor.hours[1])?.factor || 1.0;
 
-  // Calculate health factors impact
-  const healthMultiplier = calculateHealthFactors(patientConstants);
-
-  // Calculate base insulin with all factors
-  const baseInsulin = (carbInsulin + proteinContribution + fatContribution) *
-    absorptionFactor * mealTimingFactor * timeOfDayFactor * healthMultiplier;
-
-  // Calculate activity impact and apply to base insulin
+  // Calculate activity impact
   const activityImpact = calculateActivityImpact(activities, patientConstants);
-  const activityAdjustedInsulin = baseInsulin * (1 + activityImpact);
+
+  // Calculate timing adjusted insulin
+  const adjustedInsulin = baseInsulin * absorptionFactor * mealTimingFactor * timeOfDayFactor * (1 + activityImpact);
 
   // Calculate correction insulin if needed
   let correctionInsulin = 0;
   if (bloodSugar && patientConstants.target_glucose && patientConstants.correction_factor) {
-    const glucoseDifference = bloodSugar - patientConstants.target_glucose;
-    // Apply health multiplier to correction insulin as well
-    correctionInsulin = (glucoseDifference / patientConstants.correction_factor) * healthMultiplier;
+    correctionInsulin = (bloodSugar - patientConstants.target_glucose) / patientConstants.correction_factor;
   }
 
-  // Calculate total insulin (ensuring it never goes below 0)
-  const totalInsulin = Math.max(0, activityAdjustedInsulin + correctionInsulin);
+  // Get combined health factor (diseases and medications)
+  const healthMultiplier = calculateHealthFactors(patientConstants);
+
+  // Calculate final insulin dose
+  const totalInsulin = Math.max(0, (adjustedInsulin + correctionInsulin) * healthMultiplier);
 
   return {
     total: Math.round(totalInsulin * 10) / 10,
@@ -215,12 +208,14 @@ export const calculateInsulinDose = ({
       carbInsulin: Math.round(carbInsulin * 100) / 100,
       proteinContribution: Math.round(proteinContribution * 100) / 100,
       fatContribution: Math.round(fatContribution * 100) / 100,
+      baseInsulin: Math.round(baseInsulin * 100) / 100,
+      adjustedInsulin: Math.round(adjustedInsulin * 100) / 100,
       correctionInsulin: Math.round(correctionInsulin * 100) / 100,
-      activityImpact: Math.round(activityImpact * 100) / 100,
       healthMultiplier: Math.round(healthMultiplier * 100) / 100,
       absorptionFactor,
       mealTimingFactor,
-      timeOfDayFactor
+      timeOfDayFactor,
+      activityImpact: Math.round(activityImpact * 100) / 100
     }
   };
 };
@@ -237,3 +232,142 @@ export const calculateActivityImpact = (activities, patientConstants) => {
     return total + (coefficient * durationFactor);
   }, 0);
 };
+
+export const calculateHealthFactorsDetails = (patientConstants) => {
+  if (!patientConstants) return null;
+
+  const currentDate = new Date();
+  const result = {
+    healthMultiplier: 1.0,
+    conditions: [],
+    medications: [],
+    summary: ''
+  };
+
+  // Calculate conditions impact
+  if (patientConstants.active_conditions?.length > 0) {
+    patientConstants.active_conditions.forEach(condition => {
+      const conditionData = patientConstants.disease_factors[condition];
+      if (conditionData && conditionData.factor) {
+        result.conditions.push({
+          name: condition,
+          factor: conditionData.factor,
+          percentage: ((conditionData.factor - 1) * 100).toFixed(1)
+        });
+      }
+    });
+  }
+
+  // Calculate medications impact
+  if (patientConstants.active_medications?.length > 0) {
+    patientConstants.active_medications.forEach(medication => {
+      const medData = patientConstants.medication_factors[medication];
+      const schedule = patientConstants.medication_schedules?.[medication];
+
+      if (medData) {
+        let medicationEffect = null;
+
+        if (medData.duration_based && schedule) {
+          medicationEffect = calculateDurationBasedMedication(medData, schedule, currentDate);
+        } else {
+          medicationEffect = {
+            status: 'Constant effect',
+            factor: medData.factor
+          };
+        }
+
+        if (medicationEffect) {
+          result.medications.push({
+            name: medication,
+            ...medicationEffect
+          });
+        }
+      }
+    });
+  }
+
+  // Calculate combined health multiplier
+  result.healthMultiplier = calculateHealthFactors(patientConstants);
+
+  // Format summary
+  const percentageChange = ((result.healthMultiplier - 1) * 100).toFixed(1);
+  result.summary = `${percentageChange}%${
+    result.healthMultiplier > 1 
+      ? ` (+${percentageChange}% increase)` 
+      : ` (${percentageChange}% decrease)`
+  }`;
+
+  return result;
+};
+
+// Helper function for duration-based medications
+function calculateDurationBasedMedication(medData, schedule, currentDate) {
+  const startDate = new Date(schedule.startDate);
+  const endDate = new Date(schedule.endDate);
+
+  if (currentDate < startDate) {
+    return {
+      status: 'Scheduled to start',
+      startDate: startDate.toLocaleDateString(),
+      factor: 1.0
+    };
+  }
+
+  if (currentDate > endDate) {
+    return {
+      status: 'Schedule ended',
+      endDate: endDate.toLocaleDateString(),
+      factor: 1.0
+    };
+  }
+
+  const lastDoseTime = schedule.dailyTimes
+    .map(time => {
+      const [hours, minutes] = time.split(':');
+      const doseTime = new Date(currentDate);
+      doseTime.setHours(hours, minutes, 0, 0);
+      if (doseTime > currentDate) {
+        doseTime.setDate(doseTime.getDate() - 1);
+      }
+      return doseTime;
+    })
+    .sort((a, b) => b - a)[0];
+
+  const hoursSinceLastDose = (currentDate - lastDoseTime) / (1000 * 60 * 60);
+
+  if (hoursSinceLastDose < medData.onset_hours) {
+    return {
+      status: 'Ramping up',
+      factor: 1.0 + ((medData.factor - 1.0) * (hoursSinceLastDose / medData.onset_hours)),
+      lastDose: lastDoseTime.toLocaleString(),
+      hoursSinceLastDose: Math.round(hoursSinceLastDose * 10) / 10
+    };
+  }
+
+  if (hoursSinceLastDose < medData.peak_hours) {
+    return {
+      status: 'Peak effect',
+      factor: medData.factor,
+      lastDose: lastDoseTime.toLocaleString(),
+      hoursSinceLastDose: Math.round(hoursSinceLastDose * 10) / 10
+    };
+  }
+
+  if (hoursSinceLastDose < medData.duration_hours) {
+    const remainingEffect = (medData.duration_hours - hoursSinceLastDose) /
+                          (medData.duration_hours - medData.peak_hours);
+    return {
+      status: 'Tapering',
+      factor: 1.0 + ((medData.factor - 1.0) * remainingEffect),
+      lastDose: lastDoseTime.toLocaleString(),
+      hoursSinceLastDose: Math.round(hoursSinceLastDose * 10) / 10
+    };
+  }
+
+  return {
+    status: 'No current effect',
+    factor: 1.0,
+    lastDose: lastDoseTime.toLocaleString(),
+    hoursSinceLastDose: Math.round(hoursSinceLastDose * 10) / 10
+  };
+}
