@@ -93,6 +93,43 @@ class ConstantConfig:
 
     # New medication factors
     medication_factors: Dict[str, Dict[str, Any]] = field(default_factory=lambda: {
+        'insulin_glargine': {
+            'factor': 1.0,
+            'description': 'Long-acting insulin with 24-hour coverage',
+            'duration_based': True,
+            'onset_hours': 2,
+            'peak_hours': 4,
+            'duration_hours': 24,
+            'type': 'long_acting_insulin'
+        },
+        'insulin_detemir': {
+            'factor': 1.0,
+            'description': 'Long-acting insulin lasting 18-24 hours',
+            'duration_based': True,
+            'onset_hours': 1,
+            'peak_hours': 6,
+            'duration_hours': 24,
+            'type': 'long_acting_insulin'
+        },
+        'insulin_degludec': {
+            'factor': 1.0,
+            'description': 'Ultra-long-acting insulin lasting up to 42 hours',
+            'duration_based': True,
+            'onset_hours': 1,
+            'peak_hours': 12,
+            'duration_hours': 42,
+            'type': 'long_acting_insulin'
+        },
+        'nph_insulin': {
+            'factor': 1.0,
+            'description': 'Intermediate-acting insulin with pronounced peak',
+            'duration_based': True,
+            'onset_hours': 1,
+            'peak_hours': 4,
+            'duration_hours': 16,
+            'type': 'long_acting_insulin'
+        },
+        # Existing medications remain the same
         'oral_contraceptives': {
             'factor': 1.2,  # 20% increase in insulin resistance
             'description': 'Oral contraceptives may increase insulin resistance',
@@ -312,6 +349,42 @@ class Constants:
             }
         },
         'medication_factors': {
+            'insulin_glargine': {
+                'factor': 1.0,
+                'description': 'Long-acting insulin with 24-hour coverage',
+                'duration_based': True,
+                'onset_hours': 2,
+                'peak_hours': 4,
+                'duration_hours': 24,
+                'type': 'long_acting_insulin'
+            },
+            'insulin_detemir': {
+                'factor': 1.0,
+                'description': 'Long-acting insulin lasting 18-24 hours',
+                'duration_based': True,
+                'onset_hours': 1,
+                'peak_hours': 6,
+                'duration_hours': 24,
+                'type': 'long_acting_insulin'
+            },
+            'insulin_degludec': {
+                'factor': 1.0,
+                'description': 'Ultra-long-acting insulin lasting up to 42 hours',
+                'duration_based': True,
+                'onset_hours': 1,
+                'peak_hours': 12,
+                'duration_hours': 42,
+                'type': 'long_acting_insulin'
+            },
+            'nph_insulin': {
+                'factor': 1.0,
+                'description': 'Intermediate-acting insulin with pronounced peak',
+                'duration_based': True,
+                'onset_hours': 1,
+                'peak_hours': 4,
+                'duration_hours': 16,
+                'type': 'long_acting_insulin'
+            },
             'oral_contraceptives': {
                 'factor': 1.2,
                 'description': 'Oral contraceptives may increase insulin resistance',

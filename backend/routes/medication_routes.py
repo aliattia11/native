@@ -79,7 +79,6 @@ def get_medication_schedule(current_user, patient_id, medication):
 @api_error_handler
 def create_or_update_schedule(current_user, patient_id):
     try:
-        # Log incoming request
         logger.info(f"Received schedule update request for patient {patient_id}")
         logger.debug(f"Request data: {request.json}")
 
@@ -88,13 +87,14 @@ def create_or_update_schedule(current_user, patient_id):
             logger.error("No data provided in request")
             return jsonify({'message': 'No data provided'}), 400
 
-        # Validate user permissions
+        # Modified permission check to allow both doctors and the patient themselves
         if current_user.get('user_type') != 'doctor' and str(current_user['_id']) != patient_id:
             logger.error(f"Unauthorized access attempt by user {current_user['_id']}")
             return jsonify({'message': 'Unauthorized access'}), 403
 
         medication = data.get('medication')
         schedule_data = data.get('schedule')
+
 
         # Validate required fields
         if not all([medication, schedule_data, schedule_data.get('startDate'),

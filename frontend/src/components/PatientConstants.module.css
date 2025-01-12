@@ -83,3 +83,298 @@
   color: #666;
   font-size: 0.9em;
 }
+/* Add to frontend/src/components/PatientConstants.module.css */
+
+.medicationSchedule {
+  margin: 20px 0;
+  padding: 15px;
+  border: 1px solid #e1e4e8;
+  border-radius: 6px;
+  background-color: #f6f8fa;
+}
+
+.scheduleEditor {
+  margin-top: 15px;
+}
+
+.dateInputs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px;
+  margin-bottom: 15px;
+}
+
+.inputGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.inputGroup label {
+  font-size: 14px;
+  color: #57606a;
+}
+
+.inputGroup input {
+  padding: 6px 12px;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+}
+
+.timeInputs {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.timeInput {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.timeInput input {
+  padding: 6px 12px;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+}
+
+.addTimeButton,
+.removeTimeButton,
+.editButton,
+.cancelButton {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid #d0d7de;
+  cursor: pointer;
+}
+
+.addTimeButton {
+  background-color: #f6f8fa;
+  color: #24292e;
+  align-self: flex-start;
+}
+
+.removeTimeButton {
+  background-color: #fff;
+  color: #cf222e;
+}
+
+.editButton {
+  background-color: #0969da;
+  color: white;
+  border: none;
+  margin-top: 10px;
+}
+
+.cancelButton {
+  background-color: #f6f8fa;
+  color: #24292e;
+  margin-top: 10px;
+}
+
+.error {
+  color: #cf222e;
+  margin: 10px 0;
+  padding: 10px;
+  background-color: #ffebe9;
+  border-radius: 6px;
+}
+
+.medicationInfo {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #d0d7de;
+  font-size: 14px;
+  color: #57606a;
+}
+
+.scheduleView {
+  margin-top: 10px;
+}
+
+.scheduleView p {
+  margin: 5px 0;
+}
+.constantsContainer {
+  padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.constantsGrid {
+  display: grid;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.constantGroup {
+  background-color: #f6f8fa;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  padding: 15px;
+}
+
+.medicationSchedule {
+  margin: 20px 0;
+  padding: 15px;
+  border: 1px solid #e1e4e8;
+  border-radius: 6px;
+  background-color: #ffffff;
+}
+
+.scheduleEditor {
+  margin-top: 15px;
+}
+
+.dateInputs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px;
+  margin-bottom: 15px;
+}
+
+.inputGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.inputGroup label {
+  font-size: 14px;
+  color: #57606a;
+}
+
+.inputGroup input {
+  padding: 6px 12px;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+}
+
+.timeInputs {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.timeInput {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.timeInput input {
+  padding: 6px 12px;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+}
+
+.buttonGroup {
+  display: flex;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.addTimeButton,
+.removeTimeButton,
+.editButton,
+.saveButton,
+.cancelButton {
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.addTimeButton {
+  background-color: #f6f8fa;
+  color: #24292e;
+  border: 1px solid #d0d7de;
+  align-self: flex-start;
+}
+
+.removeTimeButton {
+  background-color: #fff;
+  color: #cf222e;
+  border: 1px solid #d0d7de;
+}
+
+.editButton {
+  background-color: #0969da;
+  color: white;
+  border: none;
+  margin-top: 10px;
+}
+
+.saveButton {
+  background-color: #2da44e;
+  color: white;
+  border: none;
+}
+
+.saveButton:disabled {
+  background-color: #94d3a2;
+  cursor: not-allowed;
+}
+
+.cancelButton {
+  background-color: #f6f8fa;
+  color: #24292e;
+  border: 1px solid #d0d7de;
+}
+
+.cancelButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.error {
+  color: #cf222e;
+  margin: 10px 0;
+  padding: 10px;
+  background-color: #ffebe9;
+  border-radius: 6px;
+}
+
+.medicationInfo {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #d0d7de;
+  font-size: 14px;
+  color: #57606a;
+}
+
+.scheduleView {
+  margin-top: 10px;
+}
+
+.scheduleView p {
+  margin: 5px 0;
+}
+
+.refreshButton {
+  background-color: #f6f8fa;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #24292e;
+}
+
+.refreshButton:hover {
+  background-color: #f3f4f6;
+}
+
+.description {
+  color: #57606a;
+  font-size: 14px;
+}
+
+.durationInfo {
+  color: #57606a;
+  font-size: 14px;
+  margin-top: 5px;
+}
