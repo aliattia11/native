@@ -1,6 +1,5 @@
 // EnhancedPatientConstantsCalc.js
 import {
-  DEFAULT_PATIENT_CONSTANTS,
   MEASUREMENT_SYSTEMS,
   VOLUME_MEASUREMENTS,
   WEIGHT_MEASUREMENTS,
@@ -154,6 +153,24 @@ export const calculateTotalNutrients = (selectedFoods) => {
   }, { carbs: 0, protein: 0, fat: 0, absorptionType: 'medium' });
 };
 
+export const get_time_of_day_factor = (patientConstants) => {
+  if (!patientConstants?.time_of_day_factors) {
+    return 1.0;
+  }
+
+  const hour = new Date().getHours();
+
+  // Check each time period
+  for (const [periodName, periodData] of Object.entries(patientConstants.time_of_day_factors)) {
+    const [startHour, endHour] = periodData.hours;
+    if (hour >= startHour && hour < endHour) {
+      return periodData.factor;
+    }
+  }
+
+  // Default to daytime factor if no period matches
+  return patientConstants.time_of_day_factors.daytime?.factor || 1.0;
+};
 // Updated insulin calculation function with health factors
 export const calculateInsulinDose = ({
   carbs,
@@ -178,11 +195,7 @@ export const calculateInsulinDose = ({
   // Calculate adjustment factors
   const absorptionFactor = patientConstants.absorption_modifiers[absorptionType] || 1.0;
   const mealTimingFactor = mealType && patientConstants.meal_timing_factors?.[mealType] || 1.0;
-
-  // Get time-based factor
-  const hour = new Date().getHours();
-  const timeOfDayFactor = Object.values(patientConstants.time_of_day_factors || {})
-    .find(factor => hour >= factor.hours[0] && hour < factor.hours[1])?.factor || 1.0;
+  const timeOfDayFactor = get_time_of_day_factor(patientConstants);
 
   // Calculate activity impact
   const activityImpact = calculateActivityImpact(activities, patientConstants);
@@ -196,7 +209,7 @@ export const calculateInsulinDose = ({
     correctionInsulin = (bloodSugar - patientConstants.target_glucose) / patientConstants.correction_factor;
   }
 
-  // Get combined health factor (diseases and medications)
+  // Get health factors
   const healthMultiplier = calculateHealthFactors(patientConstants);
 
   // Calculate final insulin dose
@@ -299,6 +312,7 @@ export const calculateHealthFactorsDetails = (patientConstants) => {
 
   return result;
 };
+
 
 // Helper function for duration-based medications
 function calculateDurationBasedMedication(medData, schedule, currentDate) {

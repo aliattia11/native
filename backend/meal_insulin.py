@@ -115,6 +115,25 @@ def calculate_health_factors(user_id):
         return 1.0  # Default multiplier in case of error
 
 
+def get_time_of_day_factor(time=None):
+    """Get time of day factor based on current hour"""
+    if time is None:
+        time = datetime.now()
+
+    hour = time.hour
+
+    # Get time of day factors from Constants
+    time_of_day_factors = current_app.constants.get_constant('time_of_day_factors')
+
+    # Find matching time period
+    for period, data in time_of_day_factors.items():
+        start_hour, end_hour = data['hours']
+        if start_hour <= hour < end_hour:
+            return data['factor']
+
+    # Default to daytime factor if no period matches
+    return time_of_day_factors['daytime']['factor']
+
 def calculate_activity_impact(activities):
     """
     Calculate the total activity impact coefficient using multiplicative factors.
