@@ -4,8 +4,12 @@ import axios from 'axios';
 import { FaPlus, FaMinus } from 'react-icons/fa';
 import DurationInput from './DurationInput';
 import FoodSection from './FoodSection';
-import { calculateTotalNutrients, calculateInsulinDose } from './EnhancedPatientConstantsCalc';
-import { MEAL_TYPES, ACTIVITY_LEVELS, SHARED_CONSTANTS } from '../constants';
+import {
+  calculateTotalNutrients,
+  calculateInsulinDose,
+  getHealthFactorsBreakdown  // Add this import
+} from './EnhancedPatientConstantsCalc';
+import { MEAL_TYPES, ACTIVITY_LEVELS } from '../constants'; // Remove SHARED_CONSTANTS since it's unused
 import styles from './MealInput.module.css';
 
 // Update ActivityItem to use ACTIVITY_LEVELS from shared constants
@@ -48,22 +52,8 @@ const MealInput = () => {
   const [notes, setNotes] = useState('');
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [healthFactors, setHealthFactors] = useState(null);
 
-  // Refresh constants on mount and setup listener
-  useEffect(() => {
-    refreshConstants();
-
-    const handleConstantsUpdate = () => {
-      refreshConstants();
-    };
-
-    window.addEventListener('patientConstantsUpdated', handleConstantsUpdate);
-    return () => {
-      window.removeEventListener('patientConstantsUpdated', handleConstantsUpdate);
-    };
-  }, [refreshConstants]);
-
-  // Calculate insulin needs whenever relevant inputs change
   const calculateInsulinNeeds = useCallback(() => {
   if (selectedFoods.length === 0 || !patientConstants) {
     setSuggestedInsulin('');
@@ -89,12 +79,40 @@ const MealInput = () => {
     setMessage('Error calculating insulin needs: ' + error.message);
   }
 }, [selectedFoods, bloodSugar, activities, patientConstants, mealType]);
+// Update the useEffect that calculates insulin needs to include health factors calculation:
+useEffect(() => {
+  if (!loading && patientConstants && (selectedFoods.length > 0 || bloodSugar)) {
+    // Calculate health factors
+    const healthFactorsData = getHealthFactorsBreakdown(patientConstants);
+    setHealthFactors(healthFactorsData);
+
+    // Calculate insulin needs
+    calculateInsulinNeeds();
+  }
+}, [selectedFoods, activities, bloodSugar, mealType, patientConstants, loading, calculateInsulinNeeds]);
+  // Refresh constants on mount and setup listener
+  useEffect(() => {
+    refreshConstants();
+
+    const handleConstantsUpdate = () => {
+      refreshConstants();
+    };
+
+    window.addEventListener('patientConstantsUpdated', handleConstantsUpdate);
+    return () => {
+      window.removeEventListener('patientConstantsUpdated', handleConstantsUpdate);
+    };
+  }, [refreshConstants]);
+
+  // Calculate insulin needs whenever relevant inputs change
+
 
   useEffect(() => {
     if (!loading && patientConstants && (selectedFoods.length > 0 || bloodSugar)) {
       calculateInsulinNeeds();
     }
   }, [selectedFoods, activities, bloodSugar, mealType, patientConstants, loading, calculateInsulinNeeds]);
+
 
   // Food handling functions
   const handleFoodSelect = useCallback((food) => {
@@ -442,154 +460,75 @@ const handleSubmit = async (e) => {
         </li>
       )}
 
-      {/* Health Factors Section */}
-      {insulinBreakdown.healthMultiplier !== 1 && (
-        <>
-          <li className={styles.breakdownSection}>
-            <strong>Health Factors:</strong>
-          </li>
-          {patientConstants.active_conditions?.length > 0 && (
-            <li>
-              <strong>Active Conditions:</strong>
-              <ul>
-                {patientConstants.active_conditions.map(condition => {
-                  const conditionData = patientConstants.disease_factors[condition];
-                  return (
-                    <li key={condition}>
-                      • {condition.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}:
-                      {((conditionData.factor - 1) * 100).toFixed(1)}%
-                      {conditionData.factor > 1
-                        ? ` (+${((conditionData.factor - 1) * 100).toFixed(1)}% increase)`
-                        : ` (${((conditionData.factor - 1) * 100).toFixed(1)}% decrease)`}
-                    </li>
-                  );
-                })}
-              </ul>
+   {insulinBreakdown.healthMultiplier !== 1 && (
+  <>
+    <li className={styles.breakdownSection}>
+      <strong>Health Factors:</strong>
+    </li>
+    {healthFactors?.conditions.length > 0 && (
+      <li>
+        <strong>Active Conditions:</strong>
+        <ul>
+          {healthFactors.conditions.map(condition => (
+            <li key={condition.name}>
+              • {condition.name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}:
+              {condition.percentage}%
+              {condition.factor > 1
+                ? ` (+${condition.percentage}% increase)`
+                : ` (${condition.percentage}% decrease)`}
             </li>
-          )}
-     {patientConstants.active_medications?.length > 0 && (
-  <div className={styles.medicationTimingInfo}>
-    <h4>Medication Effects:</h4>
-    {patientConstants.active_medications.map(medication => {
-      const medData = patientConstants.medication_factors[medication];
-      const schedule = patientConstants.medication_schedules?.[medication];
-      const currentDate = new Date();
+          ))}
+        </ul>
+      </li>
+    )}
 
-      let medicationEffect = null;
-
-      if (medData) {
-        if (medData.duration_based && schedule) {
-          const startDate = new Date(schedule.startDate);
-          const endDate = new Date(schedule.endDate);
-
-          if (currentDate < startDate) {
-            medicationEffect = {
-              status: 'Scheduled to start',
-              startDate: startDate.toLocaleDateString(),
-              factor: 1.0
-            };
-          } else if (currentDate > endDate) {
-            medicationEffect = {
-              status: 'Schedule ended',
-              endDate: endDate.toLocaleDateString(),
-              factor: 1.0
-            };
-          } else {
-            // Calculate time since last dose
-            const lastDoseTime = schedule.dailyTimes
-              .map(time => {
-                const [hours, minutes] = time.split(':');
-                const doseTime = new Date(currentDate);
-                doseTime.setHours(hours, minutes, 0, 0);
-                if (doseTime > currentDate) {
-                  doseTime.setDate(doseTime.getDate() - 1);
-                }
-                return doseTime;
-              })
-              .sort((a, b) => b - a)[0];
-
-            const hoursSinceLastDose = (currentDate - lastDoseTime) / (1000 * 60 * 60);
-
-            let phase, factor;
-            if (hoursSinceLastDose < medData.onset_hours) {
-              phase = 'Ramping up';
-              factor = 1.0 + ((medData.factor - 1.0) * (hoursSinceLastDose / medData.onset_hours));
-            } else if (hoursSinceLastDose < medData.peak_hours) {
-              phase = 'Peak effect';
-              factor = medData.factor;
-            } else if (hoursSinceLastDose < medData.duration_hours) {
-              phase = 'Tapering';
-              const remainingEffect = (medData.duration_hours - hoursSinceLastDose) /
-                                   (medData.duration_hours - medData.peak_hours);
-              factor = 1.0 + ((medData.factor - 1.0) * remainingEffect);
-            } else {
-              phase = 'No current effect';
-              factor = 1.0;
-            }
-
-            medicationEffect = {
-              status: phase,
-              lastDose: lastDoseTime.toLocaleString(),
-              factor: factor,
-              hoursSinceLastDose: Math.round(hoursSinceLastDose * 10) / 10
-            };
-          }
-        } else {
-          // Non-duration based medications
-          medicationEffect = {
-            status: 'Constant effect',
-            factor: medData.factor
-          };
-        }
-
-        return (
-          <div key={medication} className={styles.medicationEffect}>
-            <h5>{medication.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</h5>
+    {healthFactors?.medications.length > 0 && (
+      <div className={styles.medicationTimingInfo}>
+        <h4>Medication Effects:</h4>
+        {healthFactors.medications.map(med => (
+          <div key={med.name} className={styles.medicationEffect}>
+            <h5>{med.name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</h5>
             <div className={styles.effectDetails}>
-              {medicationEffect.status === 'Scheduled to start' && (
+              {med.status === 'Scheduled to start' && (
                 <>
-                  <p>Status: Scheduled to start on {medicationEffect.startDate}</p>
+                  <p>Status: Scheduled to start on {med.startDate}</p>
                   <p>Current Effect: None</p>
                 </>
               )}
-              {medicationEffect.status === 'Schedule ended' && (
+              {med.status === 'Schedule ended' && (
                 <>
-                  <p>Status: Schedule ended on {medicationEffect.endDate}</p>
+                  <p>Status: Schedule ended on {med.endDate}</p>
                   <p>Current Effect: None</p>
                 </>
               )}
-              {['Ramping up', 'Peak effect', 'Tapering', 'No current effect'].includes(medicationEffect.status) && (
+              {['Ramping up', 'Peak effect', 'Tapering', 'No current effect'].includes(med.status) && (
                 <>
-                  <p>Last dose: {medicationEffect.lastDose}</p>
-                  <p>Hours since last dose: {medicationEffect.hoursSinceLastDose}h</p>
-                  <p>Current phase: {medicationEffect.status}</p>
-                  <p>Current effect strength: {((medicationEffect.factor - 1) * 100).toFixed(1)}%
-                     {medicationEffect.factor > 1 ? ' increase' : ' decrease'}</p>
+                  <p>Last dose: {med.lastDose}</p>
+                  <p>Hours since last dose: {med.hoursSinceLastDose}h</p>
+                  <p>Current phase: {med.status}</p>
+                  <p>Current effect strength: {((med.factor - 1) * 100).toFixed(1)}%
+                     {med.factor > 1 ? ' increase' : ' decrease'}</p>
                 </>
               )}
-              {medicationEffect.status === 'Constant effect' && (
-                <p>Effect: {((medicationEffect.factor - 1) * 100).toFixed(1)}%
-                   {medicationEffect.factor > 1 ? ' increase' : ' decrease'} in insulin resistance</p>
+              {med.status === 'Constant effect' && (
+                <p>Effect: {((med.factor - 1) * 100).toFixed(1)}%
+                   {med.factor > 1 ? ' increase' : ' decrease'} in insulin resistance</p>
               )}
             </div>
           </div>
-        );
-      }
-      return null;
-    })}
-  </div>
+        ))}
+      </div>
+    )}
+
+    <li className={styles.summaryLine}>
+      <strong>Combined Health Factor: {((healthFactors.healthMultiplier - 1) * 100).toFixed(1)}%
+        {healthFactors.healthMultiplier > 1
+          ? ` (+${((healthFactors.healthMultiplier - 1) * 100).toFixed(1)}% increase)`
+          : ` (${((healthFactors.healthMultiplier - 1) * 100).toFixed(1)}% decrease)`}
+      </strong>
+    </li>
+  </>
 )}
-
-          <li className={styles.summaryLine}>
-            <strong>Combined Health Factor: {((insulinBreakdown.healthMultiplier - 1) * 100).toFixed(1)}%
-              {insulinBreakdown.healthMultiplier > 1
-                ? ` (+${((insulinBreakdown.healthMultiplier - 1) * 100).toFixed(1)}% increase)`
-                : ` (${((insulinBreakdown.healthMultiplier - 1) * 100).toFixed(1)}% decrease)`}
-            </strong>
-          </li>
-        </>
-      )}
-
 
       {/* Final Calculation */}
       <li className={styles.breakdownSection}>

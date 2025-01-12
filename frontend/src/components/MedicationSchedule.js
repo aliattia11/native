@@ -1,5 +1,5 @@
 // frontend/src/components/MedicationSchedule.js
-
+import { validateMedicationSchedule } from './EnhancedPatientConstantsCalc';
 import React, { useState, useEffect } from 'react';
 import { useConstants } from '../contexts/ConstantsContext';
 import styles from './MedicationSchedule.module.css';
@@ -99,38 +99,9 @@ const loadInitialSchedule = async () => {
     loadInitialSchedule();
   }, [medication, medicationSchedules, patientId]);
 
-  const validateSchedule = () => {
-    const errors = [];
-    const startDateObj = new Date(schedule.startDate);
-    const endDateObj = new Date(schedule.endDate);
-    const currentDate = new Date();
-    currentDate.setHours(0, 0, 0, 0);
-
-    // Validate dates
-    if (!schedule.startDate || !schedule.endDate) {
-      errors.push('Start and end dates are required');
-    } else {
-      if (startDateObj < currentDate) {
-        errors.push('Start date cannot be in the past');
-      }
-      if (endDateObj <= startDateObj) {
-        errors.push('End date must be after start date');
-      }
-    }
-
-    // Validate times
-    if (schedule.dailyTimes.some(time => !time)) {
-      errors.push('All time slots must be filled');
-    }
-
-    // Check for duplicate times
-    const uniqueTimes = new Set(schedule.dailyTimes);
-    if (uniqueTimes.size !== schedule.dailyTimes.length) {
-      errors.push('Duplicate times are not allowed');
-    }
-
-    return errors;
-  };
+ const validateSchedule = () => {
+  return validateMedicationSchedule(schedule);
+};
 
   const handleAddTime = () => {
     setSchedule(prev => ({
