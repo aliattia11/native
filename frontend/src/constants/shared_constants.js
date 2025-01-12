@@ -79,11 +79,11 @@
     "protein_factor": 0.5,
     "fat_factor": 0.2,
     "activity_coefficients": {
-      "-2": 0.2,
-      "-1": 0.1,
-      "0": 0,
-      "1": -0.1,
-      "2": -0.2
+      "-2": 1.2,
+      "-1": 1.1,
+      "0": 1.0,
+      "1": 0.9,
+      "2": 0.8
     },
     "absorption_modifiers": {
       "very_slow": 0.6,
@@ -233,28 +233,28 @@
   "ACTIVITY_LEVELS": [
     {
       "value": -2,
-      "label": "Sleep",
-      "impact": -0.2
+      "label": "mode 1",
+      "impact": 1.2
     },
     {
       "value": -1,
-      "label": "Very Low Activity",
-      "impact": -0.1
+      "label": "mode 2",
+      "impact": 1.1
     },
     {
       "value": 0,
       "label": "Normal Activity",
-      "impact": 0
+      "impact": 1.0
     },
     {
       "value": 1,
       "label": "High Activity",
-      "impact": 0.1
+      "impact": 0.9
     },
     {
       "value": 2,
       "label": "Vigorous Activity",
-      "impact": 0.2
+      "impact": 0.8
     }
   ],
   "MEAL_TYPES": [

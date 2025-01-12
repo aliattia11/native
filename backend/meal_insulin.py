@@ -114,9 +114,21 @@ def calculate_health_factors(user_id):
         logger.error(f"Error calculating health factors: {str(e)}")
         return 1.0  # Default multiplier in case of error
 
+
 def calculate_activity_impact(activities):
-    """Calculate the total activity impact coefficient"""
-    total_coefficient = 0
+    """
+    Calculate the total activity impact coefficient using multiplicative factors.
+
+    Returns:
+    - float: Activity multiplier where:
+        1.0 means no impact
+        <1.0 means reduced insulin needs (e.g., 0.8 = 20% reduction)
+        >1.0 means increased insulin needs (e.g., 1.2 = 20% increase)
+    """
+    if not activities:
+        return 1.0  # No activities means no adjustment
+
+    total_impact = 1.0  # Start with neutral multiplier
 
     for activity in activities:
         level = activity.get('level', 0)
@@ -132,13 +144,20 @@ def calculate_activity_impact(activities):
 
         # Get activity coefficients from constants
         activity_coefficients = current_app.constants.get_constant('activity_coefficients')
-        impact = activity_coefficients.get(str(level), 0)
+        impact_factor = activity_coefficients.get(str(level), 1.0)
 
         # Apply duration factor (capped at 2 hours)
-        duration_factor = min(duration / 2, 1)
-        total_coefficient += impact * duration_factor
+        duration_weight = min(duration / 2, 1)
 
-    return total_coefficient
+        # Calculate weighted impact for this activity
+        # Formula: 1.0 + (impact_factor - 1.0) * duration_weight
+        # This gives a smooth transition from 1.0 to the full impact_factor
+        weighted_impact = 1.0 + ((impact_factor - 1.0) * duration_weight)
+
+        # Multiply into total impact
+        total_impact *= weighted_impact
+
+    return total_impact
 
 
 def get_meal_timing_factor(meal_type, time=None):

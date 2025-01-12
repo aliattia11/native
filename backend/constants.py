@@ -16,11 +16,11 @@ class ConstantConfig:
     protein_factor: float = 0.5
     fat_factor: float = 0.2
     activity_coefficients: Dict[str, float] = field(default_factory=lambda: {
-        "-2": 0.2,   # Sleep
-        "-1": 0.1,   # Very Low Activity
-        "0": 0,      # Normal Activity
-        "1": -0.1,   # High Activity
-        "2": -0.2    # Vigorous Activity
+        "-2": 1.2,  # mode 1 (20% increase in insulin needs)
+        "-1": 1.1,  # mode 2 (10% increase)
+        "0": 1.0,  # Normal Activity (no change)
+        "1": 0.9,  # High Activity (10% decrease)
+        "2": 0.8  # Vigorous Activity (20% decrease)
     })
     absorption_modifiers: Dict[str, float] = field(default_factory=lambda: {
         'very_slow': 0.6,
@@ -198,11 +198,11 @@ class Constants:
     }
 
     ACTIVITY_LEVELS = [
-        {'value': -2, 'label': 'Sleep', 'impact': -0.2},
-        {'value': -1, 'label': 'Very Low Activity', 'impact': -0.1},
-        {'value': 0, 'label': 'Normal Activity', 'impact': 0},
-        {'value': 1, 'label': 'High Activity', 'impact': 0.1},
-        {'value': 2, 'label': 'Vigorous Activity', 'impact': 0.2}
+        {'value': -2, 'label': 'mode 1', 'impact': 1.2},
+        {'value': -1, 'label': 'mode 2', 'impact': 1.1},
+        {'value': 0, 'label': 'Normal Activity', 'impact': 1.0},
+        {'value': 1, 'label': 'High Activity', 'impact': 0.9},
+        {'value': 2, 'label': 'Vigorous Activity', 'impact': 0.8}
     ]
 
     MEAL_TYPES = [
@@ -237,11 +237,11 @@ class Constants:
         'protein_factor': 0.5,
         'fat_factor': 0.2,
         'activity_coefficients': {
-            "-2": 0.2,
-            "-1": 0.1,
-            "0": 0,
-            "1": -0.1,
-            "2": -0.2
+            "-2": 1.2,  # mode 1 (20% increase in insulin needs)
+            "-1": 1.1,  # mode 2 (10% increase)
+            "0": 1.0,  # Normal Activity (no change)
+            "1": 0.9,  # High Activity (10% decrease)
+            "2": 0.8  # Vigorous Activity (20% decrease)
         },
         'absorption_modifiers': {
             'very_slow': 0.6,
