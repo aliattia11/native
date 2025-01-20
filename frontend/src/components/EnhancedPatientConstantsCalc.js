@@ -247,16 +247,33 @@ export const calculateHealthFactors = (patientConstants) => {
 };
 
 export const calculateActivityImpact = (activities, patientConstants) => {
-  if (!activities || !patientConstants?.activity_coefficients) return 0;
+  if (!activities || !patientConstants?.activity_coefficients) {
+    return 1.0; // No impact if no activities or coefficients
+  }
 
-  return activities.reduce((total, activity) => {
-    const coefficient = patientConstants.activity_coefficients[activity.level.toString()] || 0;
+  let totalImpact = 1.0;
+
+  activities.forEach(activity => {
+    // Get the base coefficient (defaults to 1.0 for normal activity)
+    const coefficient = patientConstants.activity_coefficients[activity.level.toString()] || 1.0;
+
+    // Calculate duration in hours
     const duration = typeof activity.duration === 'string'
       ? parseFloat(activity.duration.split(':')[0]) + (parseFloat(activity.duration.split(':')[1]) || 0) / 60
       : activity.duration;
-    const durationFactor = Math.min(duration / 2, 1);
-    return total + (coefficient * durationFactor);
-  }, 0);
+
+    // Calculate duration weight (capped at 2 hours)
+    const durationWeight = Math.min(duration / 2, 1);
+
+    // Calculate weighted impact
+    // For normal activity (coefficient = 1.0), this will result in no change
+    const weightedImpact = 1.0 + ((coefficient - 1.0) * durationWeight);
+
+    // Multiply into total impact
+    totalImpact *= weightedImpact;
+  });
+
+  return totalImpact;
 };
 
 export const validateMedicationSchedule = (schedule) => {
@@ -381,7 +398,7 @@ export const calculateInsulinDose = ({
   const activityImpact = calculateActivityImpact(activities, patientConstants);
 
   // Calculate timing adjusted insulin
-  const adjustedInsulin = baseInsulin * absorptionFactor * mealTimingFactor * timeOfDayFactor * (1 + activityImpact);
+  const adjustedInsulin = baseInsulin * absorptionFactor * mealTimingFactor * timeOfDayFactor * activityImpact;
 
   // Calculate correction insulin if needed
   let correctionInsulin = 0;

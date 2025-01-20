@@ -134,20 +134,13 @@ def get_time_of_day_factor(time=None):
     # Default to daytime factor if no period matches
     return time_of_day_factors['daytime']['factor']
 
-def calculate_activity_impact(activities):
-    """
-    Calculate the total activity impact coefficient using multiplicative factors.
 
-    Returns:
-    - float: Activity multiplier where:
-        1.0 means no impact
-        <1.0 means reduced insulin needs (e.g., 0.8 = 20% reduction)
-        >1.0 means increased insulin needs (e.g., 1.2 = 20% increase)
-    """
+def calculate_activity_impact(activities):
+    """Calculate the total activity impact coefficient."""
     if not activities:
         return 1.0  # No activities means no adjustment
 
-    total_impact = 1.0  # Start with neutral multiplier
+    total_impact = 1.0
 
     for activity in activities:
         level = activity.get('level', 0)
@@ -161,17 +154,16 @@ def calculate_activity_impact(activities):
             except:
                 duration = 0
 
-        # Get activity coefficients from constants
+        # Get activity coefficient (default to 1.0 for normal activity)
         activity_coefficients = current_app.constants.get_constant('activity_coefficients')
-        impact_factor = activity_coefficients.get(str(level), 1.0)
+        coefficient = activity_coefficients.get(str(level), 1.0)
 
-        # Apply duration factor (capped at 2 hours)
+        # Calculate duration weight (capped at 2 hours)
         duration_weight = min(duration / 2, 1)
 
         # Calculate weighted impact for this activity
-        # Formula: 1.0 + (impact_factor - 1.0) * duration_weight
-        # This gives a smooth transition from 1.0 to the full impact_factor
-        weighted_impact = 1.0 + ((impact_factor - 1.0) * duration_weight)
+        # For normal activity (coefficient = 1.0), this will result in no change
+        weighted_impact = 1.0 + ((coefficient - 1.0) * duration_weight)
 
         # Multiply into total impact
         total_impact *= weighted_impact

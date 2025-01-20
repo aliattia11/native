@@ -48,7 +48,7 @@ const MealInput = () => {
   const [intendedInsulin, setIntendedInsulin] = useState('');
   const [suggestedInsulin, setSuggestedInsulin] = useState('');
   const [insulinBreakdown, setInsulinBreakdown] = useState(null);
-  const [activityImpact, setActivityImpact] = useState(0);
+const [activityImpact, setActivityImpact] = useState(1.0); // Change initial state to 1.0 instead of 0
   const [notes, setNotes] = useState('');
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -335,12 +335,18 @@ const handleSubmit = async (e) => {
           >
             <FaPlus /> Add Activity
           </button>
-          {activityImpact !== 0 && (
-            <div className={styles.activityImpact}>
-              <p>Activity Impact: {(activityImpact * 100).toFixed(1)}% adjustment to insulin needs</p>
-            </div>
-          )}
-        </div>
+{activityImpact !== 1.0 && (  // Changed from !== 0 to !== 1.0
+  <div className={styles.activityImpact}>
+    <p>Activity Impact: {((activityImpact - 1) * 100).toFixed(1)}%
+      {activityImpact > 1
+        ? ` (+${((activityImpact - 1) * 100).toFixed(1)}% increase)`
+        : activityImpact < 1
+        ? ` (${((activityImpact - 1) * 100).toFixed(1)}% decrease)`
+        : ' (no adjustment)'}
+    </p>
+  </div>
+)}
+  </div>
 
         <div className={styles.measurementSection}>
           <div className={styles.formField}>
@@ -429,12 +435,12 @@ const handleSubmit = async (e) => {
         : ' (no adjustment)'}
     </span></li>
     <li>Activity impact: <span className={styles.valueHighlight}>
-      {(insulinBreakdown.activityImpact * 100).toFixed(1)}%
-      {insulinBreakdown.activityImpact > 0
-        ? ` (+${(insulinBreakdown.activityImpact * 100).toFixed(1)}% increase)`
-        : insulinBreakdown.activityImpact < 0
-        ? ` (${(insulinBreakdown.activityImpact * 100).toFixed(1)}% decrease)`
-        : ' (no adjustment)'}
+      {((insulinBreakdown.activityImpact - 1) * 100).toFixed(1)}%
+      {insulinBreakdown.activityImpact > 1
+          ? ` (+${((insulinBreakdown.activityImpact - 1) * 100).toFixed(1)}% increase)`
+          : insulinBreakdown.activityImpact < 1
+              ? ` (${((insulinBreakdown.activityImpact - 1) * 100).toFixed(1)}% decrease)`
+              : ' (no adjustment)'}
     </span></li>
     {/* Added Adjusted Insulin Summary */}
     <li className={styles.summaryLine}>
