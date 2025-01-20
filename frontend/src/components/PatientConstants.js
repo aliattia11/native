@@ -115,16 +115,16 @@ const PatientConstants = () => {
     <div className={styles.constantsContainer}>
       <h3>Your Treatment Constants</h3>
 
-      <div className={styles.constantsGrid}>
-        {/* Basic Constants Section */}
-        <div className={styles.constantGroup}>
-          <h4>Basic Constants</h4>
-          <p>Insulin to Carb Ratio: {patientConstants.insulin_to_carb_ratio}</p>
-          <p>Correction Factor: {patientConstants.correction_factor}</p>
-          <p>Target Glucose: {patientConstants.target_glucose} mg/dL</p>
-          <p>Protein Factor: {patientConstants.protein_factor}</p>
-          <p>Fat Factor: {patientConstants.fat_factor}</p>
-        </div>
+    <div className={styles.constantsGrid}>
+  {/* Basic Constants Section */}
+  <div className={styles.constantGroup}>
+    <h4>Basic Constants</h4>
+    <p>ICR: <span className={styles.constantValue}>{patientConstants.insulin_to_carb_ratio}</span></p>
+    <p>CF: <span className={styles.constantValue}>{patientConstants.correction_factor}</span></p>
+    <p>Target: <span className={styles.constantValue}>{patientConstants.target_glucose}</span> mg/dL</p>
+    <p>Protein: <span className={styles.constantValue}>{patientConstants.protein_factor}</span></p>
+    <p>Fat: <span className={styles.constantValue}>{patientConstants.fat_factor}</span></p>
+  </div>
 
         {/* Activity Impact Section */}
          {renderActivitySection()}
@@ -196,162 +196,150 @@ const PatientConstants = () => {
         </div>
       </div>
 
-      {/* Medication Schedules Section - Continued in Part 2 */}
-      {/* Medication Schedules Section */}
-      <div className={styles.constantGroup}>
-        <h4>Medication Schedules</h4>
-        {patientConstants.active_medications?.length > 0 ? (
-          patientConstants.active_medications.map(medication => {
-            const schedule = patientConstants.medication_schedules?.[medication] || {
-              startDate: new Date().toISOString(),
-              endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-              dailyTimes: ['']
-            };
-            const medData = patientConstants.medication_factors?.[medication] || {};
-            const isEditing = editingSchedule === medication;
+{/* Medication Schedules Section */}
+<div className={`${styles.constantGroup} ${styles.fullWidth}`}>
+  <h4>Medication Schedules</h4>
+  <div className={styles.medicationSchedulesGrid}>
+    {patientConstants.active_medications?.length > 0 ? (
+      patientConstants.active_medications.map(medication => {
+        const schedule = patientConstants.medication_schedules?.[medication] || {
+          startDate: new Date().toISOString(),
+          endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+          dailyTimes: ['']
+        };
+        const medData = patientConstants.medication_factors?.[medication] || {};
+        const isEditing = editingSchedule === medication;
 
-            return (
-              <div key={medication} className={styles.medicationSchedule}>
-                <h5>{medication.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</h5>
+        return (
+          <div key={medication} className={styles.medicationSchedule}>
+            <h5>{medication.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</h5>
 
-                {isEditing ? (
-                  <div className={styles.scheduleEditor}>
-                    <div className={styles.dateInputs}>
-                      <div className={styles.inputGroup}>
-                        <label>Start Date:</label>
-                        <input
-                          type="date"
-                          value={tempSchedule?.startDate.slice(0, 10) || schedule.startDate.slice(0, 10)}
-                          onChange={(e) => {
-                            setTempSchedule(prev => ({
-                              ...prev || schedule,
-                              startDate: e.target.value
-                            }));
-                          }}
-                          min={new Date().toISOString().slice(0, 10)}
-                        />
-                      </div>
-                      <div className={styles.inputGroup}>
-                        <label>End Date:</label>
-                        <input
-                          type="date"
-                          value={tempSchedule?.endDate.slice(0, 10) || schedule.endDate.slice(0, 10)}
-                          onChange={(e) => {
-                            setTempSchedule(prev => ({
-                              ...prev || schedule,
-                              endDate: e.target.value
-                            }));
-                          }}
-                          min={tempSchedule?.startDate.slice(0, 10) || schedule.startDate.slice(0, 10)}
-                        />
-                      </div>
-                    </div>
+            {isEditing ? (
+              <div className={styles.scheduleEditor}>
+                <div className={styles.dateInputs}>
+                  <div className={styles.inputGroup}>
+                    <label>Start:</label>
+                    <input
+                      type="date"
+                      value={tempSchedule?.startDate.slice(0, 10) || schedule.startDate.slice(0, 10)}
+                      onChange={(e) => {
+                        setTempSchedule(prev => ({
+                          ...prev || schedule,
+                          startDate: e.target.value
+                        }));
+                      }}
+                      min={new Date().toISOString().slice(0, 10)}
+                    />
+                  </div>
+                  <div className={styles.inputGroup}>
+                    <label>End:</label>
+                    <input
+                      type="date"
+                      value={tempSchedule?.endDate.slice(0, 10) || schedule.endDate.slice(0, 10)}
+                      onChange={(e) => {
+                        setTempSchedule(prev => ({
+                          ...prev || schedule,
+                          endDate: e.target.value
+                        }));
+                      }}
+                      min={tempSchedule?.startDate.slice(0, 10) || schedule.startDate.slice(0, 10)}
+                    />
+                  </div>
+                </div>
 
-                    <div className={styles.timeInputs}>
-                      <label>Daily Times:</label>
-                      {(tempSchedule?.dailyTimes || schedule.dailyTimes).map((time, index) => (
-                        <div key={index} className={styles.timeInput}>
-                          <input
-                            type="time"
-                            value={time}
-                            onChange={(e) => {
-                              const newTimes = [...(tempSchedule?.dailyTimes || schedule.dailyTimes)];
-                              newTimes[index] = e.target.value;
-                              setTempSchedule(prev => ({
-                                ...prev || schedule,
-                                dailyTimes: newTimes.sort()
-                              }));
-                            }}
-                          />
-                          {(tempSchedule?.dailyTimes || schedule.dailyTimes).length > 1 && (
-                            <button
-                              onClick={() => {
-                                const newTimes = (tempSchedule?.dailyTimes || schedule.dailyTimes)
-                                  .filter((_, i) => i !== index);
-                                setTempSchedule(prev => ({
-                                  ...prev || schedule,
-                                  dailyTimes: newTimes
-                                }));
-                              }}
-                              className={styles.removeTimeButton}
-                            >
-                              Remove
-                            </button>
-                          )}
-                        </div>
-                      ))}
-                      <button
-                        onClick={() => {
+                <div className={styles.timeInputs}>
+                  {(tempSchedule?.dailyTimes || schedule.dailyTimes).map((time, index) => (
+                    <div key={index} className={styles.timeInput}>
+                      <input
+                        type="time"
+                        value={time}
+                        onChange={(e) => {
+                          const newTimes = [...(tempSchedule?.dailyTimes || schedule.dailyTimes)];
+                          newTimes[index] = e.target.value;
                           setTempSchedule(prev => ({
                             ...prev || schedule,
-                            dailyTimes: [...(prev?.dailyTimes || schedule.dailyTimes), '']
+                            dailyTimes: newTimes.sort()
                           }));
                         }}
-                        className={styles.addTimeButton}
-                      >
-                        Add Time
-                      </button>
+                      />
+                      {(tempSchedule?.dailyTimes || schedule.dailyTimes).length > 1 && (
+                        <button
+                          onClick={() => {
+                            const newTimes = (tempSchedule?.dailyTimes || schedule.dailyTimes)
+                              .filter((_, i) => i !== index);
+                            setTempSchedule(prev => ({
+                              ...prev || schedule,
+                              dailyTimes: newTimes
+                            }));
+                          }}
+                          className={styles.removeTimeButton}
+                        >
+                          ×
+                        </button>
+                      )}
                     </div>
+                  ))}
+                  <button
+                    onClick={() => {
+                      setTempSchedule(prev => ({
+                        ...prev || schedule,
+                        dailyTimes: [...(prev?.dailyTimes || schedule.dailyTimes), '']
+                      }));
+                    }}
+                    className={styles.addTimeButton}
+                  >
+                    + Time
+                  </button>
+                </div>
 
-                    {scheduleError && (
-                      <div className={styles.error}>{scheduleError}</div>
-                    )}
-
-                    <div className={styles.buttonGroup}>
-                      <button
-                        onClick={async () => {
-                          if (tempSchedule) {
-                            await handleScheduleUpdate(medication, tempSchedule);
-                          }
-                        }}
-                        className={styles.saveButton}
-                        disabled={isSubmitting}
-                      >
-                        Save Changes
-                      </button>
-                      <button
-                        onClick={() => {
-                          setTempSchedule(null);
-                          setEditingSchedule(null);
-                        }}
-                        className={styles.cancelButton}
-                        disabled={isSubmitting}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className={styles.scheduleView}>
-                    <p>Start Date: {new Date(schedule.startDate).toLocaleDateString()}</p>
-                    <p>End Date: {new Date(schedule.endDate).toLocaleDateString()}</p>
-                    <p>Daily Times: {schedule.dailyTimes.join(', ')}</p>
-                    {medData.duration_based && (
-                      <div className={styles.medicationInfo}>
-                        <p>Onset: {medData.onset_hours}h</p>
-                        <p>Peak: {medData.peak_hours}h</p>
-                        <p>Duration: {medData.duration_hours}h</p>
-                      </div>
-                    )}
-                    <button
-                      onClick={() => {
-                        setEditingSchedule(medication);
-                        setTempSchedule(null);
-                      }}
-                      className={styles.editButton}
-                    >
-                      Edit Schedule
-                    </button>
-                  </div>
-                )}
+                <div className={styles.buttonGroup}>
+                  <button
+                    onClick={async () => {
+                      if (tempSchedule) {
+                        await handleScheduleUpdate(medication, tempSchedule);
+                      }
+                    }}
+                    className={styles.saveButton}
+                    disabled={isSubmitting}
+                  >
+                    Save
+                  </button>
+                  <button
+                    onClick={() => {
+                      setTempSchedule(null);
+                      setEditingSchedule(null);
+                    }}
+                    className={styles.cancelButton}
+                    disabled={isSubmitting}
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
-            );
-          })
-        ) : (
-          <p>No active medications</p>
-        )}
-      </div>
-
+            ) : (
+              <div className={styles.scheduleView}>
+                <p>Start: {new Date(schedule.startDate).toLocaleDateString()}</p>
+                <p>End: {new Date(schedule.endDate).toLocaleDateString()}</p>
+                <p>Times: {schedule.dailyTimes.join(', ') || 'None set'}</p>
+                <button
+                  onClick={() => {
+                    setEditingSchedule(medication);
+                    setTempSchedule(null);
+                  }}
+                  className={styles.editButton}
+                >
+                  Edit
+                </button>
+              </div>
+            )}
+          </div>
+        );
+      })
+    ) : (
+      <p>No active medications</p>
+    )}
+  </div>
+</div>
       <button
         className={styles.refreshButton}
         onClick={refreshConstants}

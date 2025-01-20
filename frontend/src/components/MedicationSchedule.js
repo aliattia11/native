@@ -185,13 +185,28 @@ const loadInitialSchedule = async () => {
     setIsSubmitting(false);
   }
 };
+ const timeValidator = (time) => {
+    const [hours, minutes] = time.split(':').map(Number);
+    return hours >= 0 && hours < 24 && minutes >= 0 && minutes < 60;
+  };
 
-  return (
+  const formatTime = (time) => {
+    if (!time) return '';
+    return time.split(':').slice(0, 2).join(':');
+  };
+
+ return (
     <div className={`${styles.medicationSchedule} ${className || ''}`}>
-      <div className={styles.scheduleInputs}>
-        <div className={styles.dateGroup}>
+      <div className={styles.scheduleContainer}>
+        <div className={styles.headerRow}>
+          <h3 className={styles.medicationTitle}>
+            {medication.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+          </h3>
+        </div>
+
+        <div className={styles.dateTimeContainer}>
           <div className={styles.inputGroup}>
-            <label htmlFor={`startDate-${medication}`}>Start Date:</label>
+            <label htmlFor={`startDate-${medication}`}>Start:</label>
             <input
               id={`startDate-${medication}`}
               type="date"
@@ -202,7 +217,7 @@ const loadInitialSchedule = async () => {
             />
           </div>
           <div className={styles.inputGroup}>
-            <label htmlFor={`endDate-${medication}`}>End Date:</label>
+            <label htmlFor={`endDate-${medication}`}>End:</label>
             <input
               id={`endDate-${medication}`}
               type="date"
@@ -212,10 +227,7 @@ const loadInitialSchedule = async () => {
               className={styles.dateInput}
             />
           </div>
-        </div>
 
-        <div className={styles.timesGroup}>
-          <label>Daily Times:</label>
           <div className={styles.timesList}>
             {schedule.dailyTimes.map((time, index) => (
               <div key={index} className={styles.timeInput}>
@@ -232,53 +244,56 @@ const loadInitialSchedule = async () => {
                   disabled={schedule.dailyTimes.length === 1}
                   title="Remove time"
                 >
-                  ✕
+                  ×
                 </button>
               </div>
             ))}
+            <button
+              type="button"
+              onClick={handleAddTime}
+              className={styles.addTimeButton}
+              title="Add another time"
+            >
+              + Time
+            </button>
           </div>
+
           <button
-            type="button"
-            onClick={handleAddTime}
-            className={styles.addTimeButton}
-            title="Add another time"
+            onClick={handleScheduleUpdate}
+            disabled={isSubmitting || !schedule.startDate || !schedule.endDate || schedule.dailyTimes.some(time => !time)}
+            className={styles.updateButton}
           >
-            + Add Time
+            {isSubmitting ? '...' : 'Update'}
           </button>
         </div>
 
+        {error && (
+          <div className={styles.error}>
+            {error.split('\n').map((err, index) => (
+              <p key={index}>{err}</p>
+            ))}
+          </div>
+        )}
 
+        {currentSchedule && (
+          <div className={styles.currentSchedule}>
+            Current: {new Date(currentSchedule.startDate).toLocaleDateString()} -
+            {new Date(currentSchedule.endDate).toLocaleDateString()} at
+            {currentSchedule.dailyTimes.join(', ')}
+          </div>
+        )}
+
+        {medicationData.duration_based && (
+          <div className={styles.durationInfo}>
+            <ul>
+              <li>Onset: {medicationData.onset_hours}h</li>
+              <li>Peak: {medicationData.peak_hours}h</li>
+              <li>Duration: {medicationData.duration_hours}h</li>
+            </ul>
+          </div>
+        )}
       </div>
-
-      {error && (
-        <div className={styles.error}>
-          {error.split('\n').map((err, index) => (
-            <p key={index}>{err}</p>
-          ))}
-        </div>
-      )}
-
-      {currentSchedule && (
-        <div className={styles.currentSchedule}>
-          <h4>Current Schedule:</h4>
-          <p>From: {new Date(currentSchedule.startDate).toLocaleDateString()}</p>
-          <p>To: {new Date(currentSchedule.endDate).toLocaleDateString()}</p>
-          <p>Daily times: {currentSchedule.dailyTimes.join(', ')}</p>
-        </div>
-      )}
-
-      {medicationData.duration_based && (
-        <div className={styles.durationInfo}>
-          <h4>Medication Timing:</h4>
-          <ul>
-            <li>Onset begins: After {medicationData.onset_hours} hours</li>
-            <li>Peak effect: At {medicationData.peak_hours} hours</li>
-            <li>Total duration: {medicationData.duration_hours} hours</li>
-          </ul>
-        </div>
-      )}
     </div>
   );
 };
-
 export default MedicationSchedule;
