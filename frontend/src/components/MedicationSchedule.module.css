@@ -1,0 +1,160 @@
+/* MedicationSchedule.module.css */
+.medicationSchedule {
+  background: white;
+  padding: 1rem;
+  border-left: 3px solid #3182ce;
+  margin: 0.5rem 0;
+}
+
+.scheduleContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.headerRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.medicationTitle {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #2d3748;
+  margin: 0;
+}
+
+.dateTimeContainer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.inputGroup {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.inputGroup label {
+  font-size: 0.813rem;
+  color: #4a5568;
+  white-space: nowrap;
+}
+
+.dateInput {
+  width: 130px;
+  padding: 0.375rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  font-size: 0.813rem;
+}
+
+.timesList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.timeInput {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.timeInput input {
+  width: 100px;
+  padding: 0.375rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  font-size: 0.813rem;
+}
+
+.removeTimeButton {
+  padding: 0.25rem 0.375rem;
+  background: transparent;
+  color: #dc2626;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.813rem;
+}
+
+.removeTimeButton:hover:not(:disabled) {
+  background: #fee2e2;
+}
+
+.addTimeButton {
+  padding: 0.375rem 0.75rem;
+  background: transparent;
+  color: #3182ce;
+  border: 1px dashed #3182ce;
+  border-radius: 4px;
+  font-size: 0.813rem;
+  cursor: pointer;
+}
+
+.addTimeButton:hover {
+  background: #e5edff;
+}
+
+.updateButton {
+  padding: 0.375rem 0.75rem;
+  background: #3182ce;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.813rem;
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.updateButton:disabled {
+  background: #cbd5e0;
+  cursor: not-allowed;
+}
+
+.error {
+  font-size: 0.813rem;
+  color: #dc2626;
+  margin-top: 0.5rem;
+}
+
+.currentSchedule {
+  font-size: 0.813rem;
+  color: #4a5568;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #e2e8f0;
+}
+
+.durationInfo {
+  font-size: 0.813rem;
+  color: #4a5568;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #e2e8f0;
+}
+
+.durationInfo ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  gap: 1rem;
+}
+
+.durationInfo li {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.durationInfo li:before {
+  content: "•";
+  color: #3182ce;
+}

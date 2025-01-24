@@ -1,0 +1,245 @@
+/* PatientConstants.module.css */
+.constantsContainer {
+  padding: 15px;
+}
+
+.constantsGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+.constantGroup {
+  flex: 1;
+  min-width: 200px;
+  max-width: 300px;
+  background: #f8f9fa;
+  padding: 12px;
+  border-left: 2px solid #3182ce;
+}
+
+.constantGroup h4 {
+  color: #2c3e50;
+  margin: 0 0 8px 0;
+  font-size: 0.875rem;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.constantValue {
+  font-weight: 500;
+  color: #2c5282;
+}
+
+/* Medication Schedules styling */
+.medicationSchedulesContainer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+  margin-top: 15px;
+}
+
+.medicationSchedule {
+  flex: 1;
+  min-width: 250px;
+  max-width: 400px;
+  background: #f8f9fa;
+  padding: 12px;
+  border-left: 2px solid #3182ce;
+  margin: 0;
+}
+
+.scheduleEditor {
+  margin-top: 10px;
+}
+
+.dateInputs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.inputGroup {
+  flex: 1;
+}
+
+.inputGroup label {
+  display: block;
+  font-size: 0.813rem;
+  margin-bottom: 4px;
+  color: #4a5568;
+}
+
+.inputGroup input {
+  width: 100%;
+  padding: 4px 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  font-size: 0.813rem;
+}
+
+.timeInputs {
+  margin-bottom: 10px;
+}
+
+.timeInput {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.buttonGroup {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.scheduleView p {
+  margin: 4px 0;
+  font-size: 0.813rem;
+}
+/* PatientConstants.module.css */
+.constantsContainer {
+  padding: 15px;
+}
+
+.constantsGrid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr); /* Forces 5 equal columns */
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.constantGroup {
+  background: #f8f9fa;
+  padding: 10px;
+  border-left: 2px solid #3182ce;
+  min-width: 0; /* Prevents overflow */
+}
+
+.constantGroup h4 {
+  color: #2c3e50;
+  margin: 0 0 8px 0;
+  font-size: 0.875rem;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #e9ecef;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.constantGroup p {
+  margin: 4px 0;
+  font-size: 0.813rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.constantValue {
+  font-weight: 500;
+  color: #2c5282;
+}
+
+.description {
+  display: block;
+  font-size: 0.75rem;
+  color: #666;
+  margin-top: 2px;
+}
+
+/* Responsive design */
+@media (max-width: 1200px) {
+  .constantsGrid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .constantsGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .constantsGrid {
+    grid-template-columns: 1fr;
+  }
+}
+.medicationSchedulesGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.medicationSchedule {
+  background: #f8f9fa;
+  padding: 10px;
+  border-left: 2px solid #3182ce;
+}
+
+.medicationSchedule h5 {
+  margin: 0 0 8px 0;
+  font-size: 0.875rem;
+  color: #2c3e50;
+}
+
+.scheduleView {
+  font-size: 0.813rem;
+}
+
+.scheduleView p {
+  margin: 4px 0;
+}
+
+.editButton {
+  margin-top: 8px;
+  padding: 4px 12px;
+  background: #3182ce;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.813rem;
+  cursor: pointer;
+}
+
+.editButton:hover {
+  background: #2c5282;
+}
+
+.scheduleEditor {
+  margin-top: 8px;
+}
+
+.dateInputs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.timeInputs {
+  margin-bottom: 8px;
+}
+
+.buttonGroup {
+  display: flex;
+  gap: 8px;
+}
+.columnsGrid {
+  display: grid;
+  grid-template-columns: 3fr 2fr 2fr 1fr; /* Adjust the proportions as needed */
+  gap: 1rem;
+  width: 100%;
+}
+
+.medicationScheduleColumn {
+  grid-column: span 4; /* Make this column span across all 4 grid columns */
+  width: 100%; /* Ensure full width */
+}
+
+.otherColumn {
+  grid-column: auto; /* Default behavior for other columns */
+}

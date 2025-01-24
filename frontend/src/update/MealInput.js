@@ -1,13 +1,17 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import axios from 'axios';
 import { FaPlus, FaMinus } from 'react-icons/fa';
 import DurationInput from './DurationInput';
 import FoodSection from './FoodSection';
-import { calculateTotalNutrients, calculateInsulinDose } from './EnhancedPatientConstantsCalc';
-import { DEFAULT_PATIENT_CONSTANTS, MEAL_TYPES, MEASUREMENT_SYSTEMS, VOLUME_MEASUREMENTS, WEIGHT_MEASUREMENTS } from '../constants';
+import {
+  SHARED_CONSTANTS,
+  DEFAULT_PATIENT_CONSTANTS,
+  usePatientConstants,
+  convertToStandardUnit,
+  getMeasurementSystem,
+  calculateInsulinDose
+} from '../constants/EnhancedConstants';
 import styles from './MealInput.module.css';
-
-
 
 const ActivityItem = ({ index, item, updateItem, removeItem, activityCoefficients }) => (
   <div className={styles.activityItem}>
@@ -37,6 +41,7 @@ const ActivityItem = ({ index, item, updateItem, removeItem, activityCoefficient
 );
 
 const MealInput = () => {
+  const { patientConstants, loading: constantsLoading } = usePatientConstants();
   const [mealType, setMealType] = useState('');
   const [selectedFoods, setSelectedFoods] = useState([]);
   const [activities, setActivities] = useState([{ level: 0, duration: 0 }]);
@@ -47,17 +52,44 @@ const MealInput = () => {
   const [activityImpact, setActivityImpact] = useState(0);
   const [notes, setNotes] = useState('');
   const [message, setMessage] = useState('');
-  const [patientConstants, setPatientConstants] = useState(DEFAULT_PATIENT_CONSTANTS);
-
 
   const calculateInsulinNeeds = useCallback(() => {
-    if (selectedFoods.length === 0) {
+    if (selectedFoods.length === 0 || constantsLoading) {
       setSuggestedInsulin('');
       setInsulinBreakdown(null);
       return;
     }
 
-    const totalNutrition = calculateTotalNutrients(selectedFoods);
+    const totalNutrition = selectedFoods.reduce((acc, food) => {
+      const portionSystem = getMeasurementSystem(food.portion.unit);
+      const servingSystem = getMeasurementSystem(food.details.serving_size?.unit || 'serving');
+
+      let conversionRatio = 1;
+
+      if (portionSystem === SHARED_CONSTANTS.MEASUREMENT_SYSTEMS.WEIGHT) {
+        const portionInGrams = convertToStandardUnit(food.portion.amount, food.portion.unit);
+        const servingSizeInGrams = convertToStandardUnit(
+          food.details.serving_size?.amount || 100,
+          food.details.serving_size?.unit || 'g'
+        );
+        conversionRatio = portionInGrams / servingSizeInGrams;
+      } else if (portionSystem === SHARED_CONSTANTS.MEASUREMENT_SYSTEMS.VOLUME &&
+                 servingSystem === SHARED_CONSTANTS.MEASUREMENT_SYSTEMS.VOLUME) {
+        const portionInMl = convertToStandardUnit(food.portion.amount, food.portion.unit);
+        const servingInMl = convertToStandardUnit(
+          food.details.serving_size?.amount || 1,
+          food.details.serving_size?.unit || 'serving'
+        );
+        conversionRatio = portionInMl / servingInMl;
+      }
+
+      return {
+        carbs: acc.carbs + ((food.details.carbs || 0) * conversionRatio),
+        protein: acc.protein + ((food.details.protein || 0) * conversionRatio),
+        fat: acc.fat + ((food.details.fat || 0) * conversionRatio),
+        absorptionType: food.details.absorption_type || 'medium'
+      };
+    }, { carbs: 0, protein: 0, fat: 0, absorptionType: 'medium' });
 
     const insulinCalculation = calculateInsulinDose({
       ...totalNutrition,
@@ -69,7 +101,7 @@ const MealInput = () => {
     setSuggestedInsulin(insulinCalculation.total);
     setInsulinBreakdown(insulinCalculation.breakdown);
     setActivityImpact(insulinCalculation.breakdown.activityImpact || 0);
-  }, [selectedFoods, bloodSugar, activities, patientConstants]);
+  }, [selectedFoods, bloodSugar, activities, patientConstants, constantsLoading]);
 
   useEffect(() => {
     const fetchPatientConstants = async () => {
@@ -83,7 +115,7 @@ const MealInput = () => {
         }
       } catch (error) {
         console.error('Error fetching patient constants:', error);
-        setPatientConstants(DEFAULT_PATIENT_CONSTANTS);
+        setPatientConstants(defaultPatientConstants);
       }
     };
 
@@ -222,7 +254,7 @@ const MealInput = () => {
             required
           >
             <option value="">Select type</option>
-            {MEAL_TYPES.map(type => (
+            {SHARED_CONSTANTS.MEAL_TYPES.map(type => (
               <option key={type.value} value={type.value}>{type.label}</option>
             ))}
           </select>
