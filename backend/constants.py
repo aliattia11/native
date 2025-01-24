@@ -129,15 +129,6 @@ class ConstantConfig:
             'duration_hours': 16,
             'type': 'long_acting_insulin'
         },
-        # Existing medications remain the same
-        'oral_contraceptives': {
-            'factor': 1.2,  # 20% increase in insulin resistance
-            'description': 'Oral contraceptives may increase insulin resistance',
-            'duration_based': True,
-            'onset_hours': 24,
-            'peak_hours': 72,
-            'duration_hours': 720  # 30 days
-        },
         'injectable_contraceptives': {
             'factor': 1.3,  # 30% increase in insulin resistance
             'description': 'Injectable contraceptives can significantly increase insulin resistance',
@@ -162,22 +153,6 @@ class ConstantConfig:
             'onset_hours': 24,
             'peak_hours': 72,
             'duration_hours': 720  # 30 days
-        },
-        'injectable_contraceptives': {
-            'factor': 1.3,  # 30% increase in insulin resistance
-            'description': 'Injectable contraceptives can significantly increase insulin resistance',
-            'duration_based': True,
-            'onset_hours': 48,
-            'peak_hours': 168,  # 1 week
-            'duration_hours': 2160  # 90 days for quarterly injections
-        },
-        'corticosteroids': {
-            'factor': 1.4,
-            'description': 'Significant increase in insulin resistance',
-            'duration_based': True,
-            'onset_hours': 4,
-            'peak_hours': 8,
-            'duration_hours': 24
         },
         'beta_blockers': {
             'factor': 1.2,
@@ -266,173 +241,95 @@ class Constants:
         {'value': 'italian', 'label': 'Italian Dishes'},
         {'value': 'custom', 'label': 'Custom Foods'}
     ]
-
-    DEFAULT_PATIENT_CONSTANTS = {
-        'insulin_to_carb_ratio': 10,
-        'correction_factor': 50,
-        'target_glucose': 100,
-        'protein_factor': 0.5,
-        'fat_factor': 0.2,
-        'activity_coefficients': {
-            "-2": 1.2,  # mode 1 (20% increase in insulin needs)
-            "-1": 1.1,  # mode 2 (10% increase)
-            "0": 1.0,  # Normal Activity (no change)
-            "1": 0.9,  # High Activity (10% decrease)
-            "2": 0.8  # Vigorous Activity (20% decrease)
-        },
-        'absorption_modifiers': {
-            'very_slow': 0.6,
-            'slow': 0.8,
-            'medium': 1.0,
-            'fast': 1.2,
-            'very_fast': 1.4
-        },
-        'insulin_timing_guidelines': {
-            'very_slow': {'timing_minutes': 0, 'description': 'Take insulin at the start of meal'},
-            'slow': {'timing_minutes': 5, 'description': 'Take insulin 5 minutes before meal'},
-            'medium': {'timing_minutes': 10, 'description': 'Take insulin 10 minutes before meal'},
-            'fast': {'timing_minutes': 15, 'description': 'Take insulin 15 minutes before meal'},
-            'very_fast': {'timing_minutes': 20, 'description': 'Take insulin 20 minutes before meal'}
-        },
-        'meal_timing_factors': {
-            'breakfast': 1.2,  # Higher insulin resistance in morning
-            'lunch': 1.0,
-            'dinner': 0.9,  # Better insulin sensitivity in evening
-            'snack': 1.0  # Default factor for snacks
-        },
-        'time_of_day_factors': {
-            'early_morning': {
-                'hours': (0, 6),
-                'factor': 1.1,
-                'description': 'Very early morning adjustment'
-            },
-            'morning': {
-                'hours': (6, 10),
-                'factor': 1.2,
-                'description': 'Morning insulin resistance period'
-            },
-            'daytime': {
-                'hours': (10, 22),
+    INSULIN_TYPES = {
+        'rapid_acting': {
+            'insulin_lispro': {
                 'factor': 1.0,
-                'description': 'Standard daytime period'
+                'duration_based': True,
+                'onset_hours': 0.25,  # 15 minutes
+                'peak_hours': 1.5,  # 1-2 hours
+                'duration_hours': 4.5,  # 4-5 hours
+                'type': 'rapid_acting',
+                'brand_names': ['Humalog', 'Admelog']
             },
-            'late_night': {
-                'hours': (22, 24),
-                'factor': 0.9,
-                'description': 'Late night adjustment'
+            'insulin_aspart': {
+                'factor': 1.0,
+                'duration_based': True,
+                'onset_hours': 0.25,  # 15 minutes
+                'peak_hours': 1.5,  # 1-2 hours
+                'duration_hours': 4.0,  # 3-5 hours
+                'type': 'rapid_acting',
+                'brand_names': ['NovoLog', 'Fiasp']
+            },
+            'insulin_glulisine': {
+                'factor': 1.0,
+                'duration_based': True,
+                'onset_hours': 0.25,  # 15 minutes
+                'peak_hours': 1.5,  # 1-2 hours
+                'duration_hours': 4.0,  # 4 hours
+                'type': 'rapid_acting',
+                'brand_names': ['Apidra']
             }
         },
-        'disease_factors': {
-            'type_1_diabetes': {
+        'short_acting': {
+            'regular_insulin': {
                 'factor': 1.0,
-                'description': 'Standard insulin sensitivity for Type 1 Diabetes'
-            },
-            'type_2_diabetes': {
-                'factor': 0.8,
-                'description': 'Reduced insulin sensitivity for Type 2 Diabetes'
-            },
-            'gestational_diabetes': {
-                'factor': 1.2,
-                'description': 'Increased insulin sensitivity during pregnancy'
-            },
-            'insulin_resistance': {
-                'factor': 0.7,
-                'description': 'Significant reduction in insulin sensitivity'
-            },
-            'thyroid_disorders': {
-                'factor': 1.1,
-                'description': 'Slight increase in insulin requirements'
-            },
-            'celiac_disease': {
-                'factor': 1.1,
-                'description': 'May require insulin adjustment due to absorption issues'
+                'duration_based': True,
+                'onset_hours': 0.5,  # 30 minutes
+                'peak_hours': 3.0,  # 2-4 hours
+                'duration_hours': 6.0,  # 6-8 hours
+                'type': 'short_acting',
+                'brand_names': ['Humulin R', 'Novolin R']
             }
         },
-        'medication_factors': {
-            'insulin_glargine': {
-                'factor': 1.0,
-                'description': 'Long-acting insulin with 24-hour coverage',
-                'duration_based': True,
-                'onset_hours': 2,
-                'peak_hours': 4,
-                'duration_hours': 24,
-                'type': 'long_acting_insulin'
-            },
-            'insulin_detemir': {
-                'factor': 1.0,
-                'description': 'Long-acting insulin lasting 18-24 hours',
-                'duration_based': True,
-                'onset_hours': 1,
-                'peak_hours': 6,
-                'duration_hours': 24,
-                'type': 'long_acting_insulin'
-            },
-            'insulin_degludec': {
-                'factor': 1.0,
-                'description': 'Ultra-long-acting insulin lasting up to 42 hours',
-                'duration_based': True,
-                'onset_hours': 1,
-                'peak_hours': 12,
-                'duration_hours': 42,
-                'type': 'long_acting_insulin'
-            },
+        'intermediate_acting': {
             'nph_insulin': {
                 'factor': 1.0,
-                'description': 'Intermediate-acting insulin with pronounced peak',
                 'duration_based': True,
-                'onset_hours': 1,
-                'peak_hours': 4,
-                'duration_hours': 16,
-                'type': 'long_acting_insulin'
-            },
-            'oral_contraceptives': {
-                'factor': 1.2,
-                'description': 'Oral contraceptives may increase insulin resistance',
+                'onset_hours': 1.5,  # 1-2 hours
+                'peak_hours': 6.0,  # 4-8 hours
+                'duration_hours': 16.0,  # 14-18 hours
+                'type': 'intermediate_acting',
+                'brand_names': ['Humulin N', 'Novolin N']
+            }
+        },
+        'mixed': {
+            'nph_regular_70_30': {
+                'factor': 1.0,
                 'duration_based': True,
-                'onset_hours': 24,
-                'peak_hours': 72,
-                'duration_hours': 720  # 30 days
+                'onset_hours': 0.5,  # 30 minutes
+                'peak_hours': 4.0,  # 2-6 hours
+                'duration_hours': 14.0,  # 14-16 hours
+                'type': 'mixed',
+                'brand_names': ['Humulin 70/30', 'Novolin 70/30']
             },
-            'injectable_contraceptives': {
-                'factor': 1.3,
-                'description': 'Injectable contraceptives can significantly increase insulin resistance',
+            'nph_regular_50_50': {
+                'factor': 1.0,
                 'duration_based': True,
-                'onset_hours': 48,
-                'peak_hours': 168,  # 1 week
-                'duration_hours': 2160  # 90 days for quarterly injections
-            },
-            'corticosteroids': {
-                'factor': 1.4,
-                'description': 'Significant increase in insulin resistance',
-                'duration_based': True,
-                'onset_hours': 4,
-                'peak_hours': 8,
-                'duration_hours': 24
-            },
-            'beta_blockers': {
-                'factor': 1.2,
-                'description': 'Moderate increase in insulin resistance',
-                'duration_based': False
-            },
-            'thiazide_diuretics': {
-                'factor': 1.1,
-                'description': 'Slight increase in insulin resistance',
-                'duration_based': False
-            },
-            'metformin': {
-                'factor': 0.9,
-                'description': 'Improved insulin sensitivity',
-                'duration_based': False
-            },
-            'thiazolidinediones': {
-                'factor': 0.8,
-                'description': 'Significant improvement in insulin sensitivity',
-                'duration_based': True,
-                'onset_hours': 24,
-                'peak_hours': 48,
-                'duration_hours': 168  # 1 week
+                'onset_hours': 0.5,  # 30 minutes
+                'peak_hours': 3.5,  # 2-5 hours
+                'duration_hours': 12.0,  # 10-14 hours
+                'type': 'mixed',
+                'brand_names': ['Humulin 50/50']
             }
         }
+    }
+    config = ConstantConfig()
+
+    DEFAULT_PATIENT_CONSTANTS = {
+        'insulin_to_carb_ratio': config.insulin_to_carb_ratio,
+        'correction_factor': config.correction_factor,
+        'target_glucose': config.target_glucose,
+        'protein_factor': config.protein_factor,
+        'fat_factor': config.fat_factor,
+        'activity_coefficients': config.activity_coefficients,
+        'absorption_modifiers': config.absorption_modifiers,
+        'insulin_timing_guidelines': config.insulin_timing_guidelines,
+        'meal_timing_factors': config.meal_timing_factors,
+        'time_of_day_factors': config.time_of_day_factors,
+        'disease_factors': config.disease_factors,
+        'medication_factors': config.medication_factors,
+        'insulin_types': INSULIN_TYPES
     }
 
     def __init__(self, patient_id: Optional[str] = None):
@@ -641,108 +538,107 @@ class Constants:
 
     @classmethod
     def get_all_constants(cls) -> Dict[str, Any]:
-        """Get all base constants in a format suitable for frontend export"""
-        config = ConstantConfig()
-        return {
-            'MEASUREMENT_SYSTEMS': cls.MEASUREMENT_SYSTEMS,
-            'VOLUME_MEASUREMENTS': cls.VOLUME_MEASUREMENTS,
-            'WEIGHT_MEASUREMENTS': cls.WEIGHT_MEASUREMENTS,
-            'ACTIVITY_LEVELS': cls.ACTIVITY_LEVELS,
-            'MEAL_TYPES': cls.MEAL_TYPES,
-            'FOOD_CATEGORIES': cls.FOOD_CATEGORIES,
-            'DEFAULT_PATIENT_CONSTANTS': cls.DEFAULT_PATIENT_CONSTANTS,
-            'MEAL_TIMING_FACTORS': cls.DEFAULT_PATIENT_CONSTANTS['meal_timing_factors'],
-            'TIME_OF_DAY_FACTORS': cls.DEFAULT_PATIENT_CONSTANTS['time_of_day_factors']
-        }
-
+            """Get all base constants in a format suitable for frontend export"""
+            return {
+                'MEASUREMENT_SYSTEMS': cls.MEASUREMENT_SYSTEMS,
+                'VOLUME_MEASUREMENTS': cls.VOLUME_MEASUREMENTS,
+                'WEIGHT_MEASUREMENTS': cls.WEIGHT_MEASUREMENTS,
+                'ACTIVITY_LEVELS': cls.ACTIVITY_LEVELS,
+                'MEAL_TYPES': cls.MEAL_TYPES,
+                'FOOD_CATEGORIES': cls.FOOD_CATEGORIES,
+                'DEFAULT_PATIENT_CONSTANTS': cls.DEFAULT_PATIENT_CONSTANTS,  # This now contains all the values
+                'INSULIN_TYPES': cls.INSULIN_TYPES
+            }
     @classmethod
     def export_constants_to_frontend(cls, output_path: str = '../frontend/src/constants/shared_constants.js'):
         """
         Enhanced export of constants to JavaScript, ensuring comprehensive coverage
         """
         constants = {
-            'MEASUREMENT_SYSTEMS': cls.MEASUREMENT_SYSTEMS,
-            'VOLUME_MEASUREMENTS': cls.VOLUME_MEASUREMENTS,
-            'WEIGHT_MEASUREMENTS': cls.WEIGHT_MEASUREMENTS,
-            'DEFAULT_PATIENT_CONSTANTS': cls.DEFAULT_PATIENT_CONSTANTS,
-            'ACTIVITY_LEVELS': cls.ACTIVITY_LEVELS,
-            'MEAL_TYPES': cls.MEAL_TYPES,
-            'FOOD_CATEGORIES': cls.FOOD_CATEGORIES,  # Use class constant
-            'MEAL_TIMING_FACTORS': cls.DEFAULT_PATIENT_CONSTANTS['meal_timing_factors'],  # Use class constant
-            'TIME_OF_DAY_FACTORS': cls.DEFAULT_PATIENT_CONSTANTS['time_of_day_factors'],  # Use class constant
-            'DISEASE_FACTORS': cls.DEFAULT_PATIENT_CONSTANTS['disease_factors'],
-            'MEDICATION_FACTORS': cls.DEFAULT_PATIENT_CONSTANTS['medication_factors'],
-            # Conversion Utilities
+            **cls.get_all_constants(),  # Get all base constants
             'CONVERSION_UTILS': {
                 'convertToGrams': '''
-          function convertToGrams(amount, unit) {
-              const volumeMeasurements = SHARED_CONSTANTS.VOLUME_MEASUREMENTS;
-              const weightMeasurements = SHARED_CONSTANTS.WEIGHT_MEASUREMENTS;
+                function convertToGrams(amount, unit) {
+                    const volumeMeasurements = SHARED_CONSTANTS.VOLUME_MEASUREMENTS;
+                    const weightMeasurements = SHARED_CONSTANTS.WEIGHT_MEASUREMENTS;
 
-              if (weightMeasurements[unit]) {
-                  return amount * weightMeasurements[unit].grams;
-              }
+                    if (weightMeasurements[unit]) {
+                        return amount * weightMeasurements[unit].grams;
+                    }
 
-              if (volumeMeasurements[unit]) {
-                  // For volume, use a default density of 1g/ml for simplicity
-                  return amount * volumeMeasurements[unit].ml;
-              }
+                    if (volumeMeasurements[unit]) {
+                        // For volume, use a default density of 1g/ml for simplicity
+                        return amount * volumeMeasurements[unit].ml;
+                    }
 
-              // If unit is not found, return the original amount
-              return amount;
-          }
-          ''',
+                    // If unit is not found, return the original amount
+                    return amount;
+                }
+                ''',
                 'convertToMl': '''
-          function convertToMl(amount, unit) {
-              const volumeMeasurements = SHARED_CONSTANTS.VOLUME_MEASUREMENTS;
-              const weightMeasurements = SHARED_CONSTANTS.WEIGHT_MEASUREMENTS;
+                function convertToMl(amount, unit) {
+                    const volumeMeasurements = SHARED_CONSTANTS.VOLUME_MEASUREMENTS;
+                    const weightMeasurements = SHARED_CONSTANTS.WEIGHT_MEASUREMENTS;
 
-              if (volumeMeasurements[unit]) {
-                  return amount * volumeMeasurements[unit].ml;
-              }
+                    if (volumeMeasurements[unit]) {
+                        return amount * volumeMeasurements[unit].ml;
+                    }
 
-              if (weightMeasurements[unit]) {
-                  // For weight, use a default density of 1g/ml for simplicity
-                  return amount * weightMeasurements[unit].grams;
-              }
+                    if (weightMeasurements[unit]) {
+                        // For weight, use a default density of 1g/ml for simplicity
+                        return amount * weightMeasurements[unit].grams;
+                    }
 
-              // If unit is not found, return the original amount
-              return amount;
-          }
-          '''
+                    // If unit is not found, return the original amount
+                    return amount;
+                }
+                '''
             }
         }
 
         js_content = f"""// Auto-generated from backend constants - DO NOT EDIT DIRECTLY
-              export const SHARED_CONSTANTS = {json.dumps(constants, indent=2)};
+        export const SHARED_CONSTANTS = {json.dumps(constants, indent=2)};
 
-              // Utility Functions
-              export const convertToGrams = {constants['CONVERSION_UTILS']['convertToGrams']};
-              export const convertToMl = {constants['CONVERSION_UTILS']['convertToMl']};
+        // Utility Functions
+        export const convertToGrams = {constants['CONVERSION_UTILS']['convertToGrams']};
+        export const convertToMl = {constants['CONVERSION_UTILS']['convertToMl']};
 
-              // New utility function for calculating disease and medication impacts
-              export const calculateHealthFactors = (diseases, medications) => {{
-                  let totalFactor = 1.0;
+        // Utility function for calculating health factors
+        export const calculateHealthFactors = (diseases, medications) => {{
+            let totalFactor = 1.0;
 
-                  // Calculate disease impacts
-                  if (diseases && diseases.length > 0) {{
-                      diseases.forEach(disease => {{
-                          const diseaseFactor = SHARED_CONSTANTS.DISEASE_FACTORS[disease]?.factor || 1.0;
-                          totalFactor *= diseaseFactor;
-                      }});
-                  }}
+            // Calculate disease impacts
+            if (diseases && diseases.length > 0) {{
+                diseases.forEach(disease => {{
+                    const diseaseFactor = SHARED_CONSTANTS.DEFAULT_PATIENT_CONSTANTS.disease_factors[disease]?.factor || 1.0;
+                    totalFactor *= diseaseFactor;
+                }});
+            }}
 
-                  // Calculate medication impacts
-                  if (medications && medications.length > 0) {{
-                      medications.forEach(med => {{
-                          const medFactor = SHARED_CONSTANTS.MEDICATION_FACTORS[med]?.factor || 1.0;
-                          totalFactor *= medFactor;
-                      }});
-                  }}
+            // Calculate medication impacts
+            if (medications && medications.length > 0) {{
+                medications.forEach(med => {{
+                    const medFactor = SHARED_CONSTANTS.DEFAULT_PATIENT_CONSTANTS.medication_factors[med]?.factor || 1.0;
+                    totalFactor *= medFactor;
+                }});
+            }}
 
-                  return totalFactor;
-              }};
-              """
+            return totalFactor;
+        }};
+
+        // Utility function for getting insulin information
+        export const getInsulinInfo = (insulinName) => {{
+            for (const category in SHARED_CONSTANTS.INSULIN_TYPES) {{
+                if (SHARED_CONSTANTS.INSULIN_TYPES[category][insulinName]) {{
+                    return {{
+                        ...SHARED_CONSTANTS.INSULIN_TYPES[category][insulinName],
+                        category
+                    }};
+                }}
+            }}
+            return null;
+        }};
+        """
 
         frontend_path = Path(output_path)
         frontend_path.parent.mkdir(parents=True, exist_ok=True)
