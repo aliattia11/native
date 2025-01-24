@@ -387,3 +387,108 @@
     color: #ccc;
   }
 }
+
+/* Insulin Breakdown Section */
+.insulinBreakdown {
+  background: #f8f9fa;
+  padding: 1rem;
+  border-radius: 8px;
+  margin: 1rem 0;
+}
+
+.insulinBreakdown h4 {
+  color: #2c3e50;
+  margin: 0 0 0.75rem 0;
+  font-size: 1.1rem;
+}
+
+.insulinBreakdown ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.insulinBreakdown li {
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #eee;
+  color: #666;
+}
+
+.insulinBreakdown li:last-child {
+  border-bottom: none;
+}
+
+/* Dark Mode Support for Insulin Breakdown */
+@media (prefers-color-scheme: dark) {
+  .insulinBreakdown {
+    background: #3d3d3d;
+  }
+
+  .insulinBreakdown h4 {
+    color: #fff;
+  }
+
+  .insulinBreakdown li {
+    color: #ccc;
+    border-bottom-color: #4d4d4d;
+  }
+}
+.effectsInfo {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e2e8f0;
+}
+
+.effectsInfo h4 {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #2d3748;
+  margin: 0 0 0.5rem 0;
+}
+
+.effectDetail {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.813rem;
+  color: #4a5568;
+  margin-bottom: 0.25rem;
+}
+
+.effectDetail span:first-child {
+  color: #718096;
+}
+
+.increase {
+  color: #e53e3e;
+}
+
+.decrease {
+  color: #38a169;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .effectsInfo {
+    border-top-color: #4a5568;
+  }
+
+  .effectsInfo h4 {
+    color: #e2e8f0;
+  }
+
+  .effectDetail {
+    color: #cbd5e0;
+  }
+
+  .effectDetail span:first-child {
+    color: #a0aec0;
+  }
+
+  .increase {
+    color: #fc8181;
+  }
+
+  .decrease {
+    color: #68d391;
+  }
+}

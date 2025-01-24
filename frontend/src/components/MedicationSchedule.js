@@ -292,6 +292,37 @@ const loadInitialSchedule = async () => {
             </ul>
           </div>
         )}
+        {medicationData.effects && (
+  <div className={styles.effectsInfo}>
+    <h4>Current Effects</h4>
+    {medicationData.lastDose && (
+      <>
+        <div className={styles.effectDetail}>
+          <span>Last dose:</span>
+          <span>{new Date(medicationData.lastDose).toLocaleString()}</span>
+        </div>
+        <div className={styles.effectDetail}>
+          <span>Hours since last dose:</span>
+          <span>{medicationData.hoursSinceLastDose.toFixed(1)}h</span>
+        </div>
+      </>
+    )}
+    {medicationData.currentPhase && (
+      <div className={styles.effectDetail}>
+        <span>Current phase:</span>
+        <span>{medicationData.currentPhase}</span>
+      </div>
+    )}
+    <div className={styles.effectDetail}>
+      <span>Effect:</span>
+      <span className={medicationData.effectStrength < 0 ? styles.decrease : styles.increase}>
+        {Math.abs(medicationData.effectStrength).toFixed(1)}%
+        {medicationData.effectStrength < 0 ? ' decrease' : ' increase'}
+        {medicationData.effectType ? ` in ${medicationData.effectType}` : ''}
+      </span>
+    </div>
+  </div>
+)}
       </div>
     </div>
   );
