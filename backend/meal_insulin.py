@@ -16,107 +16,6 @@ logger = logging.getLogger(__name__)
 meal_insulin_bp = Blueprint('meal_insulin', __name__)
 
 
-def calculate_health_factors(user_id, frontend_health_multiplier=None):
-    """
-    Calculate combined impact of diseases and medications with timing considerations.
-
-    This function assesses a user's health status by considering active conditions
-    and medications, with sophisticated timing and factor calculations.
-
-    Args:
-        user_id (str): Unique identifier for the user
-        frontend_health_multiplier (float, optional): Pre-calculated health multiplier
-
-    Returns:
-        float: A health factor multiplier between 0 and 2, representing overall health status
-    """
-    # If frontend provides a health multiplier, use it with safety
-    if frontend_health_multiplier is not None:
-        try:
-            return float(frontend_health_multiplier)
-        except (ValueError, TypeError):
-            logger.warning(f"Invalid frontend health multiplier: {frontend_health_multiplier}")
-            # Continue with backend calculation if frontend multiplier is invalid
-
-    def safe_float_conversion(value, default=1.0):
-        """
-        Safely convert a value to float, with error logging and a default fallback.
-
-        Args:
-            value: Value to convert
-            default: Default value if conversion fails
-
-        Returns:
-            float: Converted value or default
-        """
-        try:
-            return float(value) if value is not None else default
-        except (ValueError, TypeError):
-            logger.warning(f"Could not convert value: {value}")
-            return default
-
-    try:
-        # Retrieve user from database
-        user = mongo.db.users.find_one({"_id": ObjectId(str(user_id))})
-        if not user:
-            return 1.0
-
-        # Load patient-specific constants
-        constants = Constants(str(user_id))
-        patient_constants = constants.get_patient_constants()
-
-        # Calculate disease impact
-        disease_multiplier = 1.0
-        for condition in user.get('active_conditions', []):
-            factor = patient_constants.get('disease_factors', {}).get(condition, {}).get('factor')
-            disease_multiplier *= safe_float_conversion(factor)
-
-        # Calculate medication impact
-        medication_multiplier = 1.0
-        current_time = datetime.utcnow()
-
-        for medication in user.get('active_medications', []):
-            med_data = patient_constants.get('medication_factors', {}).get(medication, {})
-            med_factor = safe_float_conversion(med_data.get('factor'))
-
-            # Handle duration-based medications
-            if med_data.get('duration_based', False):
-                schedule = user.get('medication_schedules', {}).get(medication)
-
-                if schedule:
-                    try:
-                        schedule_start = datetime.fromisoformat(schedule['startDate'].replace('Z', '+00:00'))
-                        schedule_end = datetime.fromisoformat(schedule['endDate'].replace('Z', '+00:00'))
-
-                        # Check if current time is within schedule period
-                        if schedule_start <= current_time <= schedule_end:
-                            daily_times = schedule.get('dailyTimes', [])
-
-                            # Timing-based medication effect calculation logic
-                            # (simplified version of original complex calculation)
-                            if daily_times:
-                                timing_factor = _calculate_medication_timing_factor(
-                                    current_time,
-                                    daily_times,
-                                    med_data,
-                                    med_factor
-                                )
-                                medication_multiplier *= timing_factor
-
-                    except (ValueError, KeyError) as e:
-                        logger.warning(f"Invalid schedule for {medication}: {e}")
-
-            # For non-duration based medications, apply factor directly
-            else:
-                medication_multiplier *= med_factor
-
-        # Combine and return final health factor
-        return max(0.1, min(2.0, disease_multiplier * medication_multiplier))
-
-    except Exception as e:
-        logger.error(f"Error calculating health factors for user {user_id}: {str(e)}")
-        return 1.0
-
 
 def _calculate_medication_timing_factor(current_time, daily_times, med_data, med_factor):
     """
@@ -347,66 +246,91 @@ def calculate_meal_nutrition(food_items):
     }
 
 
-def calculate_suggested_insulin(user_id, nutrition, activities, blood_glucose=None, meal_type='normal', calculation_factors=None):
-    # Initialize Constants with patient ID
-    constants = Constants(user_id)
-    patient_constants = constants.get_patient_constants()
+def calculate_suggested_insulin(user_id, nutrition, activities, blood_glucose=None, meal_type='normal',
+                                calculation_factors=None):
+    try:
+        constants = Constants(user_id)
+        patient_constants = constants.get_patient_constants()
 
-    # Get user-specific constants with fallbacks
-    insulin_to_carb_ratio = patient_constants['insulin_to_carb_ratio']
-    correction_factor = patient_constants['correction_factor']
-    target_glucose = patient_constants['target_glucose']
-    protein_factor = patient_constants['protein_factor']
-    fat_factor = patient_constants['fat_factor']
+        # Base calculations
+        carb_insulin = nutrition['carbs'] / patient_constants['insulin_to_carb_ratio']
+        protein_contribution = (nutrition['protein'] * patient_constants['protein_factor']) / patient_constants[
+            'insulin_to_carb_ratio']
+        fat_contribution = (nutrition['fat'] * patient_constants['fat_factor']) / patient_constants[
+            'insulin_to_carb_ratio']
+        base_insulin = carb_insulin + protein_contribution + fat_contribution
 
-    # Base insulin calculation
-    carb_insulin = nutrition['carbs'] / insulin_to_carb_ratio
-    protein_contribution = (nutrition['protein'] * protein_factor) / insulin_to_carb_ratio
-    fat_contribution = (nutrition['fat'] * fat_factor) / insulin_to_carb_ratio
-    base_insulin = carb_insulin + protein_contribution + fat_contribution
+        # Get adjustment factors from frontend if available
+        if calculation_factors:
+            try:
+                absorption_factor = float(
+                    calculation_factors.get('absorptionFactor', nutrition.get('absorption_factor', 1.0)))
+                time_factor = float(calculation_factors.get('timeOfDayFactor', 1.0))
+                meal_timing_factor = float(calculation_factors.get('mealTimingFactor', 1.0))
+                activity_coefficient = float(calculation_factors.get('activityImpact', 1.0))
 
-    # Get adjustment factors, using provided factors if available
-    if calculation_factors:
-        absorption_factor = calculation_factors.get('absorptionFactor', nutrition.get('absorption_factor', 1.0))
-        time_factor = calculation_factors.get('timeOfDayFactor', get_time_of_day_factor())
-        meal_timing_factor = calculation_factors.get('mealTimingFactor', get_meal_timing_factor(meal_type))
-        activity_coefficient = calculation_factors.get('activityImpact', calculate_activity_impact(activities))
-    else:
-        absorption_factor = nutrition.get('absorption_factor', 1.0)
-        meal_timing_factor = get_meal_timing_factor(meal_type)
-        time_factor = get_time_of_day_factor()
-        activity_coefficient = calculate_activity_impact(activities)
+                # Use the provided health multiplier instead of recalculating
+                if 'healthMultiplier' in calculation_factors:
+                    health_multiplier = float(calculation_factors['healthMultiplier'])
+                    logger.debug(f"Using provided health multiplier from frontend: {health_multiplier}")
+                else:
+                    # If no health multiplier provided, calculate from medications and conditions
+                    health_multiplier = 1.0
+                    medications = calculation_factors.get('medications', [])
+                    conditions = calculation_factors.get('conditions', [])
 
-    # Calculate adjusted insulin
-    adjusted_insulin = base_insulin * absorption_factor * meal_timing_factor * time_factor * activity_coefficient
+                    for med in medications:
+                        health_multiplier *= float(med['factor'])
+                    for condition in conditions:
+                        health_multiplier *= float(condition['factor'])
 
-    # Calculate correction insulin if needed
-    correction_insulin = 0
-    if blood_glucose is not None:
-        correction_insulin = (blood_glucose - target_glucose) / correction_factor
+                    logger.debug(f"Calculated health multiplier from factors: {health_multiplier}")
+            except (ValueError, TypeError) as e:
+                logger.error(f"Error processing calculation factors: {e}")
+                return calculate_default_factors(nutrition, activities, meal_type, user_id)
+        else:
+            # Use default calculations if no factors provided
+            absorption_factor = nutrition.get('absorption_factor', 1.0)
+            meal_timing_factor = get_meal_timing_factor(meal_type)
+            time_factor = get_time_of_day_factor()
+            activity_coefficient = calculate_activity_impact(activities)
+            health_multiplier = calculate_health_factors(user_id)
 
-    # Calculate health factors impact
-    health_multiplier = calculate_health_factors(user_id)
+        # Calculate adjusted insulin
+        adjusted_insulin = base_insulin * absorption_factor * meal_timing_factor * time_factor * activity_coefficient
 
-    # Calculate total insulin
-    total_insulin = max(0, (adjusted_insulin + correction_insulin) * health_multiplier)
+        # Calculate correction insulin if needed
+        correction_insulin = 0
+        if blood_glucose is not None:
+            correction_insulin = (blood_glucose - patient_constants['target_glucose']) / patient_constants[
+                'correction_factor']
 
-    return {
-        'total': round(total_insulin, 1),
-        'breakdown': {
-            'carb_insulin': round(carb_insulin, 2),
-            'protein_contribution': round(protein_contribution, 2),
-            'fat_contribution': round(fat_contribution, 2),
-            'base_insulin': round(base_insulin, 2),
-            'correction_insulin': round(correction_insulin, 2),
-            'activity_coefficient': round(activity_coefficient, 2),
-            'health_multiplier': round(health_multiplier, 2),
-            'absorption_factor': absorption_factor,
-            'meal_timing_factor': meal_timing_factor,
-            'time_factor': time_factor
+        # Calculate final insulin using the health multiplier
+        total_insulin = max(0, (adjusted_insulin + correction_insulin) * health_multiplier)
+
+        result = {
+            'total': round(total_insulin, 1),
+            'breakdown': {
+                'carb_insulin': round(carb_insulin, 2),
+                'protein_contribution': round(protein_contribution, 2),
+                'fat_contribution': round(fat_contribution, 2),
+                'base_insulin': round(base_insulin, 2),
+                'adjusted_insulin': round(adjusted_insulin, 2),
+                'correction_insulin': round(correction_insulin, 2),
+                'activity_coefficient': round(activity_coefficient, 2),
+                'health_multiplier': round(health_multiplier, 2),
+                'absorption_factor': absorption_factor,
+                'meal_timing_factor': meal_timing_factor,
+                'time_factor': time_factor
+            }
         }
-    }
 
+        logger.debug(f"Final calculation result: {result}")
+        return result
+
+    except Exception as e:
+        logger.error(f"Error in calculate_suggested_insulin: {str(e)}")
+        raise
 
 @meal_insulin_bp.route('/api/meal', methods=['POST'])
 @token_required
@@ -663,3 +587,42 @@ def calculate_meal(current_user):
     except Exception as e:
         logger.error(f"Error in calculate_meal: {str(e)}")
         return jsonify({"error": str(e)}), 400
+
+def calculate_health_factors(user_id):
+    try:
+        # Get user from database
+        user = mongo.db.users.find_one({"_id": ObjectId(user_id)})
+        if not user:
+            logger.warning(f"User {user_id} not found, using default health multiplier")
+            return 1.0
+
+        constants = Constants(user_id)
+        patient_constants = constants.get_patient_constants()
+
+        # Calculate disease impact
+        disease_multiplier = 1.0
+        active_conditions = user.get('active_conditions', [])
+        for condition in active_conditions:
+            condition_data = patient_constants.get('disease_factors', {}).get(condition, {})
+            if condition_data and 'factor' in condition_data:
+                try:
+                    disease_multiplier *= float(condition_data['factor'])
+                except (ValueError, TypeError) as e:
+                    logger.error(f"Invalid disease factor for condition {condition}: {e}")
+
+        # Calculate medication impact
+        medication_multiplier = 1.0
+        active_medications = user.get('active_medications', [])
+        for medication in active_medications:
+            med_data = patient_constants.get('medication_factors', {}).get(medication, {})
+            if med_data and 'factor' in med_data:
+                try:
+                    medication_multiplier *= float(med_data['factor'])
+                except (ValueError, TypeError) as e:
+                    logger.error(f"Invalid medication factor for medication {medication}: {e}")
+
+        return disease_multiplier * medication_multiplier
+
+    except Exception as e:
+        logger.error(f"Error calculating health factors: {str(e)}")
+        return 1.0

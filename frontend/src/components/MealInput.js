@@ -247,12 +247,22 @@ const handleSubmit = async (e) => {
       intendedInsulin: intendedInsulin ? parseFloat(intendedInsulin) : null,
       notes,
       // Add the calculation factors here
-      calculationFactors: {
+       calculationFactors: {
         absorptionFactor: insulinBreakdown.absorptionFactor,
         timeOfDayFactor: insulinBreakdown.timeOfDayFactor,
         mealTimingFactor: insulinBreakdown.mealTimingFactor,
         activityImpact: insulinBreakdown.activityImpact,
-        healthMultiplier: healthFactors.healthMultiplier
+        healthMultiplier: healthFactors.healthMultiplier,
+        medications: healthFactors.medications.map(med => ({
+          name: med.name,
+          factor: med.factor,
+          status: med.status,
+          hoursSinceLastDose: med.hoursSinceLastDose
+        })),
+        conditions: healthFactors.conditions.map(condition => ({
+          name: condition.name,
+          factor: condition.factor
+        }))
       }
     };
 
