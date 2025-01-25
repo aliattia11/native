@@ -181,7 +181,6 @@ const handleSubmit = async (e) => {
     return;
   }
 
-  // Add validation
   if (!mealType) {
     setMessage('Please select a meal type');
     return;
@@ -201,58 +200,53 @@ const handleSubmit = async (e) => {
       throw new Error('Authentication token not found');
     }
 
-    // Create a more structured mealData object with measurement validation
-  const mealData = {
-      mealType,
-      foodItems: selectedFoods.map(food => {
-        const isWeightMeasurement = food.portion.activeMeasurement === 'weight';
-        const amount = isWeightMeasurement ? food.portion.w_amount : food.portion.amount;
-        const unit = isWeightMeasurement ? food.portion.w_unit : food.portion.unit;
+    // Create meal data with enhanced calculation factors
+const mealData = {
+  mealType,
+  foodItems: selectedFoods.map(food => {
+    const isWeightMeasurement = food.portion.activeMeasurement === 'weight';
+    const isStandardPortion = food.portion.unit === 'serving';
 
-        if (!amount || !unit) {
-          throw new Error(`Invalid measurement for food item: ${food.name}`);
+    return {
+      name: food.name,
+      portion: {
+        amount: parseFloat(isWeightMeasurement ? food.portion.w_amount : food.portion.amount) || 1,
+        unit: isWeightMeasurement ? food.portion.w_unit : food.portion.unit,
+        measurement_type: isStandardPortion ? 'standard' : food.portion.activeMeasurement || 'volume'
+      },
+      details: {
+        carbs: parseFloat(food.details.carbs) || 0,
+        protein: parseFloat(food.details.protein) || 0,
+        fat: parseFloat(food.details.fat) || 0,
+        absorption_type: food.details.absorption_type || 'medium',
+        serving_size: {
+          amount: food.details.serving_size?.amount || 1,
+          unit: food.details.serving_size?.unit || 'serving',
+          w_amount: food.details.serving_size?.w_amount,
+          w_unit: food.details.serving_size?.w_unit
         }
-
-        return {
-          name: food.name,
-          portion: {
-            amount: parseFloat(amount) || 1,
-            unit: unit || (isWeightMeasurement ? 'g' : 'ml'),
-            measurement_type: food.portion.activeMeasurement || 'weight'
-          },
-          details: {
-            carbs: parseFloat(food.details.carbs) || 0,
-            protein: parseFloat(food.details.protein) || 0,
-            fat: parseFloat(food.details.fat) || 0,
-            absorption_type: food.details.absorption_type || 'medium',
-            serving_size: {
-              amount: food.details.serving_size?.amount || 1,
-              unit: food.details.serving_size?.unit || 'serving',
-              w_amount: food.details.serving_size?.w_amount,
-              w_unit: food.details.serving_size?.w_unit
-            }
-          }
-        };
-      }),
+      }
+    };
+  }),
       activities: activities.map(activity => ({
         level: parseInt(activity.level) || 0,
-        duration: typeof activity.duration === 'string'
-          ? activity.duration
-          : `${Math.floor(activity.duration)}:${Math.round((activity.duration % 1) * 60).toString().padStart(2, '0')}`
+        duration: activity.duration
       })),
       bloodSugar: bloodSugar ? parseFloat(bloodSugar) : null,
       intendedInsulin: intendedInsulin ? parseFloat(intendedInsulin) : null,
       notes,
-      // Add the calculation factors here
       calculationFactors: {
         absorptionFactor: insulinBreakdown.absorptionFactor,
         timeOfDayFactor: insulinBreakdown.timeOfDayFactor,
         mealTimingFactor: insulinBreakdown.mealTimingFactor,
-        activityImpact: insulinBreakdown.activityImpact
+        activityImpact: insulinBreakdown.activityImpact,
+        healthMultiplier: healthFactors.healthMultiplier, // Add health multiplier here
+        medicationEffects: healthFactors.medications,
+        diseaseEffects: healthFactors.conditions
       }
     };
 
-    // Debug log to see what's being sent
+    // Debug log
     console.log('Submitting meal data:', JSON.stringify(mealData, null, 2));
 
     const response = await axios.post(
@@ -270,21 +264,20 @@ const handleSubmit = async (e) => {
     setMessage('Meal logged successfully!');
 
     // Reset form
- setMealType('');
+    setMealType('');
     setSelectedFoods([]);
-    setActivities([]); // Change to empty array instead of array with default activity
+    setActivities([]);
     setBloodSugar('');
     setIntendedInsulin('');
     setSuggestedInsulin('');
     setInsulinBreakdown(null);
-    setActivityImpact(1.0); // Change to 1.0 instead of 0
+    setActivityImpact(1.0);
     setNotes('');
 
   } catch (error) {
     console.error('Error submitting meal:', error);
     const errorMessage = error.response?.data?.error || error.message;
     setMessage(`Error: ${errorMessage}`);
-    // Log the full error response for debugging
     if (error.response?.data) {
       console.log('Full error response:', error.response.data);
     }
