@@ -46,22 +46,24 @@ const calculateHealthFactorsData = (patientConstants, options = {}) => {
 
   // Calculate conditions impact
   if (patientConstants.active_conditions?.length > 0) {
-    result.conditions = patientConstants.active_conditions
-      .map(condition => {
-        const conditionData = patientConstants.disease_factors[condition];
-        if (!conditionData?.factor) return null;
+  result.conditions = patientConstants.active_conditions
+  .map(condition => {
+    const conditionData = patientConstants.disease_factors[condition];
+    if (!conditionData?.factor) return null;
 
-        const percentChange = ((conditionData.factor - 1) * 100).toFixed(1);
-        return {
-          name: formatNames
-            ? condition.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
-            : condition,
-          factor: conditionData.factor,
-          percentChange,
-          isIncrease: conditionData.factor > 1
-        };
-      })
-      .filter(Boolean);
+    const factor = parseFloat(conditionData.factor);
+    const percentChange = ((factor - 1) * 100).toFixed(1);
+
+    return {
+      name: formatNames
+        ? condition.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+        : condition,
+      factor: factor,
+      percentage: percentChange, // Add this explicit field
+      isIncrease: factor > 1
+    };
+  })
+  .filter(Boolean);
   }
 
   // Calculate medications impact

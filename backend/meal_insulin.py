@@ -15,12 +15,8 @@ logger = logging.getLogger(__name__)
 meal_insulin_bp = Blueprint('meal_insulin', __name__)
 
 
-def calculate_health_factors(user_id, frontend_health_multiplier=None):
+def calculate_health_factors(user_id):
     """Calculate combined impact of diseases and medications with timing considerations"""
-    # If frontend provides a health multiplier, use it
-    if frontend_health_multiplier is not None:
-        return float(frontend_health_multiplier)
-
     try:
         # Get user from database
         user = mongo.db.users.find_one({"_id": ObjectId(user_id)})
@@ -95,7 +91,7 @@ def calculate_health_factors(user_id, frontend_health_multiplier=None):
                                 elif hours_since_dose < duration_hours:
                                     # Tapering phase
                                     remaining_effect = (duration_hours - hours_since_dose) / (
-                                            duration_hours - peak_hours)
+                                                duration_hours - peak_hours)
                                     timing_factor = max(1.0, med_factor * remaining_effect)
                                 else:
                                     # Outside duration window
@@ -112,6 +108,12 @@ def calculate_health_factors(user_id, frontend_health_multiplier=None):
     except Exception as e:
         logger.error(f"Error calculating health factors: {str(e)}")
         return 1.0
+
+
+    except Exception as e:
+        logger.error(f"Error calculating health factors: {str(e)}")
+        return 1.0  # Default multiplier in case of error
+
 
 def get_time_of_day_factor(time=None):
     """Get time of day factor based on current hour"""
@@ -219,9 +221,9 @@ def calculate_meal_nutrition(food_items):
         # Extract portion information from the new structure
         portion_data = food.get('portion', {})
         details = food.get('details', {})
-        measurement_type = portion_data.get('measurement_type', 'standard')
+        measurement_type = portion_data.get('measurement_type', 'volume')
 
-        # Calculate conversion ratio based on measurement type
+        # Handle weight-based measurements
         if measurement_type == 'weight':
             amount = portion_data.get('amount', 1)
             unit = portion_data.get('unit', 'g')
@@ -240,15 +242,15 @@ def calculate_meal_nutrition(food_items):
             else:
                 continue
 
-        elif measurement_type == 'volume':
+        else:  # Handle volume-based measurements
             amount = portion_data.get('amount', 1)
-            unit = portion_data.get('unit', 'ml')
+            unit = portion_data.get('unit', 'serving')
 
             # Get serving size
             serving_size = details.get('serving_size', {})
             base_amount = constants.convert_to_standard(
                 serving_size.get('amount', 1),
-                serving_size.get('unit', 'ml')
+                serving_size.get('unit', 'serving')
             )
 
             # Convert to standard units
@@ -257,10 +259,6 @@ def calculate_meal_nutrition(food_items):
                 continue
 
             ratio = standard_amount / base_amount
-
-        else:  # Standard portions
-            amount = portion_data.get('amount', 1)
-            ratio = amount  # For standard portions, use direct multiplication
 
         # Calculate nutrition values using the ratio
         carbs = details.get('carbs', 0) * ratio
@@ -272,7 +270,6 @@ def calculate_meal_nutrition(food_items):
         total_fat += fat
         total_calories += (carbs * 4) + (protein * 4) + (fat * 9)
         absorption_factors.append(details.get('absorption_type', 'medium'))
-
 
     # Get absorption modifiers from constants
     absorption_types = current_app.constants.get_constant('absorption_modifiers', {
@@ -315,20 +312,17 @@ def calculate_suggested_insulin(user_id, nutrition, activities, blood_glucose=No
     fat_contribution = (nutrition['fat'] * fat_factor) / insulin_to_carb_ratio
     base_insulin = carb_insulin + protein_contribution + fat_contribution
 
-    # Get adjustment factors from frontend if available
+    # Get adjustment factors, using provided factors if available
     if calculation_factors:
-        absorption_factor = float(calculation_factors.get('absorptionFactor', nutrition.get('absorption_factor', 1.0)))
-        time_factor = float(calculation_factors.get('timeOfDayFactor', 1.0))
-        meal_timing_factor = float(calculation_factors.get('mealTimingFactor', 1.0))
-        activity_coefficient = float(calculation_factors.get('activityImpact', 1.0))
-        # Use the frontend's health multiplier
-        health_multiplier = float(calculation_factors.get('healthMultiplier', 1.0))
+        absorption_factor = calculation_factors.get('absorptionFactor', nutrition.get('absorption_factor', 1.0))
+        time_factor = calculation_factors.get('timeOfDayFactor', get_time_of_day_factor())
+        meal_timing_factor = calculation_factors.get('mealTimingFactor', get_meal_timing_factor(meal_type))
+        activity_coefficient = calculation_factors.get('activityImpact', calculate_activity_impact(activities))
     else:
         absorption_factor = nutrition.get('absorption_factor', 1.0)
         meal_timing_factor = get_meal_timing_factor(meal_type)
         time_factor = get_time_of_day_factor()
         activity_coefficient = calculate_activity_impact(activities)
-        health_multiplier = calculate_health_factors(user_id)
 
     # Calculate adjusted insulin
     adjusted_insulin = base_insulin * absorption_factor * meal_timing_factor * time_factor * activity_coefficient
@@ -338,22 +332,11 @@ def calculate_suggested_insulin(user_id, nutrition, activities, blood_glucose=No
     if blood_glucose is not None:
         correction_insulin = (blood_glucose - target_glucose) / correction_factor
 
-    # Calculate total insulin using the health multiplier
-    total_insulin = max(0, (adjusted_insulin + correction_insulin) * health_multiplier)
+    # Calculate health factors impact
+    health_multiplier = calculate_health_factors(user_id)
 
-    # Debug logging
-    logger.debug(f"""
-    Calculation breakdown:
-    Base insulin: {base_insulin}
-    Absorption factor: {absorption_factor}
-    Meal timing factor: {meal_timing_factor}
-    Time factor: {time_factor}
-    Activity coefficient: {activity_coefficient}
-    Health multiplier: {health_multiplier}
-    Adjusted insulin: {adjusted_insulin}
-    Correction insulin: {correction_insulin}
-    Total insulin: {total_insulin}
-    """)
+    # Calculate total insulin
+    total_insulin = max(0, (adjusted_insulin + correction_insulin) * health_multiplier)
 
     return {
         'total': round(total_insulin, 1),
@@ -403,17 +386,16 @@ def submit_meal(current_user):
                     }), 400
             elif measurement_type == 'volume':
                 if unit not in supported_measurements['volume']:
-                    # Check if it's a standard portion before returning error
-                    if unit not in supported_measurements['standard_portions']:
-                        return jsonify({
-                            "error": f"Unsupported volume measurement: {unit}",
-                            "supported_measurements": supported_measurements
-                        }), 400
-            elif unit not in supported_measurements['standard_portions']:
-                return jsonify({
-                    "error": f"Unsupported measurement: {unit}",
-                    "supported_measurements": supported_measurements
-                }), 400
+                    return jsonify({
+                        "error": f"Unsupported volume measurement: {unit}",
+                        "supported_measurements": supported_measurements
+                    }), 400
+            else:
+                if unit not in supported_measurements['standard_portions']:
+                    return jsonify({
+                        "error": f"Unsupported standard portion: {unit}",
+                        "supported_measurements": supported_measurements
+                    }), 400
 
         # Calculate nutrition with new portion system
         nutrition = calculate_meal_nutrition(data['foodItems'])
@@ -575,3 +557,45 @@ def get_patient_meal_history(current_user, patient_id):
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@meal_insulin_bp.route('/api/meal/calculate', methods=['POST'])
+@token_required
+def calculate_meal(current_user):
+    try:
+        data = request.json
+        nutrition = calculate_meal_nutrition(data['foodItems'])
+
+        insulin_calc = calculate_suggested_insulin(
+            str(current_user['_id']),
+            nutrition,
+            data['activities'],
+            data.get('bloodSugar'),
+            data['mealType'],
+            data.get('calculationFactors')
+        )
+
+        # Get debug information
+        user = mongo.db.users.find_one({"_id": current_user['_id']})
+        constants = Constants(str(current_user['_id']))
+        patient_constants = constants.get_patient_constants()
+
+        return jsonify({
+            "calculations": {
+                "nutrition": nutrition,
+                "insulin": insulin_calc,
+                "constants": {
+                    "insulin_to_carb_ratio": patient_constants['insulin_to_carb_ratio'],
+                    "correction_factor": patient_constants['correction_factor'],
+                    "target_glucose": patient_constants['target_glucose'],
+                    "protein_factor": patient_constants['protein_factor'],
+                    "fat_factor": patient_constants['fat_factor']
+                },
+                "conditions": user.get('active_conditions', []),
+                "medications": user.get('active_medications', [])
+            }
+        })
+
+    except Exception as e:
+        logger.error(f"Error in calculate_meal: {str(e)}")
+        return jsonify({"error": str(e)}), 400
