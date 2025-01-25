@@ -13,38 +13,44 @@ import { MEAL_TYPES, ACTIVITY_LEVELS } from '../constants';
 import styles from './MealInput.module.css';
 
 // Update ActivityItem to use ACTIVITY_LEVELS from shared constants
-const ActivityItem = ({ index, item, updateItem, removeItem }) => (
-  <div className={styles.activityItem}>
-    <select
-      value={item.level}
-      onChange={(e) => updateItem(index, { ...item, level: parseInt(e.target.value) })}
-      required
-    >
-      {ACTIVITY_LEVELS.map(({ value, label }) => (
-        <option key={value} value={value}>{label}</option>
-      ))}
-    </select>
-    <DurationInput
-      value={item.duration}
-      onChange={(newDuration) => updateItem(index, { ...item, duration: newDuration })}
-    />
-    <button
-      type="button"
-      onClick={() => removeItem(index)}
-      className={styles.removeButton}
-      aria-label="Remove activity"
-    >
-      <FaMinus />
-    </button>
-  </div>
-);
+const ActivityItem = ({ index, item, updateItem, removeItem }) => {
+  const handleDurationChange = (newDuration) => {
+    updateItem(index, { ...item, duration: newDuration });
+  };
+
+  return (
+    <div className={styles.activityItem}>
+      <select
+        value={item.level}
+        onChange={(e) => updateItem(index, { ...item, level: parseInt(e.target.value) })}
+        required
+      >
+        {ACTIVITY_LEVELS.map(({ value, label }) => (
+          <option key={value} value={value}>{label}</option>
+        ))}
+      </select>
+      <DurationInput
+        value={item.duration}
+        onChange={handleDurationChange}
+      />
+      <button
+        type="button"
+        onClick={() => removeItem(index)}
+        className={styles.removeButton}
+        aria-label="Remove activity"
+      >
+        <FaMinus />
+      </button>
+    </div>
+  );
+};
 
 const MealInput = () => {
   const { patientConstants, loading, error, refreshConstants } = useConstants();
   const [mealType, setMealType] = useState('');
   const [selectedFoods, setSelectedFoods] = useState([]);
-  const [activities, setActivities] = useState([{ level: 0, duration: 0 }]);
-  const [bloodSugar, setBloodSugar] = useState('');
+const [activities, setActivities] = useState([{level: 0, duration: '0:00'}]);
+const [bloodSugar, setBloodSugar] = useState('');
   const [intendedInsulin, setIntendedInsulin] = useState('');
   const [suggestedInsulin, setSuggestedInsulin] = useState('');
   const [insulinBreakdown, setInsulinBreakdown] = useState(null);
@@ -145,17 +151,17 @@ useEffect(() => {
   }, []);
 
   // Activity handling functions
-  const addActivity = useCallback(() => {
-    setActivities(prev => [...prev, { level: 0, duration: 0 }]);
-  }, []);
+ const addActivity = useCallback(() => {
+  setActivities(prev => [...prev, { level: 0, duration: '0:00' }]);
+}, []);
 
-  const updateActivity = useCallback((index, updatedActivity) => {
-    setActivities(prev => {
-      const newActivities = [...prev];
-      newActivities[index] = updatedActivity;
-      return newActivities;
-    });
-  }, []);
+const updateActivity = useCallback((index, updatedActivity) => {
+  setActivities(prev => {
+    const newActivities = [...prev];
+    newActivities[index] = updatedActivity;
+    return newActivities;
+  });
+}, []);
 
   const removeActivity = useCallback((index) => {
     setActivities(prev => prev.filter((_, i) => i !== index));
@@ -227,10 +233,8 @@ const handleSubmit = async (e) => {
         };
       }),
       activities: activities.map(activity => ({
-        level: parseInt(activity.level) || 0,
-        duration: typeof activity.duration === 'string'
-          ? activity.duration
-          : `${Math.floor(activity.duration)}:${Math.round((activity.duration % 1) * 60).toString().padStart(2, '0')}`
+        level: parseInt(activity.level),
+        duration: activity.duration // Keep as "HH:MM" string format
       })),
       bloodSugar: bloodSugar ? parseFloat(bloodSugar) : null,
       intendedInsulin: intendedInsulin ? parseFloat(intendedInsulin) : null,
@@ -335,15 +339,34 @@ const handleSubmit = async (e) => {
           >
             <FaPlus /> Add Activity
           </button>
-{activityImpact !== 1.0 && (  // Changed from !== 0 to !== 1.0
+          {activityImpact !== 1.0 && (
   <div className={styles.activityImpact}>
-    <p>Activity Impact: {((activityImpact - 1) * 100).toFixed(1)}%
-      {activityImpact > 1
-        ? ` (+${((activityImpact - 1) * 100).toFixed(1)}% increase)`
-        : activityImpact < 1
-        ? ` (${((activityImpact - 1) * 100).toFixed(1)}% decrease)`
-        : ' (no adjustment)'}
+    <p>Activity Impact:
+      {activityImpact === 1.0
+        ? 'No effect'
+        : `${((activityImpact - 1) * 100).toFixed(1)}% ${
+            activityImpact > 1 
+              ? 'increase in insulin needs' 
+              : 'decrease in insulin needs'
+          }`
+      }
     </p>
+    <div className={styles.activityBreakdown}>
+      {activities.map((activity, index) => {
+        const coefficient = patientConstants.activity_coefficients[String(activity.level)] || 1.0;
+        if (coefficient === 1.0) return null; // Don't show normal activity
+
+        return (
+          <div key={index} className={styles.activityEffect}>
+            <span>
+              {ACTIVITY_LEVELS.find(a => a.value === activity.level)?.label}:
+              {((coefficient - 1) * 100).toFixed(1)}%
+              {coefficient > 1 ? ' increase' : ' decrease'}
+            </span>
+          </div>
+        );
+      })}
+    </div>
   </div>
 )}
   </div>
