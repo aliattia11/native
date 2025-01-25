@@ -25,7 +25,7 @@ const ActivityItem = ({ index, item, updateItem, removeItem }) => (
       ))}
     </select>
     <DurationInput
-      value={item.duration}
+      value={item.duration || "0:00"} // Add default value
       onChange={(newDuration) => updateItem(index, { ...item, duration: newDuration })}
     />
     <button
@@ -44,36 +44,46 @@ const MealInput = () => {
   const [mealType, setMealType] = useState('');
   const [selectedFoods, setSelectedFoods] = useState([]);
   const [activities, setActivities] = useState([]);
+  const [activityImpact, setActivityImpact] = useState(1.0); // Start with 1.0
   const [bloodSugar, setBloodSugar] = useState('');
   const [intendedInsulin, setIntendedInsulin] = useState('');
   const [suggestedInsulin, setSuggestedInsulin] = useState('');
   const [insulinBreakdown, setInsulinBreakdown] = useState(null);
-const [activityImpact, setActivityImpact] = useState(1.0); // Change initial state to 1.0 instead of 0
   const [notes, setNotes] = useState('');
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [healthFactors, setHealthFactors] = useState(null);
 
-  const calculateInsulinNeeds = useCallback(() => {
+const calculateInsulinNeeds = useCallback(() => {
   if (selectedFoods.length === 0 || !patientConstants) {
     setSuggestedInsulin('');
     setInsulinBreakdown(null);
+    setActivityImpact(1.0); // Set default impact
     return;
   }
 
   try {
     const totalNutrition = calculateTotalNutrients(selectedFoods);
 
+    // Only include activities with non-zero duration
+    const validActivities = activities.filter(activity => {
+      const duration = typeof activity.duration === 'string'
+        ? activity.duration.split(':').reduce((acc, val) => acc * 60 + parseInt(val), 0) / 60
+        : activity.duration;
+      return duration > 0;
+    });
+
     const insulinCalculation = calculateInsulinDose({
       ...totalNutrition,
       bloodSugar: parseFloat(bloodSugar) || 0,
-      activities,
+      activities: validActivities,
       patientConstants,
-      mealType});
+      mealType
+    });
 
     setSuggestedInsulin(insulinCalculation.total);
     setInsulinBreakdown(insulinCalculation.breakdown);
-    setActivityImpact(insulinCalculation.breakdown.activityImpact || 0);
+    setActivityImpact(insulinCalculation.breakdown.activityImpact || 1.0);
   } catch (error) {
     console.error('Error calculating insulin:', error);
     setMessage('Error calculating insulin needs: ' + error.message);
@@ -145,9 +155,9 @@ useEffect(() => {
   }, []);
 
   // Activity handling functions
-  const addActivity = useCallback(() => {
-    setActivities(prev => [...prev, { level: 0, duration: 0 }]);
-  }, []);
+const addActivity = useCallback(() => {
+  setActivities(prev => [...prev, { level: 0, duration: "0:00" }]);
+}, []);
 
   const updateActivity = useCallback((index, updatedActivity) => {
     setActivities(prev => {
@@ -255,14 +265,14 @@ const handleSubmit = async (e) => {
     setMessage('Meal logged successfully!');
 
     // Reset form
-    setMealType('');
+ setMealType('');
     setSelectedFoods([]);
-    setActivities([{ level: 0, duration: 0 }]);
+    setActivities([]); // Change to empty array instead of array with default activity
     setBloodSugar('');
     setIntendedInsulin('');
     setSuggestedInsulin('');
     setInsulinBreakdown(null);
-    setActivityImpact(0);
+    setActivityImpact(1.0); // Change to 1.0 instead of 0
     setNotes('');
 
   } catch (error) {
@@ -335,7 +345,7 @@ const handleSubmit = async (e) => {
           >
             <FaPlus /> Add Activity
           </button>
-{activityImpact !== 1.0 && (  // Changed from !== 0 to !== 1.0
+{activities.length > 0 && activityImpact !== 1.0 && (
   <div className={styles.activityImpact}>
     <p>Activity Impact: {((activityImpact - 1) * 100).toFixed(1)}%
       {activityImpact > 1
