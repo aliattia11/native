@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useConstants } from '../contexts/ConstantsContext';
 import axios from 'axios';
-import { FaPlus, FaMinus } from 'react-icons/fa';
+import { FaPlus, FaMinus,FaInfoCircle,FaChevronDown, FaChevronUp } from 'react-icons/fa';
 import DurationInput from './DurationInput';
 import FoodSection from './FoodSection';
 import {
@@ -57,6 +57,7 @@ const MealInput = () => {
   const [backendCalculation, setBackendCalculation] = useState(null);
   const [intendedInsulinType, setIntendedInsulinType] = useState('');
   const [suggestedInsulinType, setSuggestedInsulinType] = useState('regular_insulin');
+  const [expandedCard, setExpandedCard] = useState(null);
 
 const calculateInsulinNeeds = useCallback(() => {
   if (selectedFoods.length === 0 || !patientConstants) {
@@ -188,7 +189,9 @@ const addActivity = useCallback(() => {
     setActivities(prev => prev.filter((_, i) => i !== index));
   }, []);
 
-
+const handleCardClick = (cardName) => {
+  setExpandedCard(expandedCard === cardName ? null : cardName);
+};
 
   // Form submission handler
 const handleSubmit = async (e) => {
@@ -503,176 +506,280 @@ setMessage(
 
 
 {selectedFoods.length > 0 && insulinBreakdown && (
-  <div className={styles.insulinBreakdown}>
-    <h4>Insulin Calculation Breakdown</h4>
-    <ul>
-      {/* Base Units Section */}
-      <li className={styles.breakdownSection}>
-        <strong>Base Units</strong>
-        <div>
-          <li>Carbohydrate insulin: <span className={styles.valueHighlight}>{insulinBreakdown.carbInsulin}</span> units</li>
-          <li>Protein contribution: <span className={styles.valueHighlight}>{insulinBreakdown.proteinContribution}</span> units</li>
-          <li>Fat contribution: <span className={styles.valueHighlight}>{insulinBreakdown.fatContribution}</span> units</li>
-          <li className={styles.summaryLine}>
-            <strong>Total Base Units: <span className={styles.valueHighlight}>{insulinBreakdown.baseInsulin}</span> units</strong>
-          </li>
+  <div className={styles.sectionCard}>
+    <div className={styles.sectionHeader}>
+      <h3 className={styles.sectionTitle}>
+        Insulin Calculation Summary
+        <div className={styles.tooltip}>
+          <FaInfoCircle className={styles.infoIcon} />
+          <span className={styles.tooltipText}>
+            Click on any card to see detailed breakdown
+          </span>
         </div>
-      </li>
+      </h3>
+    </div>
 
- {/* Adjustment Factors Section */}
-<li className={styles.breakdownSection}>
-  <strong>Adjustment Factors</strong>
-  <div>
-    <li>Absorption rate: <span className={styles.valueHighlight}>
-      {((insulinBreakdown.absorptionFactor - 1) * 100).toFixed(1)}%
-      {insulinBreakdown.absorptionFactor > 1
-        ? ` (+${((insulinBreakdown.absorptionFactor - 1) * 100).toFixed(1)}% increase)`
-        : insulinBreakdown.absorptionFactor < 1
-        ? ` (${((insulinBreakdown.absorptionFactor - 1) * 100).toFixed(1)}% decrease)`
-        : ' (no adjustment)'}
-    </span></li>
-    <li>Meal timing: <span className={styles.valueHighlight}>
-      {((insulinBreakdown.mealTimingFactor - 1) * 100).toFixed(1)}%
-      {insulinBreakdown.mealTimingFactor > 1
-        ? ` (+${((insulinBreakdown.mealTimingFactor - 1) * 100).toFixed(1)}% increase)`
-        : insulinBreakdown.mealTimingFactor < 1
-        ? ` (${((insulinBreakdown.mealTimingFactor - 1) * 100).toFixed(1)}% decrease)`
-        : ' (no adjustment)'}
-    </span></li>
-    <li>Time of day: <span className={styles.valueHighlight}>
-      {((insulinBreakdown.timeOfDayFactor - 1) * 100).toFixed(1)}%
-      {insulinBreakdown.timeOfDayFactor > 1
-        ? ` (+${((insulinBreakdown.timeOfDayFactor - 1) * 100).toFixed(1)}% increase)`
-        : insulinBreakdown.timeOfDayFactor < 1
-        ? ` (${((insulinBreakdown.timeOfDayFactor - 1) * 100).toFixed(1)}% decrease)`
-        : ' (no adjustment)'}
-    </span></li>
-    <li>Activity impact: <span className={styles.valueHighlight}>
-      {((insulinBreakdown.activityImpact - 1) * 100).toFixed(1)}%
-      {insulinBreakdown.activityImpact > 1
-          ? ` (+${((insulinBreakdown.activityImpact - 1) * 100).toFixed(1)}% increase)`
-          : insulinBreakdown.activityImpact < 1
-              ? ` (${((insulinBreakdown.activityImpact - 1) * 100).toFixed(1)}% decrease)`
-              : ' (no adjustment)'}
-    </span></li>
-    {/* Added Adjusted Insulin Summary */}
-    <li className={styles.summaryLine}>
-      <strong>Adjusted Insulin: <span className={styles.valueHighlight}>
-        {insulinBreakdown.adjustedInsulin}
-      </span> units</strong>
-      <div className={styles.formulaExplanation}>
-        <small>
-          (Base insulin × Absorption × Meal timing × Time of day × Activity factor)
-        </small>
-      </div>
-    </li>
-  </div>
-</li>
-
-      {/* Correction Section */}
-      {insulinBreakdown.correctionInsulin !== 0 && (
-        <li className={styles.breakdownSection}>
-          <strong>Correction Units</strong>
-          <div>
-            <li>Correction insulin: <span className={styles.valueHighlight}>{insulinBreakdown.correctionInsulin}</span> units</li>
+    <div className={styles.breakdownGrid}>
+      {/* Base Insulin Card */}
+      <div
+        className={`${styles.breakdownCard} ${expandedCard === 'base' ? styles.expanded : ''}`}
+        onClick={() => handleCardClick('base')}
+      >
+        <div className={styles.breakdownHeader}>
+          <div className={styles.headerContent}>
+            <span>Base Insulin Needs</span>
+            {expandedCard === 'base' ? <FaChevronUp /> : <FaChevronDown />}
           </div>
-        </li>
-      )}
+          <div className={styles.breakdownValue}>{insulinBreakdown.baseInsulin.toFixed(1)} units</div>
+        </div>
 
-   {insulinBreakdown.healthMultiplier !== 1 && (
-  <>
-    <li className={styles.breakdownSection}>
-      <strong>Health Factors:</strong>
-    </li>
-    {healthFactors?.conditions.length > 0 && (
-      <li>
-        <strong>Active Conditions:</strong>
-        <ul>
-          {healthFactors.conditions.map(condition => (
-            <li key={condition.name}>
-              • {condition.name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}:
-              {condition.percentage}%
-              {condition.factor > 1
-                ? ` (+${condition.percentage}% increase)`
-                : ` (${condition.percentage}% decrease)`}
-            </li>
-          ))}
-        </ul>
-      </li>
-    )}
+        {expandedCard === 'base' && (
+          <div className={styles.expandedContent}>
+            <ul>
+              <li>Carbohydrate insulin: {insulinBreakdown.carbInsulin.toFixed(1)} units</li>
+              <li>Protein contribution: {insulinBreakdown.proteinContribution.toFixed(1)} units</li>
+              <li>Fat contribution: {insulinBreakdown.fatContribution.toFixed(1)} units</li>
+              <li className={styles.summaryLine}>
+                Total Base Units: {insulinBreakdown.baseInsulin.toFixed(1)} units
+              </li>
+            </ul>
+          </div>
+        )}
+      </div>
 
-    {healthFactors?.medications.length > 0 && (
-      <div className={styles.medicationTimingInfo}>
-        <h4>Medication Effects:</h4>
-        {healthFactors.medications.map(med => (
-          <div key={med.name} className={styles.medicationEffect}>
-            <h5>{med.name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</h5>
-            <div className={styles.effectDetails}>
-              {med.status === 'Scheduled to start' && (
-                <>
-                  <p>Status: Scheduled to start on {med.startDate}</p>
-                  <p>Current Effect: None</p>
-                </>
-              )}
-              {med.status === 'Schedule ended' && (
-                <>
-                  <p>Status: Schedule ended on {med.endDate}</p>
-                  <p>Current Effect: None</p>
-                </>
-              )}
-              {['Ramping up', 'Peak effect', 'Tapering', 'No current effect'].includes(med.status) && (
-                <>
-                  <p>Last dose: {med.lastDose}</p>
-                  <p>Hours since last dose: {med.hoursSinceLastDose}h</p>
-                  <p>Current phase: {med.status}</p>
-                  <p>Current effect strength: {((med.factor - 1) * 100).toFixed(1)}%
+        {/* Activity Impact Card */}
+      <div
+        className={`${styles.breakdownCard} ${expandedCard === 'activity' ? styles.expanded : ''}`}
+        onClick={() => handleCardClick('activity')}
+      >
+        <div className={styles.breakdownHeader}>
+          <div className={styles.headerContent}>
+            <span>Activity Impact</span>
+            {expandedCard === 'activity' ? <FaChevronUp /> : <FaChevronDown />}
+          </div>
+          <div className={`${styles.breakdownValue} ${
+            activityImpact < 1 ? styles.impactNegative : styles.impactPositive
+          }`}>
+            {((activityImpact - 1) * 100).toFixed(1)}%
+            {activityImpact !== 1 && (activityImpact > 1 ? ' Increase' : ' Decrease')}
+          </div>
+        </div>
+
+        {expandedCard === 'activity' && activities.length > 0 && (
+          <div className={styles.expandedContent}>
+            {activities.map((activity, index) => (
+              <div key={index} className={styles.activityDetail}>
+                <span>Activity {index + 1}:</span>
+                <span>Level: {ACTIVITY_LEVELS.find(level => level.value === activity.level)?.label}</span>
+                <span>Duration: {activity.duration}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+    {/* Pharmacodynamic Adjustments Card */}
+      <div
+        className={`${styles.breakdownCard} ${expandedCard === 'adjustment' ? styles.expanded : ''}`}
+        onClick={() => handleCardClick('adjustment')}
+      >
+        <div className={styles.breakdownHeader}>
+          <div className={styles.headerContent}>
+            <span>Pharmacodynamic Adjustments</span>
+            {expandedCard === 'adjustment' ? <FaChevronUp /> : <FaChevronDown />}
+          </div>
+          <div className={styles.breakdownValue}>
+            {[
+              insulinBreakdown.absorptionFactor,
+              insulinBreakdown.mealTimingFactor,
+              insulinBreakdown.timeOfDayFactor,
+              insulinBreakdown.activityImpact
+            ].some(factor => factor !== 1) ? (
+              <span className={styles.valueHighlight}>
+                Adjustments applied: {insulinBreakdown.adjustedInsulin.toFixed(1)} units
+              </span>
+            ) : '0.0% (no adjustment)'}
+          </div>
+        </div>
+
+        {expandedCard === 'adjustment' && (
+          <div className={styles.expandedContent}>
+            <ul>
+              <li>Absorption rate: <span className={styles.valueHighlight}>
+                {((insulinBreakdown.absorptionFactor - 1) * 100).toFixed(1)}%
+                {insulinBreakdown.absorptionFactor > 1
+                  ? ` (+${((insulinBreakdown.absorptionFactor - 1) * 100).toFixed(1)}% increase)`
+                  : insulinBreakdown.absorptionFactor < 1
+                  ? ` (${((insulinBreakdown.absorptionFactor - 1) * 100).toFixed(1)}% decrease)`
+                  : ' (no adjustment)'}
+              </span></li>
+              <li>Meal timing: <span className={styles.valueHighlight}>
+                {((insulinBreakdown.mealTimingFactor - 1) * 100).toFixed(1)}%
+                {insulinBreakdown.mealTimingFactor > 1
+                  ? ` (+${((insulinBreakdown.mealTimingFactor - 1) * 100).toFixed(1)}% increase)`
+                  : insulinBreakdown.mealTimingFactor < 1
+                  ? ` (${((insulinBreakdown.mealTimingFactor - 1) * 100).toFixed(1)}% decrease)`
+                  : ' (no adjustment)'}
+              </span></li>
+              <li>Time of day: <span className={styles.valueHighlight}>
+                {((insulinBreakdown.timeOfDayFactor - 1) * 100).toFixed(1)}%
+                {insulinBreakdown.timeOfDayFactor > 1
+                  ? ` (+${((insulinBreakdown.timeOfDayFactor - 1) * 100).toFixed(1)}% increase)`
+                  : insulinBreakdown.timeOfDayFactor < 1
+                  ? ` (${((insulinBreakdown.timeOfDayFactor - 1) * 100).toFixed(1)}% decrease)`
+                  : ' (no adjustment)'}
+              </span></li>
+              <li>Activity impact: <span className={styles.valueHighlight}>
+                {((insulinBreakdown.activityImpact - 1) * 100).toFixed(1)}%
+                {insulinBreakdown.activityImpact > 1
+                    ? ` (+${((insulinBreakdown.activityImpact - 1) * 100).toFixed(1)}% increase)`
+                    : insulinBreakdown.activityImpact < 1
+                        ? ` (${((insulinBreakdown.activityImpact - 1) * 100).toFixed(1)}% decrease)`
+                        : ' (no adjustment)'}
+              </span></li>
+              <li className={styles.summaryLine}>
+                Adjusted Insulin: <span className={styles.valueHighlight}>
+                  {insulinBreakdown.adjustedInsulin.toFixed(1)}
+                </span> units
+                <div className={styles.formulaExplanation}>
+                  <small>
+                    (Base insulin × Absorption × Meal timing × Time of day × Activity factor)
+                  </small>
+                </div>
+              </li>
+            </ul>
+          </div>
+        )}
+      </div>
+
+
+{/* Pharmacokinetics Adjustments Card */}
+{healthFactors && healthFactors.healthMultiplier !== 1 && (
+  <div
+    className={`${styles.breakdownCard} ${expandedCard === 'health' ? styles.expanded : ''}`}
+    onClick={() => handleCardClick('health')}
+  >
+    <div className={styles.breakdownHeader}>
+      <div className={styles.headerContent}>
+        <span>Pharmacokinetics Adjustments</span>
+        {expandedCard === 'health' ? <FaChevronUp /> : <FaChevronDown />}
+      </div>
+      <div className={`${styles.breakdownValue} ${
+        healthFactors.healthMultiplier < 1 ? styles.impactNegative : styles.impactPositive
+      }`}>
+        {((healthFactors.healthMultiplier - 1) * 100).toFixed(1)}%
+        {healthFactors.healthMultiplier > 1 ? ' Increase' : ' Decrease'}
+      </div>
+    </div>
+
+    {expandedCard === 'health' && (
+      <div className={styles.expandedContent}>
+        {healthFactors.conditions.length > 0 && (
+          <div className={styles.healthSection}>
+            <h4>Active Conditions:</h4>
+            <ul>
+              {healthFactors.conditions.map(condition => (
+                <li key={condition.name}>
+                  {condition.name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}:
+                  {condition.percentage}%
+                  {condition.factor > 1
+                    ? ` (+${condition.percentage}% increase)`
+                    : ` (${condition.percentage}% decrease)`}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {healthFactors.medications.length > 0 && (
+          <div className={styles.healthSection}>
+            <h4>Medications:</h4>
+            {healthFactors.medications.map(med => (
+              <div key={med.name} className={styles.medicationEffect}>
+                <h5>{med.name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</h5>
+                <div className={styles.effectDetails}>
+                  <p>Status: {med.status}</p>
+                  {med.lastDose && <p>Last dose: {med.lastDose}</p>}
+                  {med.hoursSinceLastDose && <p>Hours since last dose: {med.hoursSinceLastDose.toFixed(1)}h</p>}
+                  <p>Current effect: {((med.factor - 1) * 100).toFixed(1)}%
                      {med.factor > 1 ? ' increase' : ' decrease'}</p>
-                </>
-              )}
-              {med.status === 'Constant effect' && (
-                <p>Effect: {((med.factor - 1) * 100).toFixed(1)}%
-                   {med.factor > 1 ? ' increase' : ' decrease'} in insulin resistance</p>
-              )}
-            </div>
+                </div>
+              </div>
+            ))}
           </div>
-        ))}
+        )}
       </div>
     )}
-
-    <li className={styles.summaryLine}>
-      <strong>Combined Health Factor: {((healthFactors.healthMultiplier - 1) * 100).toFixed(1)}%
-        {healthFactors.healthMultiplier > 1
-          ? ` (+${((healthFactors.healthMultiplier - 1) * 100).toFixed(1)}% increase)`
-          : ` (${((healthFactors.healthMultiplier - 1) * 100).toFixed(1)}% decrease)`}
-      </strong>
-    </li>
-  </>
+  </div>
 )}
 
-      {/* Final Calculation */}
-      <li className={styles.breakdownSection}>
-        <strong>Final Calculation</strong>
-        <div className={styles.calculationBreakdown}>
-          <span>Adjusted Insulin: {insulinBreakdown.adjustedInsulin} units</span>
-          {insulinBreakdown.correctionInsulin !== 0 && (
-            <span>+ Correction: {insulinBreakdown.correctionInsulin} units</span>
-          )}
-          {insulinBreakdown.healthMultiplier !== 1 && (
-            <span>× Health Factor: {insulinBreakdown.healthMultiplier}</span>
-          )}
+          {/* Correction Insulin Card */}
+      <div
+        className={`${styles.breakdownCard} ${expandedCard === 'correction' ? styles.expanded : ''}`}
+        onClick={() => handleCardClick('correction')}
+      >
+        <div className={styles.breakdownHeader}>
+          <div className={styles.headerContent}>
+            <span>Correction Insulin</span>
+            {expandedCard === 'correction' ? <FaChevronUp /> : <FaChevronDown />}
+          </div>
+          <div className={styles.breakdownValue}>
+            {insulinBreakdown.correctionInsulin.toFixed(1)} units
+          </div>
         </div>
-        <div className={styles.formulaExplanation}>
-          <small>
-            Formula: ({insulinBreakdown.adjustedInsulin} + {insulinBreakdown.correctionInsulin}) × {insulinBreakdown.healthMultiplier}
-          </small>
-        </div>
-      </li>
 
-      {/* Final Total */}
-      <li className={styles.summaryLine}>
-        <strong>Total Insulin Needed: <span className={styles.valueHighlight}>{suggestedInsulin}</span> units</strong>
-      </li>
-    </ul>
+        {expandedCard === 'correction' && (
+          <div className={styles.expandedContent}>
+            <ul>
+              <li>Correction insulin: <span className={styles.valueHighlight}>{insulinBreakdown.correctionInsulin.toFixed(1)} units</span></li>
+              <li className={styles.summaryLine}>
+                <strong>Adjusted Insulin: <span className={styles.valueHighlight}>
+                  {insulinBreakdown.adjustedInsulin.toFixed(1)}
+                </span> units</strong>
+                <div className={styles.formulaExplanation}>
+                  <small>
+                    (Current blood sugar - Target blood sugar) / Correction factor
+                  </small>
+                </div>
+              </li>
+            </ul>
+          </div>
+        )}
+      </div>
+
+
+      {/* Final Calculation Card */}
+      <div
+        className={`${styles.breakdownCard} ${expandedCard === 'final' ? styles.expanded : ''}`}
+        onClick={() => handleCardClick('final')}
+      >
+        <div className={styles.breakdownHeader}>
+          <div className={styles.headerContent}>
+            <span>Suggested Insulin Dose</span>
+            {expandedCard === 'final' ? <FaChevronUp /> : <FaChevronDown />}
+          </div>
+          <div className={styles.breakdownValue}>{suggestedInsulin} units</div>
+        </div>
+
+        {expandedCard === 'final' && (
+          <div className={styles.expandedContent}>
+            <div className={styles.calculationBreakdown}>
+              <p>Adjusted Insulin: {insulinBreakdown.adjustedInsulin.toFixed(1)} units</p>
+              {insulinBreakdown.correctionInsulin !== 0 && (
+                <p>Correction: {insulinBreakdown.correctionInsulin.toFixed(1)} units</p>
+              )}
+              <p>Health Multiplier: ×{insulinBreakdown.healthMultiplier.toFixed(2)}</p>
+              <div className={styles.formulaExplanation}>
+                <small>
+                  Formula: ({insulinBreakdown.adjustedInsulin.toFixed(1)} + {insulinBreakdown.correctionInsulin.toFixed(1)})
+                  × {insulinBreakdown.healthMultiplier.toFixed(2)} = {suggestedInsulin} units
+                </small>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   </div>
 )}
         {selectedFoods.length > 0 && patientConstants && (
@@ -700,6 +807,8 @@ setMessage(
             />
           </div>
         </div>
+
+
 {backendCalculation && (
   <div className={styles.backendCalculation}>
     <h4>Backend Calculation Result</h4>
