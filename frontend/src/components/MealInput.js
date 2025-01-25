@@ -10,7 +10,7 @@ import {
   getHealthFactorsBreakdown,
   compareCalculations  // Add this import
 } from './EnhancedPatientConstantsCalc';
-import { MEAL_TYPES, ACTIVITY_LEVELS } from '../constants';
+import { MEAL_TYPES, ACTIVITY_LEVELS,INSULIN_TYPES } from '../constants';
 import styles from './MealInput.module.css';
 
 // Update ActivityItem to use ACTIVITY_LEVELS from shared constants
@@ -55,7 +55,8 @@ const MealInput = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [healthFactors, setHealthFactors] = useState(null);
   const [backendCalculation, setBackendCalculation] = useState(null);
-
+  const [intendedInsulinType, setIntendedInsulinType] = useState('');
+  const [suggestedInsulinType, setSuggestedInsulinType] = useState('regular_insulin');
 
 const calculateInsulinNeeds = useCallback(() => {
   if (selectedFoods.length === 0 || !patientConstants) {
@@ -118,7 +119,20 @@ useEffect(() => {
   }, [refreshConstants]);
 
   // Calculate insulin needs whenever relevant inputs change
-
+const getAvailableInsulinTypes = () => {
+  const insulinTypes = [];
+  Object.entries(INSULIN_TYPES).forEach(([category, types]) => {
+    Object.entries(types).forEach(([name, details]) => {
+      insulinTypes.push({
+        name: name,
+        displayName: name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+        category: category,
+        ...details
+      });
+    });
+  });
+  return insulinTypes;
+};
 
   useEffect(() => {
     if (!loading && patientConstants && (selectedFoods.length > 0 || bloodSugar)) {
@@ -245,6 +259,8 @@ const handleSubmit = async (e) => {
       })),
       bloodSugar: bloodSugar ? parseFloat(bloodSugar) : null,
       intendedInsulin: intendedInsulin ? parseFloat(intendedInsulin) : null,
+      intendedInsulinType: intendedInsulinType,
+      suggestedInsulinType: suggestedInsulinType,
       notes,
       // Add the calculation factors here
        calculationFactors: {
@@ -326,13 +342,15 @@ setMessage(
     // Reset form
  setMealType('');
     setSelectedFoods([]);
-    setActivities([]); // Change to empty array instead of array with default activity
+    setActivities([]);
     setBloodSugar('');
     setIntendedInsulin('');
     setSuggestedInsulin('');
     setInsulinBreakdown(null);
-    setActivityImpact(1.0); // Change to 1.0 instead of 0
+    setActivityImpact(1.0);
     setNotes('');
+    setIntendedInsulinType('');
+    setSuggestedInsulinType('regular_insulin');
 
   } catch (error) {
     console.error('Error submitting meal:', error);
@@ -421,42 +439,68 @@ setMessage(
           <div className={styles.formField}>
             <label htmlFor="bloodSugar">Blood Sugar Level (mg/dL)</label>
             <input
-              id="bloodSugar"
-              type="number"
-              min="0"
-              max="1000"
-              value={bloodSugar}
-              onChange={(e) => setBloodSugar(e.target.value)}
-              placeholder="Enter blood sugar level"
-              required
-            />
-          </div>
-
-          <div className={styles.formField}>
-            <label htmlFor="intendedInsulin">Intended Insulin Intake (units)</label>
-            <input
-              id="intendedInsulin"
-              type="number"
-              min="0"
-              step="0.1"
-              value={intendedInsulin}
-              onChange={(e) => setIntendedInsulin(e.target.value)}
-              placeholder="Enter intended insulin intake"
-              required
+                id="bloodSugar"
+                type="number"
+                min="0"
+                max="1000"
+                value={bloodSugar}
+                onChange={(e) => setBloodSugar(e.target.value)}
+                placeholder="Enter blood sugar level"
+                required
             />
           </div>
 
           <div className={`${styles.formField} ${styles.readOnlyField}`}>
             <label htmlFor="suggestedInsulin">Suggested Insulin Intake (units)</label>
-            <input
-              id="suggestedInsulin"
-              type="number"
-              value={suggestedInsulin}
-              readOnly
-              placeholder="Calculated based on meal and activities"
-            />
+            <div className={styles.insulinInputGroup}>
+              <input
+                  id="suggestedInsulin"
+                  type="number"
+                  value={suggestedInsulin}
+                  readOnly
+                  placeholder="Calculated based on meal and activities"
+              />
+              <input
+                  id="suggestedInsulinType"
+                  type="text"
+                  value={suggestedInsulinType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                  readOnly
+                  className={styles.insulinTypeReadOnly}
+              />
+            </div>
           </div>
         </div>
+
+        <div className={styles.formField}>
+          <label htmlFor="intendedInsulin">Intended Insulin Intake (units)</label>
+          <div className={styles.insulinInputGroup}>
+            <input
+                id="intendedInsulin"
+                type="number"
+                min="0"
+                step="0.1"
+                value={intendedInsulin}
+                onChange={(e) => setIntendedInsulin(e.target.value)}
+                placeholder="Enter intended insulin intake"
+                required
+            />
+            <select
+                id="intendedInsulinType"
+                value={intendedInsulinType}
+                onChange={(e) => setIntendedInsulinType(e.target.value)}
+                required
+                className={styles.insulinTypeSelect}
+      >
+        <option value="">Select Type</option>
+        {getAvailableInsulinTypes().map(type => (
+          <option key={type.name} value={type.name}>
+            {type.displayName} ({type.category})
+          </option>
+        ))}
+      </select>
+    </div>
+  </div>
+
 
 {selectedFoods.length > 0 && insulinBreakdown && (
   <div className={styles.insulinBreakdown}>
@@ -656,6 +700,51 @@ setMessage(
             />
           </div>
         </div>
+{backendCalculation && (
+  <div className={styles.backendCalculation}>
+    <h4>Backend Calculation Result</h4>
+    <ul>
+      <li>Total Insulin: {backendCalculation.total} units</li>
+      <li className={styles.breakdownSection}>
+        <strong>Base Units</strong>
+        <div>
+          <li>Carbohydrate insulin: {backendCalculation.breakdown.carb_insulin} units</li>
+          <li>Protein contribution: {backendCalculation.breakdown.protein_contribution} units</li>
+          <li>Fat contribution: {backendCalculation.breakdown.fat_contribution} units</li>
+          <li className={styles.summaryLine}>
+            <strong>Total Base Units: {backendCalculation.breakdown.base_insulin} units</strong>
+          </li>
+        </div>
+      </li>
+
+      <li className={styles.breakdownSection}>
+        <strong>Adjustment Factors</strong>
+        <div>
+          <li>Absorption rate: {((backendCalculation.breakdown.absorption_factor - 1) * 100).toFixed(1)}%</li>
+          <li>Meal timing: {((backendCalculation.breakdown.meal_timing_factor - 1) * 100).toFixed(1)}%</li>
+          <li>Time of day: {((backendCalculation.breakdown.time_factor - 1) * 100).toFixed(1)}%</li>
+          <li>Activity impact: {((backendCalculation.breakdown.activity_coefficient - 1) * 100).toFixed(1)}%</li>
+          <li>Health multiplier: {((backendCalculation.breakdown.health_multiplier - 1) * 100).toFixed(1)}%</li>
+        </div>
+      </li>
+
+      {backendCalculation.breakdown.correction_insulin !== 0 && (
+        <li className={styles.breakdownSection}>
+          <strong>Correction Units</strong>
+          <div>
+            <li>Correction insulin: {backendCalculation.breakdown.correction_insulin} units</li>
+          </div>
+        </li>
+      )}
+
+      <li className={styles.summaryLine}>
+        <strong>Final Total: {backendCalculation.total} units</strong>
+      </li>
+    </ul>
+  </div>
+)}
+
+
 
 <button
   className={styles.submitButton}

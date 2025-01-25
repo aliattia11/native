@@ -420,7 +420,9 @@ def submit_meal(current_user):
             'nutrition': nutrition,
             'bloodSugar': data.get('bloodSugar'),
             'intendedInsulin': data.get('intendedInsulin'),
+            'intendedInsulinType': data.get('intendedInsulinType'),
             'suggestedInsulin': insulin_calc['total'],
+            'suggestedInsulinType': data.get('suggestedInsulinType', 'regular_insulin'),
             'insulinCalculation': insulin_calc['breakdown'],
             'notes': data.get('notes', ''),
             'activeConditions': active_conditions,
@@ -476,7 +478,9 @@ def get_meals(current_user):
                 "nutrition": meal['nutrition'],
                 "bloodSugar": meal.get('bloodSugar'),
                 "intendedInsulin": meal.get('intendedInsulin'),
+                "intendedInsulinType": meal.get('intendedInsulinType'),  # Add this line
                 "suggestedInsulin": meal['suggestedInsulin'],
+                "suggestedInsulinType": meal.get('suggestedInsulinType', 'regular_insulin'),  # Add this line
                 "insulinCalculation": meal.get('insulinCalculation', {}),
                 "notes": meal.get('notes', ''),
                 "timestamp": meal['timestamp'].isoformat()
