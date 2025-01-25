@@ -7,7 +7,8 @@ import FoodSection from './FoodSection';
 import {
   calculateTotalNutrients,
   calculateInsulinDose,
-  getHealthFactorsBreakdown  // Add this import
+  getHealthFactorsBreakdown,
+  compareCalculations  // Add this import
 } from './EnhancedPatientConstantsCalc';
 import { MEAL_TYPES, ACTIVITY_LEVELS } from '../constants';
 import styles from './MealInput.module.css';
@@ -53,6 +54,8 @@ const MealInput = () => {
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [healthFactors, setHealthFactors] = useState(null);
+  const [backendCalculation, setBackendCalculation] = useState(null);
+
 
 const calculateInsulinNeeds = useCallback(() => {
   if (selectedFoods.length === 0 || !patientConstants) {
@@ -248,24 +251,65 @@ const handleSubmit = async (e) => {
         absorptionFactor: insulinBreakdown.absorptionFactor,
         timeOfDayFactor: insulinBreakdown.timeOfDayFactor,
         mealTimingFactor: insulinBreakdown.mealTimingFactor,
-        activityImpact: insulinBreakdown.activityImpact
+        activityImpact: insulinBreakdown.activityImpact,
+        healthMultiplier: healthFactors.healthMultiplier
       }
     };
 
     // Debug log to see what's being sent
     console.log('Submitting meal data:', JSON.stringify(mealData, null, 2));
+console.log('Frontend calculation:', {
+  suggestedInsulin,
+  insulinBreakdown,
+  foodItems: selectedFoods,
+  bloodSugar,
+  activities,
+  calculationFactors: {
+    absorptionFactor: insulinBreakdown.absorptionFactor,
+    timeOfDayFactor: insulinBreakdown.timeOfDayFactor,
+    mealTimingFactor: insulinBreakdown.mealTimingFactor,
+    activityImpact: insulinBreakdown.activityImpact,
+    healthMultiplier: healthFactors.healthMultiplier
+  }
+});
 
-    const response = await axios.post(
-      'http://localhost:5000/api/meal',
-      mealData,
-      {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      }
-    );
+   const response = await axios.post(
+  'http://localhost:5000/api/meal',
+  mealData,
+  {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    }
+  }
+);
 
+setBackendCalculation(response.data.insulinCalculation);
+
+const differences = compareCalculations(insulinBreakdown, response.data.insulinCalculation);
+
+setMessage(
+  <div>
+    <p>Meal logged successfully!</p>
+    <div className={styles.calculationComparison}>
+      <h4>Calculation Comparison:</h4>
+      <div>
+        <h5>Frontend Calculation:</h5>
+        <pre>{JSON.stringify(insulinBreakdown, null, 2)}</pre>
+      </div>
+      <div>
+        <h5>Backend Calculation:</h5>
+        <pre>{JSON.stringify(response.data.insulinCalculation, null, 2)}</pre>
+      </div>
+      {Object.keys(differences).length > 0 && (
+        <div className={styles.calculationDifference}>
+          <h5>Differences Detected:</h5>
+          <pre>{JSON.stringify(differences, null, 2)}</pre>
+        </div>
+      )}
+    </div>
+  </div>
+);
     console.log('Server response:', response.data);
     setMessage('Meal logged successfully!');
 

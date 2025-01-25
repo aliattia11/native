@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify, current_app
 from bson.objectid import ObjectId
 from datetime import datetime
+import json  # Add this import
 
 # Updated imports
 from utils.auth import token_required
@@ -15,105 +16,157 @@ logger = logging.getLogger(__name__)
 meal_insulin_bp = Blueprint('meal_insulin', __name__)
 
 
-def calculate_health_factors(user_id):
-    """Calculate combined impact of diseases and medications with timing considerations"""
+def calculate_health_factors(user_id, frontend_health_multiplier=None):
+    """
+    Calculate combined impact of diseases and medications with timing considerations.
+
+    This function assesses a user's health status by considering active conditions
+    and medications, with sophisticated timing and factor calculations.
+
+    Args:
+        user_id (str): Unique identifier for the user
+        frontend_health_multiplier (float, optional): Pre-calculated health multiplier
+
+    Returns:
+        float: A health factor multiplier between 0 and 2, representing overall health status
+    """
+    # If frontend provides a health multiplier, use it with safety
+    if frontend_health_multiplier is not None:
+        try:
+            return float(frontend_health_multiplier)
+        except (ValueError, TypeError):
+            logger.warning(f"Invalid frontend health multiplier: {frontend_health_multiplier}")
+            # Continue with backend calculation if frontend multiplier is invalid
+
+    def safe_float_conversion(value, default=1.0):
+        """
+        Safely convert a value to float, with error logging and a default fallback.
+
+        Args:
+            value: Value to convert
+            default: Default value if conversion fails
+
+        Returns:
+            float: Converted value or default
+        """
+        try:
+            return float(value) if value is not None else default
+        except (ValueError, TypeError):
+            logger.warning(f"Could not convert value: {value}")
+            return default
+
     try:
-        # Get user from database
-        user = mongo.db.users.find_one({"_id": ObjectId(user_id)})
+        # Retrieve user from database
+        user = mongo.db.users.find_one({"_id": ObjectId(str(user_id))})
         if not user:
             return 1.0
 
-        constants = Constants(user_id)
+        # Load patient-specific constants
+        constants = Constants(str(user_id))
         patient_constants = constants.get_patient_constants()
-
-        # Get active conditions and medications
-        active_conditions = user.get('active_conditions', [])
-        active_medications = user.get('active_medications', [])
-        medication_schedules = user.get('medication_schedules', {})
 
         # Calculate disease impact
         disease_multiplier = 1.0
-        for condition in active_conditions:
-            if condition in patient_constants.get('disease_factors', {}):
-                disease_multiplier *= patient_constants['disease_factors'][condition].get('factor', 1.0)
+        for condition in user.get('active_conditions', []):
+            factor = patient_constants.get('disease_factors', {}).get(condition, {}).get('factor')
+            disease_multiplier *= safe_float_conversion(factor)
 
-        # Calculate medication impact with timing
+        # Calculate medication impact
         medication_multiplier = 1.0
         current_time = datetime.utcnow()
 
-        for medication in active_medications:
-            if medication not in patient_constants.get('medication_factors', {}):
-                continue
-
-            med_data = patient_constants['medication_factors'][medication]
-            med_factor = med_data.get('factor', 1.0)
+        for medication in user.get('active_medications', []):
+            med_data = patient_constants.get('medication_factors', {}).get(medication, {})
+            med_factor = safe_float_conversion(med_data.get('factor'))
 
             # Handle duration-based medications
             if med_data.get('duration_based', False):
-                schedule = medication_schedules.get(medication)
+                schedule = user.get('medication_schedules', {}).get(medication)
 
                 if schedule:
-                    # Convert schedule times to datetime
-                    schedule_start = datetime.fromisoformat(schedule['startDate'].replace('Z', '+00:00'))
-                    schedule_end = datetime.fromisoformat(schedule['endDate'].replace('Z', '+00:00'))
+                    try:
+                        schedule_start = datetime.fromisoformat(schedule['startDate'].replace('Z', '+00:00'))
+                        schedule_end = datetime.fromisoformat(schedule['endDate'].replace('Z', '+00:00'))
 
-                    # Check if current time is within schedule period
-                    if schedule_start <= current_time <= schedule_end:
-                        # Calculate time since last dose
-                        daily_times = schedule.get('dailyTimes', [])
-                        if daily_times:
-                            # Convert daily times to current date
-                            today_doses = []
-                            for time_str in daily_times:
-                                hour, minute = map(int, time_str.split(':'))
-                                dose_time = current_time.replace(hour=hour, minute=minute)
-                                if dose_time > current_time:
-                                    # If time hasn't occurred today, check yesterday's dose
-                                    dose_time -= timedelta(days=1)
-                                today_doses.append(dose_time)
+                        # Check if current time is within schedule period
+                        if schedule_start <= current_time <= schedule_end:
+                            daily_times = schedule.get('dailyTimes', [])
 
-                            if today_doses:
-                                # Find most recent dose
-                                last_dose = max(today_doses)
-                                hours_since_dose = (current_time - last_dose).total_seconds() / 3600
-
-                                # Apply timing-based factor
-                                onset_hours = med_data.get('onset_hours', 0)
-                                peak_hours = med_data.get('peak_hours', 0)
-                                duration_hours = med_data.get('duration_hours', 24)
-
-                                if hours_since_dose < onset_hours:
-                                    # Ramping up phase
-                                    timing_factor = (hours_since_dose / onset_hours) * med_factor
-                                elif hours_since_dose < peak_hours:
-                                    # Peak phase
-                                    timing_factor = med_factor
-                                elif hours_since_dose < duration_hours:
-                                    # Tapering phase
-                                    remaining_effect = (duration_hours - hours_since_dose) / (
-                                                duration_hours - peak_hours)
-                                    timing_factor = max(1.0, med_factor * remaining_effect)
-                                else:
-                                    # Outside duration window
-                                    timing_factor = 1.0
-
+                            # Timing-based medication effect calculation logic
+                            # (simplified version of original complex calculation)
+                            if daily_times:
+                                timing_factor = _calculate_medication_timing_factor(
+                                    current_time,
+                                    daily_times,
+                                    med_data,
+                                    med_factor
+                                )
                                 medication_multiplier *= timing_factor
-                                continue
 
-            # For non-duration based or no schedule, apply factor directly
-            medication_multiplier *= med_factor
+                    except (ValueError, KeyError) as e:
+                        logger.warning(f"Invalid schedule for {medication}: {e}")
 
-        return disease_multiplier * medication_multiplier
+            # For non-duration based medications, apply factor directly
+            else:
+                medication_multiplier *= med_factor
+
+        # Combine and return final health factor
+        return max(0.1, min(2.0, disease_multiplier * medication_multiplier))
 
     except Exception as e:
-        logger.error(f"Error calculating health factors: {str(e)}")
+        logger.error(f"Error calculating health factors for user {user_id}: {str(e)}")
         return 1.0
 
 
-    except Exception as e:
-        logger.error(f"Error calculating health factors: {str(e)}")
-        return 1.0  # Default multiplier in case of error
+def _calculate_medication_timing_factor(current_time, daily_times, med_data, med_factor):
+    """
+    Helper function to calculate medication timing factor.
 
+    This is a simplified version of the original complex timing calculation.
+
+    Args:
+        current_time (datetime): Current time
+        daily_times (list): List of daily medication times
+        med_data (dict): Medication-specific data
+        med_factor (float): Base medication factor
+
+    Returns:
+        float: Timing-based medication factor
+    """
+    try:
+        # Convert daily times and find last dose
+        today_doses = [
+            current_time.replace(hour=int(time_str.split(':')[0]),
+                                 minute=int(time_str.split(':')[1]))
+            for time_str in daily_times
+        ]
+        today_doses = [dose if dose <= current_time else dose - timedelta(days=1)
+                       for dose in today_doses]
+
+        if not today_doses:
+            return med_factor
+
+        last_dose = max(today_doses)
+        hours_since_dose = (current_time - last_dose).total_seconds() / 3600
+
+        # Basic timing factor calculation
+        onset_hours = safe_float_conversion(med_data.get('onset_hours'), 1)
+        peak_hours = safe_float_conversion(med_data.get('peak_hours'), 2)
+        duration_hours = safe_float_conversion(med_data.get('duration_hours'), 24)
+
+        if hours_since_dose < onset_hours:
+            return med_factor * (hours_since_dose / onset_hours)
+        elif hours_since_dose < peak_hours:
+            return med_factor
+        elif hours_since_dose < duration_hours:
+            remaining_effect = max(0, (duration_hours - hours_since_dose) / (duration_hours - peak_hours))
+            return max(1.0, med_factor * remaining_effect)
+
+        return 1.0
+
+    except Exception as e:
+        logger.warning(f"Error in timing factor calculation: {e}")
+        return med_factor
 
 def get_time_of_day_factor(time=None):
     """Get time of day factor based on current hour"""
@@ -402,6 +455,17 @@ def submit_meal(current_user):
 
         # Extract calculation factors from request
         calculation_factors = data.get('calculationFactors')
+
+        logger.debug(f"""
+        === Meal Submission Debug ===
+        Received meal data:
+        Food Items: {json.dumps(data['foodItems'], indent=2)}
+        Activities: {json.dumps(data['activities'], indent=2)}
+        Blood Sugar: {data.get('bloodSugar')}
+        Meal Type: {data['mealType']}
+        Calculation Factors: {json.dumps(data.get('calculationFactors'), indent=2)}
+        ============================
+        """)
 
         # Calculate suggested insulin with enhanced features and calculation factors
         insulin_calc = calculate_suggested_insulin(

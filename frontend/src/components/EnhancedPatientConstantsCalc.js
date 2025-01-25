@@ -456,3 +456,28 @@ export const calculateInsulinNeeds = (selectedFoods, bloodSugar, activities, pat
     throw new Error('Error calculating insulin needs: ' + error.message);
   }
 };
+
+export const compareCalculations = (frontend, backend) => {
+  const differences = {};
+  const tolerance = 0.01; // 1% difference tolerance
+
+  const compareValues = (key, frontVal, backVal) => {
+    const diff = Math.abs((frontVal - backVal) / backVal);
+    if (diff > tolerance) {
+      differences[key] = {
+        frontend: frontVal,
+        backend: backVal,
+        percentDiff: (diff * 100).toFixed(2) + '%'
+      };
+    }
+  };
+
+  // Compare all numeric values
+  for (const key in frontend) {
+    if (typeof frontend[key] === 'number' && backend[key] !== undefined) {
+      compareValues(key, frontend[key], backend[key]);
+    }
+  }
+
+  return differences;
+};

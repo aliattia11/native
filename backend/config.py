@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 # Specifically set PyMongo logging to WARNING level
 logging.getLogger('pymongo').setLevel(logging.WARNING)
 logging.getLogger('mongodb').setLevel(logging.WARNING)
+logging.getLogger('meal_insulin').setLevel(logging.DEBUG)
 
 # Initialize MongoDB
 mongo = PyMongo()
