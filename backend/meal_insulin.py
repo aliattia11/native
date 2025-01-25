@@ -220,26 +220,45 @@ def calculate_meal_nutrition(food_items):
 
         # Extract portion information from the new structure
         portion_data = food.get('portion', {})
-        amount = portion_data.get('amount', 1)
-        unit = portion_data.get('unit', 'serving')
-        measurement_type = portion_data.get('measurement_type', 'volume')
         details = food.get('details', {})
+        measurement_type = portion_data.get('measurement_type', 'volume')
 
-        # Convert to standard units using Constants class methods
-        standard_amount = constants.convert_to_standard(amount, unit)
-        if standard_amount is None:
-            continue
+        # Handle weight-based measurements
+        if measurement_type == 'weight':
+            amount = portion_data.get('amount', 1)
+            unit = portion_data.get('unit', 'g')
 
-        # Calculate ratio based on serving size
-        serving_size = details.get('serving_size', {})
-        base_amount = constants.convert_to_standard(
-            serving_size.get('amount', 1),
-            serving_size.get('unit', 'serving')
-        )
-        if base_amount is None or base_amount == 0:
-            continue
+            # Get serving size in weight units
+            serving_size = details.get('serving_size', {})
+            base_w_amount = serving_size.get('w_amount', 200)  # Default to 200g if not specified
+            base_w_unit = serving_size.get('w_unit', 'g')
 
-        ratio = standard_amount / base_amount
+            # Convert both to grams for comparison
+            portion_in_grams = constants.convert_to_standard(amount, unit)
+            base_in_grams = constants.convert_to_standard(base_w_amount, base_w_unit)
+
+            if base_in_grams and base_in_grams > 0:
+                ratio = portion_in_grams / base_in_grams
+            else:
+                continue
+
+        else:  # Handle volume-based measurements
+            amount = portion_data.get('amount', 1)
+            unit = portion_data.get('unit', 'serving')
+
+            # Get serving size
+            serving_size = details.get('serving_size', {})
+            base_amount = constants.convert_to_standard(
+                serving_size.get('amount', 1),
+                serving_size.get('unit', 'serving')
+            )
+
+            # Convert to standard units
+            standard_amount = constants.convert_to_standard(amount, unit)
+            if standard_amount is None or base_amount is None or base_amount == 0:
+                continue
+
+            ratio = standard_amount / base_amount
 
         # Calculate nutrition values using the ratio
         carbs = details.get('carbs', 0) * ratio
@@ -275,7 +294,7 @@ def calculate_meal_nutrition(food_items):
     }
 
 
-def calculate_suggested_insulin(user_id, nutrition, activities, blood_glucose=None, meal_type='normal'):
+def calculate_suggested_insulin(user_id, nutrition, activities, blood_glucose=None, meal_type='normal', calculation_factors=None):
     # Initialize Constants with patient ID
     constants = Constants(user_id)
     patient_constants = constants.get_patient_constants()
@@ -293,14 +312,20 @@ def calculate_suggested_insulin(user_id, nutrition, activities, blood_glucose=No
     fat_contribution = (nutrition['fat'] * fat_factor) / insulin_to_carb_ratio
     base_insulin = carb_insulin + protein_contribution + fat_contribution
 
-    # Get adjustment factors
-    absorption_factor = nutrition.get('absorption_factor', 1.0)
-    meal_timing_factor = get_meal_timing_factor(meal_type)
-    time_factor = get_time_of_day_factor()
-    activity_coefficient = calculate_activity_impact(activities)
+    # Get adjustment factors, using provided factors if available
+    if calculation_factors:
+        absorption_factor = calculation_factors.get('absorptionFactor', nutrition.get('absorption_factor', 1.0))
+        time_factor = calculation_factors.get('timeOfDayFactor', get_time_of_day_factor())
+        meal_timing_factor = calculation_factors.get('mealTimingFactor', get_meal_timing_factor(meal_type))
+        activity_coefficient = calculation_factors.get('activityImpact', calculate_activity_impact(activities))
+    else:
+        absorption_factor = nutrition.get('absorption_factor', 1.0)
+        meal_timing_factor = get_meal_timing_factor(meal_type)
+        time_factor = get_time_of_day_factor()
+        activity_coefficient = calculate_activity_impact(activities)
 
     # Calculate adjusted insulin
-    adjusted_insulin = base_insulin * absorption_factor * meal_timing_factor * time_factor * (1 + activity_coefficient)
+    adjusted_insulin = base_insulin * absorption_factor * meal_timing_factor * time_factor * activity_coefficient
 
     # Calculate correction insulin if needed
     correction_insulin = 0
@@ -375,19 +400,27 @@ def submit_meal(current_user):
         # Calculate nutrition with new portion system
         nutrition = calculate_meal_nutrition(data['foodItems'])
 
-        # Calculate suggested insulin with enhanced features
+        # Extract calculation factors from request
+        calculation_factors = data.get('calculationFactors')
+
+        # Calculate suggested insulin with enhanced features and calculation factors
         insulin_calc = calculate_suggested_insulin(
             str(current_user['_id']),
             nutrition,
             data['activities'],
             data.get('bloodSugar'),
-            data['mealType']
+            data['mealType'],
+            calculation_factors
         )
 
         # Get active conditions and medications for the meal record
         user = mongo.db.users.find_one({"_id": current_user['_id']})
         active_conditions = user.get('active_conditions', [])
         active_medications = user.get('active_medications', [])
+
+        # Add logging to debug calculations
+        logger.debug(f"Frontend calculation factors: {calculation_factors}")
+        logger.debug(f"Backend insulin calculation: {insulin_calc}")
 
         # Prepare meal document with health factors
         meal_doc = {
@@ -402,9 +435,10 @@ def submit_meal(current_user):
             'suggestedInsulin': insulin_calc['total'],
             'insulinCalculation': insulin_calc['breakdown'],
             'notes': data.get('notes', ''),
-            'activeConditions': active_conditions,  # NEW
-            'activeMedications': active_medications,  # NEW
-            'healthMultiplier': insulin_calc['breakdown']['health_multiplier']  # NEW
+            'activeConditions': active_conditions,
+            'activeMedications': active_medications,
+            'healthMultiplier': insulin_calc['breakdown']['health_multiplier'],
+            'calculationFactors': calculation_factors  # Store the frontend calculation factors
         }
 
         # Insert into database
@@ -415,7 +449,7 @@ def submit_meal(current_user):
             "id": str(result.inserted_id),
             "nutrition": nutrition,
             "insulinCalculation": insulin_calc,
-            "healthFactors": {  # NEW
+            "healthFactors": {
                 "activeConditions": active_conditions,
                 "activeMedications": active_medications,
                 "healthMultiplier": insulin_calc['breakdown']['health_multiplier']
@@ -423,6 +457,7 @@ def submit_meal(current_user):
         }), 201
 
     except Exception as e:
+        logger.error(f"Error in submit_meal: {str(e)}")
         return jsonify({"error": str(e)}), 400
 
 @meal_insulin_bp.route('/api/meals', methods=['GET'])

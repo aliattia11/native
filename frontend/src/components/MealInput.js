@@ -202,15 +202,13 @@ const handleSubmit = async (e) => {
     }
 
     // Create a more structured mealData object with measurement validation
-    const mealData = {
+  const mealData = {
       mealType,
       foodItems: selectedFoods.map(food => {
-        // Determine the measurement type and values
         const isWeightMeasurement = food.portion.activeMeasurement === 'weight';
         const amount = isWeightMeasurement ? food.portion.w_amount : food.portion.amount;
         const unit = isWeightMeasurement ? food.portion.w_unit : food.portion.unit;
 
-        // Validate measurements
         if (!amount || !unit) {
           throw new Error(`Invalid measurement for food item: ${food.name}`);
         }
@@ -218,8 +216,8 @@ const handleSubmit = async (e) => {
         return {
           name: food.name,
           portion: {
-            amount: parseFloat(amount) || 1, // Ensure numeric value with fallback
-            unit: unit || (isWeightMeasurement ? 'g' : 'ml'), // Ensure valid unit with fallback
+            amount: parseFloat(amount) || 1,
+            unit: unit || (isWeightMeasurement ? 'g' : 'ml'),
             measurement_type: food.portion.activeMeasurement || 'weight'
           },
           details: {
@@ -244,7 +242,14 @@ const handleSubmit = async (e) => {
       })),
       bloodSugar: bloodSugar ? parseFloat(bloodSugar) : null,
       intendedInsulin: intendedInsulin ? parseFloat(intendedInsulin) : null,
-      notes
+      notes,
+      // Add the calculation factors here
+      calculationFactors: {
+        absorptionFactor: insulinBreakdown.absorptionFactor,
+        timeOfDayFactor: insulinBreakdown.timeOfDayFactor,
+        mealTimingFactor: insulinBreakdown.mealTimingFactor,
+        activityImpact: insulinBreakdown.activityImpact
+      }
     };
 
     // Debug log to see what's being sent

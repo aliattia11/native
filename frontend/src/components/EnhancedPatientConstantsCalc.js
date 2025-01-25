@@ -248,7 +248,7 @@ export const calculateHealthFactors = (patientConstants) => {
 
 export const calculateActivityImpact = (activities, patientConstants) => {
   if (!activities || !patientConstants?.activity_coefficients) {
-    return 1.0; // No impact if no activities or coefficients
+    return 1.0;
   }
 
   let totalImpact = 1.0;
@@ -273,7 +273,7 @@ export const calculateActivityImpact = (activities, patientConstants) => {
     totalImpact *= weightedImpact;
   });
 
-  return totalImpact;
+  return 1.0 + (totalImpact - 1.0); // Match backend format
 };
 
 export const validateMedicationSchedule = (schedule) => {
