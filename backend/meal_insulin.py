@@ -136,63 +136,38 @@ def get_time_of_day_factor(time=None):
 
 
 def calculate_activity_impact(activities):
-    """
-    Calculate the total activity impact coefficient.
-    Returns a multiplier where:
-    - 1.0 means no impact
-    - >1.0 means increased insulin needs
-    - <1.0 means decreased insulin needs
-    """
+    """Calculate the total activity impact coefficient."""
     if not activities:
         return 1.0  # No activities means no adjustment
 
     total_impact = 1.0
-    logger.debug("Starting activity impact calculation")
 
     for activity in activities:
-        try:
-            level = activity.get('level', 0)
-            duration = activity.get('duration', '0:00')
+        level = activity.get('level', 0)
+        duration = activity.get('duration', 0)
 
-            # Convert string duration (HH:MM) to hours
-            if isinstance(duration, str):
-                try:
-                    hours, minutes = map(int, duration.split(':'))
-                    duration_hours = hours + minutes / 60
-                except (ValueError, TypeError):
-                    logger.warning(f"Invalid duration format: {duration}, defaulting to 0")
-                    duration_hours = 0
-            else:
-                duration_hours = float(duration)
+        # Convert string duration (HH:MM) to hours
+        if isinstance(duration, str):
+            try:
+                hours, minutes = map(int, duration.split(':'))
+                duration = hours + minutes / 60
+            except:
+                duration = 0
 
-            # Get activity coefficient from constants
-            activity_coefficients = current_app.constants.get_constant('activity_coefficients')
-            base_coefficient = activity_coefficients.get(str(level), 1.0)
+        # Get activity coefficient (default to 1.0 for normal activity)
+        activity_coefficients = current_app.constants.get_constant('activity_coefficients')
+        coefficient = activity_coefficients.get(str(level), 1.0)
 
-            # Calculate duration weight (capped at 2 hours)
-            duration_weight = min(duration_hours / 2, 1)
+        # Calculate duration weight (capped at 2 hours)
+        duration_weight = min(duration / 2, 1)
 
-            # Calculate impact for this activity
-            # Important: We directly use the coefficient as it already represents the multiplier
-            activity_impact = 1.0 + ((base_coefficient - 1.0) * duration_weight)
+        # Calculate weighted impact for this activity
+        # For normal activity (coefficient = 1.0), this will result in no change
+        weighted_impact = 1.0 + ((coefficient - 1.0) * duration_weight)
 
-            logger.debug(f"""
-                Activity calculation details:
-                Level: {level}
-                Duration: {duration_hours} hours
-                Base Coefficient: {base_coefficient}
-                Duration Weight: {duration_weight}
-                Activity Impact: {activity_impact}
-            """)
+        # Multiply into total impact
+        total_impact *= weighted_impact
 
-            # Multiply into total impact
-            total_impact *= activity_impact
-
-        except Exception as e:
-            logger.error(f"Error processing activity: {e}")
-            continue
-
-    logger.info(f"Final activity impact: {total_impact}")
     return total_impact
 
 
@@ -322,10 +297,10 @@ def calculate_suggested_insulin(user_id, nutrition, activities, blood_glucose=No
     absorption_factor = nutrition.get('absorption_factor', 1.0)
     meal_timing_factor = get_meal_timing_factor(meal_type)
     time_factor = get_time_of_day_factor()
-    activity_impact = calculate_activity_impact(activities)
+    activity_coefficient = calculate_activity_impact(activities)
 
     # Calculate adjusted insulin
-    adjusted_insulin = base_insulin * absorption_factor * meal_timing_factor * time_factor * activity_impact
+    adjusted_insulin = base_insulin * absorption_factor * meal_timing_factor * time_factor * (1 + activity_coefficient)
 
     # Calculate correction insulin if needed
     correction_insulin = 0
@@ -346,12 +321,11 @@ def calculate_suggested_insulin(user_id, nutrition, activities, blood_glucose=No
             'fat_contribution': round(fat_contribution, 2),
             'base_insulin': round(base_insulin, 2),
             'correction_insulin': round(correction_insulin, 2),
-            'activity_impact': round(activity_impact, 2),
+            'activity_coefficient': round(activity_coefficient, 2),
             'health_multiplier': round(health_multiplier, 2),
-            'absorption_factor': round(absorption_factor, 2),
-            'meal_timing_factor': round(meal_timing_factor, 2),
-            'time_factor': round(time_factor, 2),
-            'adjusted_insulin': round(adjusted_insulin, 2)
+            'absorption_factor': absorption_factor,
+            'meal_timing_factor': meal_timing_factor,
+            'time_factor': time_factor
         }
     }
 

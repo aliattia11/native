@@ -246,14 +246,6 @@ export const calculateHealthFactors = (patientConstants) => {
   return healthMultiplier;
 };
 
-export const parseActivityDuration = (duration) => {
-  if (typeof duration === 'string') {
-    const [hours, minutes] = duration.split(':').map(Number);
-    return hours + (minutes || 0) / 60;
-  }
-  return duration || 0;
-};
-
 export const calculateActivityImpact = (activities, patientConstants) => {
   if (!activities || !patientConstants?.activity_coefficients) {
     return 1.0; // No impact if no activities or coefficients
@@ -262,36 +254,23 @@ export const calculateActivityImpact = (activities, patientConstants) => {
   let totalImpact = 1.0;
 
   activities.forEach(activity => {
-    try {
-      // Get the base coefficient (defaults to 1.0 for normal activity)
-      const coefficient = patientConstants.activity_coefficients[String(activity.level)] || 1.0;
+    // Get the base coefficient (defaults to 1.0 for normal activity)
+    const coefficient = patientConstants.activity_coefficients[activity.level.toString()] || 1.0;
 
-      // Parse duration to hours
-      const duration = typeof activity.duration === 'string'
-        ? parseFloat(activity.duration.split(':')[0]) + (parseFloat(activity.duration.split(':')[1]) || 0) / 60
-        : activity.duration || 0;
+    // Calculate duration in hours
+    const duration = typeof activity.duration === 'string'
+      ? parseFloat(activity.duration.split(':')[0]) + (parseFloat(activity.duration.split(':')[1]) || 0) / 60
+      : activity.duration;
 
-      // Calculate duration weight (capped at 2 hours)
-      const durationWeight = Math.min(duration / 2, 1);
+    // Calculate duration weight (capped at 2 hours)
+    const durationWeight = Math.min(duration / 2, 1);
 
-      // Calculate weighted impact
-      // Changed formula to handle 1.0 as no effect
-      const weightedImpact = coefficient; // Direct coefficient application
+    // Calculate weighted impact
+    // For normal activity (coefficient = 1.0), this will result in no change
+    const weightedImpact = 1.0 + ((coefficient - 1.0) * durationWeight);
 
-      // Multiply into total impact
-      totalImpact *= weightedImpact;
-
-      console.log('Activity Impact Calculation:', {
-        level: activity.level,
-        coefficient,
-        duration,
-        durationWeight,
-        weightedImpact,
-        runningTotal: totalImpact
-      });
-    } catch (error) {
-      console.error('Error calculating activity impact:', error);
-    }
+    // Multiply into total impact
+    totalImpact *= weightedImpact;
   });
 
   return totalImpact;
