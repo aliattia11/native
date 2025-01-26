@@ -385,58 +385,56 @@ return (
           )}
         </div>
 
-        {/* Medications Section */}
-        <div className={styles.constantsSection}>
-          <h3 className={styles.subsectionTitle} onClick={() => toggleSection('medications')}>
-            Medications
-            <span>{expandedSections.medications ? '▼' : '▶'}</span>
-          </h3>
-          {expandedSections.medications && (
-            <div className={styles.constantsWrapper}>
-              {Object.entries(constants.medication_factors || {}).map(([medication, data]) => (
-                <div key={medication} className={styles.medicationGroup}>
-                  <div className={styles.factorHeader}>
-                    <input
-                      type="checkbox"
-                      checked={constants.active_medications?.includes(medication)}
-                      onChange={() => handleActiveMedicationToggle(medication)}
-                    />
-                    <label>{medication.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</label>
-                  </div>
-                  <div className={styles.factorInputs}>
-                    <input
-                      type="number"
-                      value={data.factor}
-                      onChange={(e) => handleMedicationFactorChange(medication, e.target.value)}
-                      step="0.1"
-                      disabled={!constants.active_medications?.includes(medication)}
-                    />
-                    <span className={styles.factorDescription}>
-                      {data.description}
-                      {data.duration_based && (
-                        <span className={styles.durationBased}>
-                          Duration: {data.onset_hours}h onset, {data.peak_hours}h peak, {data.duration_hours}h total
-                        </span>
-                      )}
-                    </span>
-                  </div>
-
-                  {/* Medication Schedule Component */}
-                  {constants.active_medications?.includes(medication) && data.duration_based && (
-                    <MedicationSchedule
-                      medication={medication}
-                      medicationData={data}
-                      patientId={patientId}
-                      onScheduleUpdate={handleMedicationScheduleUpdate}
-                      className={styles.medicationScheduleWrapper}
-                    />
-                  )}
-                </div>
-              ))}
+{/* Medications Section */}
+<div className={styles.constantsSection}>
+  <h3 className={styles.subsectionTitle} onClick={() => toggleSection('medications')}>
+    Medications
+    <span>{expandedSections.medications ? '▼' : '▶'}</span>
+  </h3>
+  {expandedSections.medications && (
+    <div className={styles.constantsWrapper}>
+      {/* Medication Selection Listbox */}
+      <div className={styles.medicationSelector}>
+        <label className={styles.selectorLabel}>Select Medications</label>
+        <div className={styles.multiSelectContainer}>
+          {Object.entries(constants.medication_factors || {}).map(([medication, data]) => (
+            <div key={medication} className={styles.checkboxItem}>
+              <input
+                type="checkbox"
+                id={`med-${medication}`}
+                checked={constants.active_medications?.includes(medication)}
+                onChange={() => handleActiveMedicationToggle(medication)}
+              />
+              <label htmlFor={`med-${medication}`}>
+                {medication.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                <span className={styles.medicationDescription}>{data.description}</span>
+              </label>
             </div>
-          )}
+          ))}
         </div>
+      </div>
 
+      {/* Active Medications Cards */}
+      <div className={styles.activeMedicationsGrid}>
+        {Object.entries(constants.medication_factors || {})
+          .filter(([medication]) => constants.active_medications?.includes(medication))
+          .map(([medication, data]) => (
+            <MedicationSchedule
+              key={medication}
+              medication={medication}
+              medicationData={data}
+              patientId={patientId}
+              onScheduleUpdate={handleMedicationScheduleUpdate}
+              isActive={true}
+              onActiveMedicationToggle={handleActiveMedicationToggle}
+              onMedicationFactorChange={handleMedicationFactorChange}
+              className={styles.medicationCard}
+            />
+          ))}
+      </div>
+    </div>
+  )}
+</div>
         {/* Action Buttons */}
         <div className={styles.buttonGroup}>
           <button

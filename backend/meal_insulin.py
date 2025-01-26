@@ -416,7 +416,14 @@ def submit_meal(current_user):
             'timestamp': datetime.utcnow(),
             'mealType': data['mealType'],
             'foodItems': data['foodItems'],
-            'activities': data['activities'],
+                        'activities': [{
+                'level': activity.get('level'),
+                'duration': activity.get('duration'),
+                'type': activity.get('type'),
+                'impact': activity.get('impact'),
+                'startTime': activity.get('startTime'),
+                'endTime': activity.get('endTime')
+            } for activity in data['activities']],
             'nutrition': nutrition,
             'bloodSugar': data.get('bloodSugar'),
             'intendedInsulin': data.get('intendedInsulin'),
