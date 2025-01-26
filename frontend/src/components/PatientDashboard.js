@@ -9,6 +9,8 @@ import ActivityRecording from './ActivityRecording';
 import ActivityDataTable from './ActivityDataTable';
 import FoodDatabase from './FoodDatabase';
 import PatientConstants from './PatientConstants';
+import InsulinInput from './InsulinInput';
+
 import styles from './PatientDashboard.module.css';
 
 const PatientDashboard = ({ handleLogout }) => {
@@ -119,9 +121,15 @@ const PatientDashboard = ({ handleLogout }) => {
               <h2 className={styles.cardTitle}>Activity Recording</h2>
               <ActivityRecording userType="patient" />
             </div>
+            {/* Add InsulinInput component here */}
+            <div className={styles.dashboardCard}>
+              <h2 className={styles.cardTitle}>Insulin Recording</h2>
+              <InsulinInput isStandalone={true} />
+            </div>
           </div>
         </div>
       )}
+
 
       <div className={styles.quickAccess}>
         <h2 className={styles.cardTitle}>Quick Access</h2>
