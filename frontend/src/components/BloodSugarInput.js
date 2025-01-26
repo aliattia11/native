@@ -62,57 +62,61 @@ const BloodSugarInput = ({
     }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!standalone) return;
+ const handleSubmit = async (e) => {
+  e.preventDefault();
+  if (!standalone) return;
 
-    const error = validateBloodSugar(localValue, unit);
-    if (error) {
-      setStatus({ type: 'error', message: error });
-      return;
+  const error = validateBloodSugar(localValue, unit);
+  if (error) {
+    setStatus({ type: 'error', message: error });
+    return;
+  }
+
+  setIsLoading(true);
+  try {
+    const token = localStorage.getItem('token');
+    const bloodSugarMgdl = unit === 'mmol/L'
+      ? mmolToMgdl(parseFloat(localValue))
+      : parseFloat(localValue);
+
+    const response = await fetch('http://localhost:5000/api/meal', {  // Changed endpoint
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        mealType: 'blood_sugar_only',
+        foodItems: [],
+        activities: [],
+        bloodSugar: bloodSugarMgdl,
+        bloodSugarSource: 'standalone',
+        notes: notes,
+        recordingType: 'standalone_blood_sugar',
+        timestamp: new Date().toISOString()
+      }),
+    });
+
+    if (!response.ok) {
+      const data = await response.json();
+      throw new Error(data.error || 'Failed to record blood sugar');
     }
 
-    setIsLoading(true);
-    try {
-      const token = localStorage.getItem('token');
-      const bloodSugarMgdl = unit === 'mmol/L'
-        ? mmolToMgdl(parseFloat(localValue))
-        : parseFloat(localValue);
+    const result = await response.json();
 
-      const response = await fetch('http://localhost:5000/api/blood-sugar', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          bloodSugar: bloodSugarMgdl,
-          unit: 'mg/dL',
-          notes: notes, // Include notes in the request
-          timestamp: new Date().toISOString()
-        }),
-      });
+    setStatus({ type: 'success', message: 'Blood sugar level recorded successfully' });
+    setLocalValue('');
+    setNotes('');
 
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to record blood sugar');
-      }
+    if (onBloodSugarChange) onBloodSugarChange('');
+    if (onSubmitSuccess) onSubmitSuccess(result);
 
-      const result = await response.json();
-
-      setStatus({ type: 'success', message: 'Blood sugar level recorded successfully' });
-      setLocalValue('');
-      setNotes(''); // Clear notes after successful submission
-
-      if (onBloodSugarChange) onBloodSugarChange('');
-      if (onSubmitSuccess) onSubmitSuccess(result);
-
-    } catch (error) {
-      setStatus({ type: 'error', message: error.message || 'Error recording blood sugar level' });
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  } catch (error) {
+    setStatus({ type: 'error', message: error.message || 'Error recording blood sugar level' });
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   return (
     <div className={`blood-sugar-input ${className}`}>

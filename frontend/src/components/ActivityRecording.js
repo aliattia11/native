@@ -159,10 +159,11 @@ const ActivityRecording = ({
           type: activity.type,
           impact: patientConstants.activity_coefficients[activity.level] || 1.0
         })),
-        notes,
+        notes: notes,
+        recordingType: 'standalone_activity_recording',
         calculationFactors: {
           activityImpact: totalImpact,
-          healthMultiplier: 1.0
+          healthMultiplier: 0.0
         }
       };
 

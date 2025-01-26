@@ -225,7 +225,7 @@ const handleSubmit = async (e) => {
 
     // Create a more structured mealData object with measurement validation
   const mealData = {
-      mealType,
+      mealType, recordingType: 'meal',
       foodItems: selectedFoods.map(food => {
         const isWeightMeasurement = food.portion.activeMeasurement === 'weight';
         const amount = isWeightMeasurement ? food.portion.w_amount : food.portion.amount;

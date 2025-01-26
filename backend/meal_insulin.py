@@ -638,7 +638,6 @@ def submit_blood_sugar(current_user):
     try:
         data = request.json
         blood_sugar = data.get('bloodSugar')
-        notes = data.get('notes', '')  # Get notes from request
 
         if blood_sugar is None:
             return jsonify({"error": "Blood sugar value is required"}), 400
@@ -658,7 +657,7 @@ def submit_blood_sugar(current_user):
                 'absorption_factor': 1.0
             },
             'bloodSugar': blood_sugar,
-            'notes': notes,  # Store notes in the meals collection
+            'notes': data.get('notes', ''),
             'isStandaloneReading': True  # Flag to identify standalone readings
         }
 
