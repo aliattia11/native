@@ -1,180 +1,189 @@
-/* frontend/src/components/InsulinInput/InsulinInput.module.css */
+/* frontend/src/components/InsulinInput.module.css */
+
 .insulinInput {
-  padding: 1rem;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  margin-bottom: 1rem;
+  background-color: #ffffff;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  max-width: 500px;
+  margin: 0 auto;
 }
 
-.inputSection {
-  margin-bottom: 2rem;
+.insulinInput h3 {
+  color: #2c3e50;
+  margin-bottom: 20px;
+  font-size: 1.5rem;
 }
 
 .inputGroup {
-  margin-bottom: 1rem;
+  margin-bottom: 20px;
 }
 
 .inputGroup label {
   display: block;
-  margin-bottom: 0.5rem;
+  margin-bottom: 8px;
+  color: #34495e;
   font-weight: 500;
-  color: #333;
 }
 
 .select {
   width: 100%;
-  padding: 0.5rem;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  background-color: white;
-  font-size: 1rem;
-}
-
-.numberInput {
-  width: 120px;
-  padding: 0.5rem;
-  border: 1px solid #ccc;
+  padding: 10px;
+  border: 1px solid #dcdfe6;
   border-radius: 4px;
   font-size: 1rem;
+  color: #2c3e50;
+  background-color: #fff;
+  transition: border-color 0.2s;
 }
 
+.select:focus {
+  border-color: #3498db;
+  outline: none;
+}
+
+.numberInput,
 .timeInput {
-  padding: 0.5rem;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  font-size: 1rem;
-}
-
-.submitButton {
-  background-color: #007bff;
-  color: white;
-  border: none;
-  padding: 0.5rem 1rem;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 1rem;
   width: 100%;
-}
-
-.submitButton:disabled {
-  background-color: #ccc;
-  cursor: not-allowed;
-}
-
-.submitButton:hover:not(:disabled) {
-  background-color: #0056b3;
-}
-
-.success {
-  color: #28a745;
-  margin: 1rem 0;
-  padding: 0.5rem;
-  background-color: #d4edda;
-  border: 1px solid #c3e6cb;
+  padding: 10px;
+  border: 1px solid #dcdfe6;
   border-radius: 4px;
+  font-size: 1rem;
+  color: #2c3e50;
+}
+
+.numberInput:focus,
+.timeInput:focus {
+  border-color: #3498db;
+  outline: none;
+}
+
+.insulinInfo {
+  background-color: #f8f9fa;
+  border-radius: 4px;
+  padding: 15px;
+  margin-bottom: 20px;
+}
+
+.insulinInfo h4 {
+  color: #2c3e50;
+  margin-bottom: 10px;
+  font-size: 1.1rem;
+}
+
+.timingInfo {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.timingInfo p {
+  margin: 0;
+  color: #34495e;
+  font-size: 0.9rem;
 }
 
 .error {
-  color: #dc3545;
-  margin: 1rem 0;
-  padding: 0.5rem;
-  background-color: #f8d7da;
-  border: 1px solid #f5c6cb;
+  background-color: #fff5f5;
+  color: #e53e3e;
+  padding: 10px;
   border-radius: 4px;
+  margin-bottom: 15px;
+  font-size: 0.9rem;
 }
 
-.insulinDetails {
-  background-color: #f8f9fa;
-  border: 1px solid #e9ecef;
+.success {
+  background-color: #f0fff4;
+  color: #38a169;
+  padding: 10px;
   border-radius: 4px;
-  padding: 1rem;
-  margin: 1rem 0;
+  margin-bottom: 15px;
+  font-size: 0.9rem;
 }
 
-.detailsGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
-}
-
-.detailItem {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.scheduleInfo {
-  background-color: #e9ecef;
+.submitButton {
+  width: 100%;
+  padding: 12px;
+  background-color: #3498db;
+  color: white;
+  border: none;
   border-radius: 4px;
-  padding: 1rem;
-  margin: 1rem 0;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background-color 0.2s;
 }
 
-.scheduleGrid {
-  display: grid;
-  gap: 1rem;
+.submitButton:hover:not(:disabled) {
+  background-color: #2980b9;
 }
 
-.scheduleItem {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.scheduleLabel {
-  font-size: 0.875rem;
-  color: #495057;
-  font-weight: 500;
-}
-
-.scheduleValue {
-  color: #212529;
+.submitButton:disabled {
+  background-color: #95a5a6;
+  cursor: not-allowed;
 }
 
 .recentDoses {
-  margin-top: 2rem;
-  padding-top: 1rem;
+  margin-top: 25px;
+  padding-top: 20px;
   border-top: 1px solid #eee;
+}
+
+.recentDoses h4 {
+  color: #2c3e50;
+  margin-bottom: 15px;
+  font-size: 1.1rem;
 }
 
 .dosesList {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 10px;
 }
 
 .doseItem {
+  display: grid;
+  grid-template-columns: 2fr 1fr 2fr;
+  align-items: center;
+  padding: 10px;
   background-color: #f8f9fa;
-  border: 1px solid #dee2e6;
   border-radius: 4px;
-  padding: 0.75rem;
+  font-size: 0.9rem;
 }
 
-.doseHeader {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 0.25rem;
-}
-
-.doseName {
+.doseType {
+  color: #2c3e50;
   font-weight: 500;
-  color: #495057;
 }
 
 .doseAmount {
-  color: #007bff;
-  font-weight: 500;
+  color: #3498db;
+  font-weight: 600;
+  text-align: center;
 }
 
 .doseTime {
-  font-size: 0.875rem;
-  color: #6c757d;
+  color: #7f8c8d;
+  text-align: right;
+  font-size: 0.8rem;
 }
 
-.noDoses {
-  color: #6c757d;
-  text-align: center;
-  padding: 1rem;
-  background-color: #f8f9fa;
-  border-radius: 4px;
+@media (max-width: 480px) {
+  .insulinInput {
+    padding: 15px;
+  }
+
+  .timingInfo {
+    grid-template-columns: 1fr;
+  }
+
+  .doseItem {
+    grid-template-columns: 1fr;
+    gap: 5px;
+  }
+
+  .doseType,
+  .doseAmount,
+  .doseTime {
+    text-align: left;
+  }
 }

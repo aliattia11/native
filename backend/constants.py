@@ -93,6 +93,63 @@ class ConstantConfig:
 
     # New medication factors
     medication_factors: Dict[str, Dict[str, Any]] = field(default_factory=lambda: {
+        # Rapid Acting Insulins
+        'insulin_lispro': {
+            'factor': 1.0,
+            'description': 'Rapid-acting insulin analogue',
+            'duration_based': True,
+            'onset_hours': 0.25,
+            'peak_hours': 1.5,
+            'duration_hours': 4.5,
+            'type': 'rapid_acting_insulin',
+            'brand_names': ['Humalog', 'Admelog']
+        },
+        'insulin_aspart': {
+            'factor': 1.0,
+            'description': 'Rapid-acting insulin analogue',
+            'duration_based': True,
+            'onset_hours': 0.25,
+            'peak_hours': 1.5,
+            'duration_hours': 4.0,
+            'type': 'rapid_acting_insulin',
+            'brand_names': ['NovoLog', 'Fiasp']
+        },
+        'insulin_glulisine': {
+            'factor': 1.0,
+            'description': 'Rapid-acting insulin analogue',
+            'duration_based': True,
+            'onset_hours': 0.25,
+            'peak_hours': 1.5,
+            'duration_hours': 4.0,
+            'type': 'rapid_acting_insulin',
+            'brand_names': ['Apidra']
+        },
+
+        # Short Acting Insulins
+        'regular_insulin': {
+            'factor': 1.0,
+            'description': 'Short-acting human insulin',
+            'duration_based': True,
+            'onset_hours': 0.5,
+            'peak_hours': 3.0,
+            'duration_hours': 6.0,
+            'type': 'short_acting_insulin',
+            'brand_names': ['Humulin R', 'Novolin R']
+        },
+
+        # Intermediate Acting Insulins
+        'nph_insulin': {
+            'factor': 1.0,
+            'description': 'Intermediate-acting human insulin',
+            'duration_based': True,
+            'onset_hours': 1.5,
+            'peak_hours': 6.0,
+            'duration_hours': 16.0,
+            'type': 'intermediate_acting_insulin',
+            'brand_names': ['Humulin N', 'Novolin N']
+        },
+
+        # Long Acting Insulins
         'insulin_glargine': {
             'factor': 1.0,
             'description': 'Long-acting insulin with 24-hour coverage',
@@ -100,7 +157,8 @@ class ConstantConfig:
             'onset_hours': 2,
             'peak_hours': 4,
             'duration_hours': 24,
-            'type': 'long_acting_insulin'
+            'type': 'long_acting_insulin',
+            'brand_names': ['Lantus', 'Basaglar', 'Toujeo']
         },
         'insulin_detemir': {
             'factor': 1.0,
@@ -109,7 +167,8 @@ class ConstantConfig:
             'onset_hours': 1,
             'peak_hours': 6,
             'duration_hours': 24,
-            'type': 'long_acting_insulin'
+            'type': 'long_acting_insulin',
+            'brand_names': ['Levemir']
         },
         'insulin_degludec': {
             'factor': 1.0,
@@ -118,56 +177,77 @@ class ConstantConfig:
             'onset_hours': 1,
             'peak_hours': 12,
             'duration_hours': 42,
-            'type': 'long_acting_insulin'
+            'type': 'long_acting_insulin',
+            'brand_names': ['Tresiba']
         },
-        'nph_insulin': {
+
+        # Mixed Insulins
+        'nph_regular_70_30': {
             'factor': 1.0,
-            'description': 'Intermediate-acting insulin with pronounced peak',
+            'description': '70% NPH, 30% Regular insulin mixture',
             'duration_based': True,
-            'onset_hours': 1,
-            'peak_hours': 4,
-            'duration_hours': 16,
-            'type': 'long_acting_insulin'
+            'onset_hours': 0.5,
+            'peak_hours': 4.0,
+            'duration_hours': 14.0,
+            'type': 'mixed_insulin',
+            'brand_names': ['Humulin 70/30', 'Novolin 70/30']
         },
+        'nph_regular_50_50': {
+            'factor': 1.0,
+            'description': '50% NPH, 50% Regular insulin mixture',
+            'duration_based': True,
+            'onset_hours': 0.5,
+            'peak_hours': 3.5,
+            'duration_hours': 12.0,
+            'type': 'mixed_insulin',
+            'brand_names': ['Humulin 50/50']
+        },
+
+        # Other Medications
         'injectable_contraceptives': {
-            'factor': 1.3,  # 30% increase in insulin resistance
+            'factor': 1.3,
             'description': 'Injectable contraceptives can significantly increase insulin resistance',
             'duration_based': True,
             'onset_hours': 48,
-            'peak_hours': 168,  # 1 week
-            'duration_hours': 2160  # 90 days for quarterly injections
+            'peak_hours': 168,
+            'duration_hours': 2160,
+            'type': 'hormone'
         },
-        # Keep existing medications...
         'corticosteroids': {
             'factor': 1.4,
             'description': 'Significant increase in insulin resistance',
             'duration_based': True,
             'onset_hours': 4,
             'peak_hours': 8,
-            'duration_hours': 24
+            'duration_hours': 24,
+            'type': 'steroid'
         },
         'oral_contraceptives': {
-            'factor': 1.2,  # 20% increase in insulin resistance
+            'factor': 1.2,
             'description': 'Oral contraceptives may increase insulin resistance',
             'duration_based': True,
             'onset_hours': 24,
             'peak_hours': 72,
-            'duration_hours': 720  # 30 days
+            'duration_hours': 720,
+            'type': 'hormone'
         },
         'beta_blockers': {
             'factor': 1.2,
             'description': 'Moderate increase in insulin resistance',
-            'duration_based': False
+            'duration_based': False,
+            'type': 'cardiovascular'
         },
         'thiazide_diuretics': {
             'factor': 1.1,
             'description': 'Slight increase in insulin resistance',
-            'duration_based': False
+            'duration_based': False,
+            'type': 'cardiovascular'
         },
         'metformin': {
             'factor': 0.9,
             'description': 'Improved insulin sensitivity',
-            'duration_based': False
+            'duration_based': False,
+            'type': 'antidiabetic'
         },
         'thiazolidinediones': {
             'factor': 0.8,
@@ -175,7 +255,8 @@ class ConstantConfig:
             'duration_based': True,
             'onset_hours': 24,
             'peak_hours': 48,
-            'duration_hours': 168  # 1 week
+            'duration_hours': 168,
+            'type': 'antidiabetic'
         }
     })
 class Constants:

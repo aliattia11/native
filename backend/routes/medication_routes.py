@@ -308,3 +308,120 @@ def delete_medication_schedule(current_user, patient_id, schedule_id):
         logger.error(f"Error deleting medication schedule: {str(e)}")
         return jsonify({'message': f'Error deleting medication schedule: {str(e)}'}), 500
 
+
+@medication_routes.route('/api/medication-log/<patient_id>', methods=['POST'])
+@token_required
+@api_error_handler
+def log_medication_dose(current_user, patient_id):
+    try:
+        # Check authorization
+        if current_user.get('user_type') != 'doctor' and str(current_user['_id']) != patient_id:
+            return jsonify({'message': 'Unauthorized access'}), 403
+
+        data = request.json
+        if not data:
+            return jsonify({'message': 'No data provided'}), 400
+
+        # Validate required fields
+        required_fields = ['medication', 'dose', 'scheduled_time']
+        if not all(field in data for field in required_fields):
+            return jsonify({"error": "Missing required fields"}), 400
+
+        try:
+            scheduled_time = datetime.fromisoformat(data['scheduled_time'].replace('Z', '+00:00'))
+        except ValueError as e:
+            return jsonify({"error": "Invalid date format"}), 400
+
+        # Create medication log document
+        log_doc = {
+            'patient_id': patient_id,
+            'medication': data['medication'],
+            'dose': float(data['dose']),
+            'scheduled_time': scheduled_time,
+            'taken_at': datetime.utcnow(),
+            'status': 'taken',
+            'created_at': datetime.utcnow(),
+            'created_by': str(current_user['_id']),
+            'notes': data.get('notes', ''),
+            'is_insulin': data.get('is_insulin', False)
+        }
+
+        # Insert into medication_logs collection
+        result = mongo.db.medication_logs.insert_one(log_doc)
+
+        # If it's insulin, also record in meals collection
+        if data.get('is_insulin', False):
+            meal_doc = {
+                'user_id': patient_id,
+                'timestamp': scheduled_time,
+                'mealType': 'insulin_only',
+                'foodItems': [],
+                'activities': [],
+                'nutrition': {
+                    'calories': 0,
+                    'carbs': 0,
+                    'protein': 0,
+                    'fat': 0,
+                    'absorption_factor': 1.0
+                },
+                'intendedInsulin': float(data['dose']),
+                'intendedInsulinType': data['medication'],
+                'notes': data.get('notes', ''),
+                'medication_log_id': str(result.inserted_id)
+            }
+            mongo.db.meals.insert_one(meal_doc)
+
+        return jsonify({
+            "message": "Medication dose logged successfully",
+            "id": str(result.inserted_id)
+        }), 201
+
+    except Exception as e:
+        logger.error(f"Error logging medication dose: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
+@medication_routes.route('/api/medication-logs/recent', methods=['GET'])
+@token_required
+@api_error_handler
+def get_recent_medication_logs(current_user):
+    try:
+        medication_type = request.args.get('medication_type')
+        limit = int(request.args.get('limit', 3))
+
+        # Build query
+        query = {'patient_id': str(current_user['_id'])}
+        if medication_type == 'insulin':
+            query['is_insulin'] = True
+
+        # Get recent logs
+        logs = list(mongo.db.medication_logs.find(
+            query,
+            {
+                'medication': 1,
+                'dose': 1,
+                'scheduled_time': 1,
+                'taken_at': 1,
+                'notes': 1
+            }
+        ).sort('scheduled_time', -1).limit(limit))
+
+        # Format datetime fields
+        formatted_logs = []
+        for log in logs:
+            formatted_log = {
+                'medication': log['medication'],
+                'dose': log['dose'],
+                'scheduled_time': log['scheduled_time'].isoformat(),
+                'taken_at': log['taken_at'].isoformat(),
+                'notes': log.get('notes', '')
+            }
+            formatted_logs.append(formatted_log)
+
+        return jsonify({
+            "logs": formatted_logs
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error fetching recent medication logs: {str(e)}")
+        return jsonify({"error": str(e)}), 500

@@ -288,6 +288,70 @@
       }
     },
     "medication_factors": {
+      "insulin_lispro": {
+        "factor": 1.0,
+        "description": "Rapid-acting insulin analogue",
+        "duration_based": true,
+        "onset_hours": 0.25,
+        "peak_hours": 1.5,
+        "duration_hours": 4.5,
+        "type": "rapid_acting_insulin",
+        "brand_names": [
+          "Humalog",
+          "Admelog"
+        ]
+      },
+      "insulin_aspart": {
+        "factor": 1.0,
+        "description": "Rapid-acting insulin analogue",
+        "duration_based": true,
+        "onset_hours": 0.25,
+        "peak_hours": 1.5,
+        "duration_hours": 4.0,
+        "type": "rapid_acting_insulin",
+        "brand_names": [
+          "NovoLog",
+          "Fiasp"
+        ]
+      },
+      "insulin_glulisine": {
+        "factor": 1.0,
+        "description": "Rapid-acting insulin analogue",
+        "duration_based": true,
+        "onset_hours": 0.25,
+        "peak_hours": 1.5,
+        "duration_hours": 4.0,
+        "type": "rapid_acting_insulin",
+        "brand_names": [
+          "Apidra"
+        ]
+      },
+      "regular_insulin": {
+        "factor": 1.0,
+        "description": "Short-acting human insulin",
+        "duration_based": true,
+        "onset_hours": 0.5,
+        "peak_hours": 3.0,
+        "duration_hours": 6.0,
+        "type": "short_acting_insulin",
+        "brand_names": [
+          "Humulin R",
+          "Novolin R"
+        ]
+      },
+      "nph_insulin": {
+        "factor": 1.0,
+        "description": "Intermediate-acting human insulin",
+        "duration_based": true,
+        "onset_hours": 1.5,
+        "peak_hours": 6.0,
+        "duration_hours": 16.0,
+        "type": "intermediate_acting_insulin",
+        "brand_names": [
+          "Humulin N",
+          "Novolin N"
+        ]
+      },
       "insulin_glargine": {
         "factor": 1.0,
         "description": "Long-acting insulin with 24-hour coverage",
@@ -295,7 +359,12 @@
         "onset_hours": 2,
         "peak_hours": 4,
         "duration_hours": 24,
-        "type": "long_acting_insulin"
+        "type": "long_acting_insulin",
+        "brand_names": [
+          "Lantus",
+          "Basaglar",
+          "Toujeo"
+        ]
       },
       "insulin_detemir": {
         "factor": 1.0,
@@ -304,7 +373,10 @@
         "onset_hours": 1,
         "peak_hours": 6,
         "duration_hours": 24,
-        "type": "long_acting_insulin"
+        "type": "long_acting_insulin",
+        "brand_names": [
+          "Levemir"
+        ]
       },
       "insulin_degludec": {
         "factor": 1.0,
@@ -313,16 +385,35 @@
         "onset_hours": 1,
         "peak_hours": 12,
         "duration_hours": 42,
-        "type": "long_acting_insulin"
+        "type": "long_acting_insulin",
+        "brand_names": [
+          "Tresiba"
+        ]
       },
-      "nph_insulin": {
+      "nph_regular_70_30": {
         "factor": 1.0,
-        "description": "Intermediate-acting insulin with pronounced peak",
+        "description": "70% NPH, 30% Regular insulin mixture",
         "duration_based": true,
-        "onset_hours": 1,
-        "peak_hours": 4,
-        "duration_hours": 16,
-        "type": "long_acting_insulin"
+        "onset_hours": 0.5,
+        "peak_hours": 4.0,
+        "duration_hours": 14.0,
+        "type": "mixed_insulin",
+        "brand_names": [
+          "Humulin 70/30",
+          "Novolin 70/30"
+        ]
+      },
+      "nph_regular_50_50": {
+        "factor": 1.0,
+        "description": "50% NPH, 50% Regular insulin mixture",
+        "duration_based": true,
+        "onset_hours": 0.5,
+        "peak_hours": 3.5,
+        "duration_hours": 12.0,
+        "type": "mixed_insulin",
+        "brand_names": [
+          "Humulin 50/50"
+        ]
       },
       "injectable_contraceptives": {
         "factor": 1.3,
@@ -330,7 +421,8 @@
         "duration_based": true,
         "onset_hours": 48,
         "peak_hours": 168,
-        "duration_hours": 2160
+        "duration_hours": 2160,
+        "type": "hormone"
       },
       "corticosteroids": {
         "factor": 1.4,
@@ -338,7 +430,8 @@
         "duration_based": true,
         "onset_hours": 4,
         "peak_hours": 8,
-        "duration_hours": 24
+        "duration_hours": 24,
+        "type": "steroid"
       },
       "oral_contraceptives": {
         "factor": 1.2,
@@ -346,22 +439,26 @@
         "duration_based": true,
         "onset_hours": 24,
         "peak_hours": 72,
-        "duration_hours": 720
+        "duration_hours": 720,
+        "type": "hormone"
       },
       "beta_blockers": {
         "factor": 1.2,
         "description": "Moderate increase in insulin resistance",
-        "duration_based": false
+        "duration_based": false,
+        "type": "cardiovascular"
       },
       "thiazide_diuretics": {
         "factor": 1.1,
         "description": "Slight increase in insulin resistance",
-        "duration_based": false
+        "duration_based": false,
+        "type": "cardiovascular"
       },
       "metformin": {
         "factor": 0.9,
         "description": "Improved insulin sensitivity",
-        "duration_based": false
+        "duration_based": false,
+        "type": "antidiabetic"
       },
       "thiazolidinediones": {
         "factor": 0.8,
@@ -369,7 +466,8 @@
         "duration_based": true,
         "onset_hours": 24,
         "peak_hours": 48,
-        "duration_hours": 168
+        "duration_hours": 168,
+        "type": "antidiabetic"
       }
     },
     "insulin_types": {
