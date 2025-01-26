@@ -2,45 +2,71 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { FaPlus, FaMinus } from 'react-icons/fa';
 import styles from './ActivityRecording.module.css';
-import DurationInput from './DurationInput';
+import { ACTIVITY_LEVELS } from '../constants';
+import { useConstants } from '../contexts/ConstantsContext';
 
-const activityLevels = [
-  { value: -2, label: 'Sleep' },
-  { value: -1, label: 'Very Low Activity' },
-  { value: 0, label: 'Normal Activity' },
-  { value: 1, label: 'High Activity' },
-  { value: 2, label: 'Vigorous Activity' }
-];
+const ActivityItem = ({ item, updateItem, removeItem, activityCoefficients }) => {
+  const getActivityImpact = (level) => {
+    const impact = activityCoefficients?.[level];
+    if (impact === undefined) return 1.0;
+    return impact;
+  };
 
-const ActivityItem = ({ item, updateItem, removeItem, isExpected }) => {
-  const handleDurationChange = (newDuration) => {
-    const newItem = { ...item, duration: newDuration };
-    updateItem(newItem);
+  const impact = getActivityImpact(item.level);
+  const impactPercentage = ((impact - 1) * 100).toFixed(1);
+  const impactText = impact !== 1
+    ? `Effect over 2 hours: ${impactPercentage}% ${impact > 1 ? 'increase' : 'decrease'} in insulin needs`
+    : 'No effect on insulin needs';
+
+  const calculateDurationString = (startTime, endTime) => {
+    if (!startTime || !endTime) return "0:00";
+    const start = new Date(startTime);
+    const end = new Date(endTime);
+    const durationInMinutes = Math.max(0, (end - start) / (1000 * 60));
+    const hours = Math.floor(durationInMinutes / 60);
+    const minutes = Math.round(durationInMinutes % 60);
+    return `${hours}:${minutes.toString().padStart(2, '0')}`;
   };
 
   return (
     <div className={styles.activityItem}>
-      <select
-        className={styles.select}
-        value={item.level}
-        onChange={(e) => updateItem({ ...item, level: parseInt(e.target.value) })}
-        required
-      >
-        {activityLevels.map(level => (
-          <option key={level.value} value={level.value}>{level.label}</option>
-        ))}
-      </select>
-      <DurationInput
-        value={item.duration}
-        onChange={handleDurationChange}
-      />
-      <input
-        type="datetime-local"
-        className={styles.input}
-        value={isExpected ? item.expectedTime : item.completedTime}
-        onChange={(e) => updateItem({ ...item, [isExpected ? 'expectedTime' : 'completedTime']: e.target.value })}
-        required
-      />
+      <div className={styles.activitySelect}>
+        <select
+          className={styles.select}
+          value={item.level}
+          onChange={(e) => updateItem({ ...item, level: parseInt(e.target.value) })}
+          required
+        >
+          {ACTIVITY_LEVELS.map(level => (
+            <option key={level.value} value={level.value}>
+              {level.label}
+            </option>
+          ))}
+        </select>
+        <span className={styles.impactIndicator}>{impactText}</span>
+      </div>
+      <div className={styles.timeInputs}>
+        <input
+          type="datetime-local"
+          className={styles.timeInput}
+          value={item.startTime}
+          onChange={(e) => updateItem({ ...item, startTime: e.target.value })}
+          required
+          placeholder="Start Time"
+        />
+        <input
+          type="datetime-local"
+          className={styles.timeInput}
+          value={item.endTime}
+          onChange={(e) => updateItem({ ...item, endTime: e.target.value })}
+          required
+          placeholder="End Time"
+          min={item.startTime}
+        />
+      </div>
+      <div className={styles.durationDisplay}>
+        Duration: {calculateDurationString(item.startTime, item.endTime)}
+      </div>
       <button className={styles.iconButton} type="button" onClick={removeItem}>
         <FaMinus />
       </button>
@@ -48,139 +74,240 @@ const ActivityItem = ({ item, updateItem, removeItem, isExpected }) => {
   );
 };
 
-const ActivityRecordingComponent = ({ userType, patientId }) => {
-  const [expectedActivities, setExpectedActivities] = useState([]);
-  const [completedActivities, setCompletedActivities] = useState([]);
-  const [activityHistory, setActivityHistory] = useState([]);
-  const [message, setMessage] = useState('');
+const ActivityRecording = ({
+  standalone = true,
+  onActivityUpdate,
+  initialActivities = []
+}) => {
+  const { patientConstants, loading, error } = useConstants();
+  const [activities, setActivities] = useState(initialActivities);
+  const [notes, setNotes] = useState('');
+  const [status, setStatus] = useState({ type: '', message: '' });
+  const [isLoading, setIsLoading] = useState(false);
+
+  const calculateDurationString = (startTime, endTime) => {
+    if (!startTime || !endTime) return "0:00";
+    const start = new Date(startTime);
+    const end = new Date(endTime);
+    const durationInMinutes = Math.max(0, (end - start) / (1000 * 60));
+    const hours = Math.floor(durationInMinutes / 60);
+    const minutes = Math.round(durationInMinutes % 60);
+    return `${hours}:${minutes.toString().padStart(2, '0')}`;
+  };
+
+  const calculateDurationInHours = (startTime, endTime) => {
+    if (!startTime || !endTime) return 0;
+    const start = new Date(startTime);
+    const end = new Date(endTime);
+    return Math.max(0, (end - start) / (1000 * 60 * 60));
+  };
+
+  const calculateTotalImpact = (activitiesList) => {
+    if (!activitiesList.length || !patientConstants?.activity_coefficients) return 1.0;
+
+    return activitiesList.reduce((total, activity) => {
+      const coefficient = patientConstants.activity_coefficients[activity.level] || 1.0;
+      const duration = calculateDurationInHours(activity.startTime, activity.endTime);
+
+      const durationWeight = Math.min(duration / 2, 1);
+      const weightedImpact = 1.0 + ((coefficient - 1.0) * durationWeight);
+
+      return total * weightedImpact;
+    }, 1.0);
+  };
 
   useEffect(() => {
-    if (userType === 'doctor' && patientId) {
-      fetchPatientActivityHistory(patientId);
-    } else if (userType === 'patient') {
-      fetchUserActivityHistory();
+    if (!standalone && onActivityUpdate && patientConstants) {
+      const expectedActivities = activities.filter(a => a.type === 'expected');
+      const totalImpact = calculateTotalImpact(expectedActivities);
+      onActivityUpdate(expectedActivities.map(activity => ({
+        ...activity,
+        impact: patientConstants.activity_coefficients[activity.level] || 1.0,
+        duration: calculateDurationString(activity.startTime, activity.endTime)
+      })), totalImpact);
     }
-  }, [userType, patientId]);
+  }, [activities, standalone, onActivityUpdate, patientConstants]);
 
-  const fetchUserActivityHistory = async () => {
-    try {
-      const response = await axios.get('http://localhost:5000/api/activity-history', {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
-      setActivityHistory(response.data);
-    } catch (error) {
-      console.error('Error fetching activity history:', error);
-      setMessage('Failed to fetch activity history.');
-    }
-  };
-
-  const fetchPatientActivityHistory = async (patientId) => {
-    try {
-      const response = await axios.get(`http://localhost:5000/api/patient/${patientId}/activity-history`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
-      setActivityHistory(response.data);
-    } catch (error) {
-      console.error('Error fetching patient activity history:', error);
-      setMessage('Failed to fetch patient activity history.');
-    }
-  };
-
-  const addExpectedActivity = () => {
-    const currentDate = new Date().toISOString().slice(0, 16);
-    setExpectedActivities([...expectedActivities, { level: 0, duration: 0, expectedTime: currentDate }]);
-  };
-
-  const addCompletedActivity = () => {
-    const currentDate = new Date().toISOString().slice(0, 16);
-    setCompletedActivities([...completedActivities, { level: 0, duration: 0, completedTime: currentDate }]);
-  };
-
-  const updateExpectedActivity = (index, updatedActivity) => {
-    const newActivities = [...expectedActivities];
-    newActivities[index] = updatedActivity;
-    setExpectedActivities(newActivities);
-  };
-
-  const updateCompletedActivity = (index, updatedActivity) => {
-    const newActivities = [...completedActivities];
-    newActivities[index] = updatedActivity;
-    setCompletedActivities(newActivities);
-  };
-
-  const removeExpectedActivity = (index) => {
-    setExpectedActivities(expectedActivities.filter((_, i) => i !== index));
-  };
-
-  const removeCompletedActivity = (index) => {
-    setCompletedActivities(completedActivities.filter((_, i) => i !== index));
+  const addActivity = (type) => {
+    const currentTime = new Date().toISOString().slice(0, 16);
+    setActivities([...activities, {
+      level: 0,
+      startTime: currentTime,
+      endTime: currentTime,
+      type
+    }]);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setMessage('Submitting activities...');
+    if (!standalone) return;
+
+    setIsLoading(true);
     try {
-      const response = await axios.post('http://localhost:5000/api/record-activities', {
-        expectedActivities,
-        completedActivities
-      }, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
+      const token = localStorage.getItem('token');
+      const totalImpact = calculateTotalImpact(activities);
+
+      const mealData = {
+        timestamp: new Date().toISOString(),
+        mealType: 'activity_only',
+        foodItems: [],
+        activities: activities.map(activity => ({
+          level: activity.level,
+          startTime: activity.startTime,
+          endTime: activity.endTime,
+          duration: calculateDurationString(activity.startTime, activity.endTime),
+          type: activity.type,
+          impact: patientConstants.activity_coefficients[activity.level] || 1.0
+        })),
+        notes,
+        calculationFactors: {
+          activityImpact: totalImpact,
+          healthMultiplier: 1.0
         }
+      };
+
+      const response = await axios.post(
+        'http://localhost:5000/api/meal',
+        mealData,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      setStatus({
+        type: 'success',
+        message: 'Activities recorded successfully!'
       });
-      console.log('Response:', response.data);
-      setMessage('Activities recorded successfully!');
-      setExpectedActivities([]);
-      setCompletedActivities([]);
-      fetchUserActivityHistory();
+      setActivities([]);
+      setNotes('');
+
     } catch (error) {
-      console.error('Error submitting activities:', error.response || error);
-      setMessage(`Error: ${error.response?.data?.message || error.message}`);
+      console.error('Error submitting activities:', error);
+      setStatus({
+        type: 'error',
+        message: error.response?.data?.message || 'Error recording activities'
+      });
+    } finally {
+      setIsLoading(false);
     }
   };
 
+  if (loading) {
+    return <div className={styles.loading}>Loading activity settings...</div>;
+  }
+
+  if (error) {
+    return <div className={styles.error}>Error loading activity settings: {error}</div>;
+  }
+
+  const totalImpact = calculateTotalImpact(activities);
+  const totalImpactText = totalImpact !== 1
+    ? `Total Impact: ${((totalImpact - 1) * 100).toFixed(1)}% ${totalImpact > 1 ? 'increase' : 'decrease'}`
+    : 'No overall impact';
+
   return (
-    <div className={styles.container}>
-      <h2 className={styles.title}>Activity Recording</h2>
-      {userType === 'patient' && (
-        <form onSubmit={handleSubmit} className={styles.form}>
-          <div className={styles.formGroup}>
-            <h3 className={styles.subtitle}>Expected Activities:</h3>
-            {expectedActivities.map((activity, index) => (
+    <div className={standalone ? styles.standaloneContainer : styles.inlineContainer}>
+      {standalone && <h2 className={styles.title}>Record Activities</h2>}
+
+      <form onSubmit={handleSubmit} className={styles.form}>
+        <div className={styles.activitiesList}>
+          <h3 className={styles.subtitle}>Expected Activities</h3>
+          {activities
+            .filter(activity => activity.type === 'expected')
+            .map((activity, index) => (
               <ActivityItem
                 key={index}
                 item={activity}
-                updateItem={(updatedActivity) => updateExpectedActivity(index, updatedActivity)}
-                removeItem={() => removeExpectedActivity(index)}
-                isExpected={true}
+                updateItem={(updatedActivity) => {
+                  const newActivities = [...activities];
+                  const realIndex = activities.findIndex(a => a === activity);
+                  newActivities[realIndex] = updatedActivity;
+                  setActivities(newActivities);
+                }}
+                removeItem={() => setActivities(activities.filter(a => a !== activity))}
+                activityCoefficients={patientConstants.activity_coefficients}
               />
             ))}
-            <button type="button" onClick={addExpectedActivity} className={styles.addButton}>
-              <FaPlus /> Add Expected Activity
-            </button>
-          </div>
-          <div className={styles.formGroup}>
-            <h3 className={styles.subtitle}>Completed Activities:</h3>
-            {completedActivities.map((activity, index) => (
-              <ActivityItem
-                key={index}
-                item={activity}
-                updateItem={(updatedActivity) => updateCompletedActivity(index, updatedActivity)}
-                removeItem={() => removeCompletedActivity(index)}
-                isExpected={false}
-              />
-            ))}
-            <button type="button" onClick={addCompletedActivity} className={styles.addButton}>
+          <button
+            type="button"
+            onClick={() => addActivity('expected')}
+            className={styles.addButton}
+            disabled={isLoading}
+          >
+            <FaPlus /> Add Expected Activity
+          </button>
+        </div>
+
+        {standalone && (
+          <div className={styles.activitiesList}>
+            <h3 className={styles.subtitle}>Completed Activities</h3>
+            {activities
+              .filter(activity => activity.type === 'completed')
+              .map((activity, index) => (
+                <ActivityItem
+                  key={index}
+                  item={activity}
+                  updateItem={(updatedActivity) => {
+                    const newActivities = [...activities];
+                    const realIndex = activities.findIndex(a => a === activity);
+                    newActivities[realIndex] = updatedActivity;
+                    setActivities(newActivities);
+                  }}
+                  removeItem={() => setActivities(activities.filter(a => a !== activity))}
+                  activityCoefficients={patientConstants.activity_coefficients}
+                />
+              ))}
+            <button
+              type="button"
+              onClick={() => addActivity('completed')}
+              className={styles.addButton}
+              disabled={isLoading}
+            >
               <FaPlus /> Add Completed Activity
             </button>
           </div>
-          <button type="submit" className={styles.submitButton}>Record Activities</button>
-        </form>
+        )}
+
+        {activities.length > 0 && (
+          <div className={styles.impactSummary}>
+            {totalImpactText}
+          </div>
+        )}
+
+        {standalone && (
+          <div className={styles.notesSection}>
+            <label htmlFor="notes">Notes:</label>
+            <textarea
+              id="notes"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Add any notes about your activities..."
+              disabled={isLoading}
+            />
+          </div>
+        )}
+
+        {standalone && (
+          <button
+            type="submit"
+            className={styles.submitButton}
+            disabled={isLoading}
+          >
+            {isLoading ? 'Recording...' : 'Record Activities'}
+          </button>
+        )}
+      </form>
+
+      {status.message && (
+        <div className={`${styles.message} ${styles[status.type]}`}>
+          {status.message}
+        </div>
       )}
-      {message && <p className={styles.message}>{message}</p>}
     </div>
   );
 };
 
-export default ActivityRecordingComponent;
+export default ActivityRecording;

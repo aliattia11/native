@@ -105,3 +105,24 @@
   color: #2e7c67;
   border: 1px solid #b7eb8f;
 }
+.blood-sugar-input .notes-input {
+  width: 100%;
+  min-height: 80px;
+  padding: 8px;
+  margin-top: 5px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.blood-sugar-input .notes-input:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 2px rgba(0,123,255,0.25);
+}
+
+.blood-sugar-input .notes-input:disabled {
+  background-color: #f5f5f5;
+  cursor: not-allowed;
+}

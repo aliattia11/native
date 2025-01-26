@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import MealInput from './MealInput';
 import MealHistory from './MealHistory';
 import BloodSugarInput from './BloodSugarInput';
-import BloodSugarTable from './BloodSugarTable';
+import BloodSugarVisualization from './BloodSugarVisualization';
 import BloodSugarChart from './Charts/BloodSugarChart';
 import BloodGlucoseAnalytics from './Charts/BloodGlucoseAnalytics';
 import ActivityRecording from './ActivityRecording';
@@ -45,7 +45,6 @@ const PatientDashboard = ({ handleLogout }) => {
 
     initDashboard();
 
-    // Cleanup function
     return () => {
       mounted = false;
     };
@@ -66,8 +65,8 @@ const PatientDashboard = ({ handleLogout }) => {
         return <FoodDatabase key="food-database" />;
       case 'mealHistory':
         return <MealHistory key="meal-history" />;
-      case 'bloodSugarTable':
-        return <BloodSugarTable key="blood-sugar-table" />;
+      case 'BloodSugarVisualization':
+        return <BloodSugarVisualization key="blood-sugar-visualization" />;
       case 'BloodGlucoseAnalytics':
         return <BloodGlucoseAnalytics key="blood-glucose-analytics" />;
       case 'bloodSugarChart':
@@ -81,7 +80,6 @@ const PatientDashboard = ({ handleLogout }) => {
     }
   }, [activeComponent, isLoading]);
 
-  // Handler for component switching
   const handleComponentChange = useCallback((componentName) => {
     setActiveComponent(componentName);
   }, []);
@@ -101,24 +99,29 @@ const PatientDashboard = ({ handleLogout }) => {
         </button>
       </header>
 
-      <div className={styles.dashboardGrid}>
-        {!isLoading && (
-          <>
-            <div className={styles.dashboardCard}>
-              <h2 className={styles.cardTitle}>Blood Sugar Input</h2>
-              <BloodSugarInput />
-            </div>
+      {!isLoading && (
+        <div className={styles.twoColumnLayout}>
+          {/* Left Column */}
+          <div className={styles.leftColumn}>
             <div className={styles.dashboardCard}>
               <h2 className={styles.cardTitle}>Meal Input</h2>
               <MealInput />
+            </div>
+          </div>
+
+          {/* Right Column */}
+          <div className={styles.rightColumn}>
+            <div className={styles.dashboardCard}>
+              <h2 className={styles.cardTitle}>Blood Glucose Input</h2>
+              <BloodSugarInput />
             </div>
             <div className={styles.dashboardCard}>
               <h2 className={styles.cardTitle}>Activity Recording</h2>
               <ActivityRecording userType="patient" />
             </div>
-          </>
-        )}
-      </div>
+          </div>
+        </div>
+      )}
 
       <div className={styles.quickAccess}>
         <h2 className={styles.cardTitle}>Quick Access</h2>
@@ -128,9 +131,9 @@ const PatientDashboard = ({ handleLogout }) => {
             { name: 'PatientConstants', label: 'Patient Constants' },
             { name: 'FoodDatabase', label: 'Meal Management' },
             { name: 'mealHistory', label: 'Meal History' },
-            { name: 'bloodSugarTable', label: 'Blood Sugar Table' },
+            { name: 'BloodSugarVisualization', label: 'Blood Glucose Visualization' },
             { name: 'BloodGlucoseAnalytics', label: 'Blood Glucose Analytics' },
-            { name: 'bloodSugarChart', label: 'Blood Sugar Chart' },
+            { name: 'bloodSugarChart', label: 'Blood Glucose Chart' },
             { name: 'ActivityDataTable', label: 'Activity Data Table' }
           ].map(({ name, label }) => (
             <button

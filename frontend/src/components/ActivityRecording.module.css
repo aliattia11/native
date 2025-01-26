@@ -1,138 +1,254 @@
-/* ActivityRecording.module.css */
-
-.container {
-  max-width: 100%;
+.standaloneContainer {
+  max-width: 800px;
   margin: 0 auto;
   padding: 20px;
-  font-family: Arial, sans-serif;
-  box-sizing: border-box;
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.inlineContainer {
+  width: 100%;
+  padding: 10px 0;
 }
 
 .title {
-  font-size: 1.8rem;
-  text-align: center;
-  color: #333;
   margin-bottom: 20px;
+  color: #333;
+  font-size: 1.5rem;
 }
 
 .form {
   display: flex;
   flex-direction: column;
+  gap: 20px;
 }
 
-.formGroup {
-  margin-bottom: 20px;
-}
-
-.subtitle {
-  font-size: 1.4rem;
-  margin-bottom: 10px;
-  color: #555;
+.activitiesList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .activityItem {
   display: flex;
   flex-direction: column;
-  margin-bottom: 10px;
+  gap: 8px;
+  padding: 12px;
+  background-color: #f5f5f5;
+  border-radius: 4px;
 }
 
-.select, .input {
+.activitySelect {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.select {
   padding: 8px;
-  font-size: 1rem;
-  margin-bottom: 10px;
-  border: 1px solid #ccc;
-  border-radius: 5px;
-  width: 100%;
-  box-sizing: border-box;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background-color: white;
+}
+
+.timeInputs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.timeInput {
+  padding: 6px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.durationDisplay {
+  font-size: 0.9em;
+  color: #666;
+}
+
+.impactIndicator {
+  font-size: 0.8rem;
+  color: #666;
+  padding-left: 4px;
 }
 
 .iconButton {
-  background: #e74c3c;
-  color: #fff;
+  padding: 8px;
+  background: none;
   border: none;
-  border-radius: 5px;
-  padding: 10px;
-  font-size: 1.2rem;
-  display: flex;
-  justify-content: center;
-  align-items: center;
   cursor: pointer;
-  transition: background 0.3s ease;
-  width: 100%;
-}
-
-.iconButton:hover {
-  background: #c0392b;
+  color: #ff4444;
 }
 
 .addButton {
-  background: #2ecc71;
-  color: white;
-  border: none;
-  padding: 10px;
-  font-size: 1rem;
-  border-radius: 5px;
-  cursor: pointer;
-  transition: background 0.3s ease;
-  width: 100%;
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 5px;
+  padding: 8px 16px;
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-top: 10px;
 }
 
 .addButton:hover {
-  background: #27ae60;
+  background-color: #45a049;
+}
+
+.notesSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.notesSection textarea {
+  width: 100%;
+  min-height: 100px;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  resize: vertical;
 }
 
 .submitButton {
-  background: #3498db;
+  padding: 12px 24px;
+  background-color: #007bff;
   color: white;
   border: none;
-  padding: 15px;
-  font-size: 1.2rem;
-  border-radius: 5px;
+  border-radius: 4px;
   cursor: pointer;
-  transition: background 0.3s ease;
-  width: 100%;
-}
-
-.submitButton:hover {
-  background: #2980b9;
-}
-
-.activityHistory {
+  font-size: 1rem;
   margin-top: 20px;
 }
 
+.submitButton:hover {
+  background-color: #0056b3;
+}
+
+.submitButton:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
+}
+
+.impactSummary {
+  margin: 10px 0;
+  padding: 8px;
+  background-color: #f0f8ff;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  color: #2c5282;
+  border: 1px solid #bee3f8;
+}
+
 .message {
-  font-size: 1rem;
-  color: #e74c3c;
+  margin-top: 16px;
+  padding: 12px;
+  border-radius: 4px;
   text-align: center;
 }
 
-@media (min-width: 768px) {
+.success {
+  background-color: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+/* Continue ActivityRecording.module.css */
+.error {
+  background-color: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+.loading {
+  text-align: center;
+  padding: 20px;
+  color: #666;
+}
+
+.subtitle {
+  margin: 16px 0 8px;
+  color: #444;
+  font-size: 1.1rem;
+  font-weight: 500;
+}
+
+/* Responsive styles */
+@media (max-width: 768px) {
   .activityItem {
-    flex-direction: row;
-    align-items: center;
+    flex-direction: column;
   }
 
-  .select, .input, .iconButton {
-    margin-right: 10px;
-    flex: 1;
-    width: auto;
+  .timeInputs {
+    flex-direction: column;
+  }
+
+  .timeInput {
+    width: 100%;
   }
 
   .iconButton {
-    flex: 0 0 40px;
-  }
-
-  .addButton {
-    flex: 0 0 200px;
     align-self: flex-end;
   }
+}
 
-  .submitButton {
-    flex: 0 0 200px;
-    align-self: center;
-  }
+/* Activity type specific styles */
+.expected {
+  border-left: 3px solid #4CAF50;
+}
+
+.completed {
+  border-left: 3px solid #2196F3;
+}
+
+/* Duration display enhancement */
+.durationDisplay {
+  background-color: #e9ecef;
+  padding: 4px 8px;
+  border-radius: 4px;
+  display: inline-block;
+  margin-top: 4px;
+}
+
+/* Impact indicator enhancement */
+.impactIndicator {
+  background-color: #f8f9fa;
+  padding: 4px 8px;
+  border-radius: 4px;
+  margin-top: 4px;
+}
+
+/* Button states */
+.addButton:disabled,
+.submitButton:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.addButton:disabled:hover,
+.submitButton:disabled:hover {
+  background-color: #cccccc;
+}
+
+/* Form validation styles */
+.timeInput:invalid {
+  border-color: #dc3545;
+}
+
+.timeInput:focus:invalid {
+  box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
+}
+
+.timeInput:valid {
+  border-color: #28a745;
+}
+
+.timeInput:focus:valid {
+  box-shadow: 0 0 0 0.2rem rgba(40, 167, 69, 0.25);
 }

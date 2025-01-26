@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import BloodSugarChart from './Charts/BloodSugarChart';
-import BloodSugarTable from './BloodSugarTable';
+import BloodSugarVisualization from './BloodSugarVisualization';
 import MealHistory from './MealHistory';
 import EnhancedPatientConstantsUI from './EnhancedPatientConstantsUI';
 import ActivityDataTable from './ActivityDataTable';
@@ -146,7 +146,7 @@ const DoctorDashboard = () => {
 
 <BloodGlucoseAnalytics isDoctor={true} patientId={selectedPatient.id} />
                   <BloodSugarChart isDoctor={true} patientId={selectedPatient.id} />
-                  <BloodSugarTable isDoctor={true} patientId={selectedPatient.id} />
+                  <BloodSugarVisualization isDoctor={true} patientId={selectedPatient.id} />
                 </div>
                 <div className={styles.dataHistory}>
                   <MealHistory isDoctor={true} patientId={selectedPatient.id} />

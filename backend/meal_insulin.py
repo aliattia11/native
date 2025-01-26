@@ -630,3 +630,46 @@ def calculate_health_factors(user_id):
     except Exception as e:
         logger.error(f"Error calculating health factors: {str(e)}")
         return 1.0
+
+
+@meal_insulin_bp.route('/api/blood-sugar', methods=['POST'])
+@token_required
+def submit_blood_sugar(current_user):
+    try:
+        data = request.json
+        blood_sugar = data.get('bloodSugar')
+        notes = data.get('notes', '')  # Get notes from request
+
+        if blood_sugar is None:
+            return jsonify({"error": "Blood sugar value is required"}), 400
+
+        # Create a meal document for standalone blood sugar reading
+        meal_doc = {
+            'user_id': str(current_user['_id']),
+            'timestamp': datetime.utcnow(),
+            'mealType': 'blood_sugar_only',  # Special type for standalone readings
+            'foodItems': [],  # Empty as this is just a blood sugar reading
+            'activities': [],
+            'nutrition': {
+                'calories': 0,
+                'carbs': 0,
+                'protein': 0,
+                'fat': 0,
+                'absorption_factor': 1.0
+            },
+            'bloodSugar': blood_sugar,
+            'notes': notes,  # Store notes in the meals collection
+            'isStandaloneReading': True  # Flag to identify standalone readings
+        }
+
+        # Insert into meals collection
+        result = mongo.db.meals.insert_one(meal_doc)
+
+        return jsonify({
+            "message": "Blood sugar level recorded successfully",
+            "id": str(result.inserted_id)
+        }), 201
+
+    except Exception as e:
+        logger.error(f"Error in submit_blood_sugar: {str(e)}")
+        return jsonify({"error": str(e)}), 400
