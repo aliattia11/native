@@ -332,6 +332,7 @@ def calculate_suggested_insulin(user_id, nutrition, activities, blood_glucose=No
         logger.error(f"Error in calculate_suggested_insulin: {str(e)}")
         raise
 
+
 @meal_insulin_bp.route('/api/meal', methods=['POST'])
 @token_required
 def submit_meal(current_user):
@@ -374,7 +375,7 @@ def submit_meal(current_user):
                         "supported_measurements": supported_measurements
                     }), 400
 
-        # Calculate nutrition with new portion system
+        # Calculate nutrition
         nutrition = calculate_meal_nutrition(data['foodItems'])
 
         # Extract calculation factors from request
@@ -391,7 +392,7 @@ def submit_meal(current_user):
         ============================
         """)
 
-        # Calculate suggested insulin with enhanced features and calculation factors
+        # Calculate suggested insulin
         insulin_calc = calculate_suggested_insulin(
             str(current_user['_id']),
             nutrition,
@@ -401,22 +402,18 @@ def submit_meal(current_user):
             calculation_factors
         )
 
-        # Get active conditions and medications for the meal record
+        # Get active conditions and medications
         user = mongo.db.users.find_one({"_id": current_user['_id']})
         active_conditions = user.get('active_conditions', [])
         active_medications = user.get('active_medications', [])
 
-        # Add logging to debug calculations
-        logger.debug(f"Frontend calculation factors: {calculation_factors}")
-        logger.debug(f"Backend insulin calculation: {insulin_calc}")
-
-        # Prepare meal document with health factors
+        # Prepare meal document
         meal_doc = {
             'user_id': str(current_user['_id']),
             'timestamp': datetime.utcnow(),
             'mealType': data['mealType'],
             'foodItems': data['foodItems'],
-                        'activities': [{
+            'activities': [{
                 'level': activity.get('level'),
                 'duration': activity.get('duration'),
                 'type': activity.get('type'),
@@ -435,11 +432,102 @@ def submit_meal(current_user):
             'activeConditions': active_conditions,
             'activeMedications': active_medications,
             'healthMultiplier': insulin_calc['breakdown']['health_multiplier'],
-            'calculationFactors': calculation_factors  # Store the frontend calculation factors
+            'calculationFactors': calculation_factors
         }
 
-        # Insert into database
+        # Insert meal document
         result = mongo.db.meals.insert_one(meal_doc)
+
+        # Handle insulin logging in medication system
+        if data.get('intendedInsulin') and data.get('intendedInsulinType'):
+            current_time = datetime.utcnow()
+
+            # Create medication log entry
+            medication_log = {
+                'patient_id': str(current_user['_id']),
+                'medication': data['intendedInsulinType'],
+                'dose': float(data['intendedInsulin']),
+                'scheduled_time': current_time,
+                'taken_at': current_time,
+                'status': 'taken',
+                'created_at': current_time,
+                'created_by': str(current_user['_id']),
+                'notes': data.get('notes', ''),
+                'is_insulin': True,
+                'meal_id': str(result.inserted_id),
+                'meal_type': data['mealType'],
+                'blood_sugar': data.get('bloodSugar'),
+                'suggested_dose': insulin_calc['total']
+            }
+
+            # Insert medication log
+            log_result = mongo.db.medication_logs.insert_one(medication_log)
+
+            # Format time for schedule
+            time_str = current_time.strftime('%H:%M')
+
+            try:
+                # First, try to find existing schedule
+                existing_schedule = mongo.db.medication_schedules.find_one({
+                    'patient_id': str(current_user['_id']),
+                    'medication': data['intendedInsulinType'],
+                    'endDate': {'$gte': current_time}
+                })
+
+                if existing_schedule:
+                    # Update existing schedule
+                    mongo.db.medication_schedules.update_one(
+                        {'_id': existing_schedule['_id']},
+                        {
+                            '$set': {
+                                'updated_at': current_time,
+                                'last_used': current_time
+                            },
+                            '$addToSet': {
+                                'dailyTimes': time_str
+                            }
+                        }
+                    )
+                    logger.info(f"Updated existing insulin schedule: {existing_schedule['_id']}")
+                else:
+                    # Create new schedule
+                    schedule_doc = {
+                        'patient_id': str(current_user['_id']),
+                        'medication': data['intendedInsulinType'],
+                        'startDate': current_time,
+                        'endDate': current_time + timedelta(days=30),
+                        'dailyTimes': [time_str],
+                        'created_at': current_time,
+                        'updated_at': current_time,
+                        'last_used': current_time,
+                        'created_by': str(current_user['_id']),
+                        'is_insulin': True,
+                        'auto_generated': True,
+                        'status': 'active'
+                    }
+
+                    # Insert new schedule
+                    schedule_result = mongo.db.medication_schedules.insert_one(schedule_doc)
+                    logger.info(f"Created new insulin schedule with ID: {schedule_result.inserted_id}")
+
+                # Update user's active medications if needed
+                if data['intendedInsulinType'] not in user.get('active_medications', []):
+                    mongo.db.users.update_one(
+                        {'_id': current_user['_id']},
+                        {
+                            '$addToSet': {
+                                'active_medications': data['intendedInsulinType']
+                            }
+                        }
+                    )
+                    logger.info(f"Added {data['intendedInsulinType']} to user's active medications")
+
+            except Exception as e:
+                logger.error(f"Error updating medication schedule: {str(e)}")
+                # Continue with meal submission even if schedule update fails
+
+            logger.info(
+                f"Successfully logged insulin dose: {medication_log['dose']} units of {medication_log['medication']}")
 
         return jsonify({
             "message": "Meal logged successfully",

@@ -387,12 +387,24 @@ def log_medication_dose(current_user, patient_id):
 def get_recent_medication_logs(current_user):
     try:
         medication_type = request.args.get('medication_type')
-        limit = int(request.args.get('limit', 3))
+        medication = request.args.get('medication')
+        limit = int(request.args.get('limit', 10))
+        days = int(request.args.get('days', 7))  # Default to last 7 days
+
+        # Calculate date range
+        end_date = datetime.utcnow()
+        start_date = end_date - timedelta(days=days)
 
         # Build query
-        query = {'patient_id': str(current_user['_id'])}
+        query = {
+            'patient_id': str(current_user['_id']),
+            'taken_at': {'$gte': start_date, '$lte': end_date}
+        }
+
         if medication_type == 'insulin':
             query['is_insulin'] = True
+        if medication:
+            query['medication'] = medication
 
         # Get recent logs
         logs = list(mongo.db.medication_logs.find(
@@ -402,11 +414,16 @@ def get_recent_medication_logs(current_user):
                 'dose': 1,
                 'scheduled_time': 1,
                 'taken_at': 1,
-                'notes': 1
+                'notes': 1,
+                'is_insulin': 1,
+                'meal_id': 1,
+                'meal_type': 1,
+                'blood_sugar': 1,
+                'suggested_dose': 1
             }
-        ).sort('scheduled_time', -1).limit(limit))
+        ).sort('taken_at', -1).limit(limit))
 
-        # Format datetime fields
+        # Format logs
         formatted_logs = []
         for log in logs:
             formatted_log = {
@@ -414,14 +431,138 @@ def get_recent_medication_logs(current_user):
                 'dose': log['dose'],
                 'scheduled_time': log['scheduled_time'].isoformat(),
                 'taken_at': log['taken_at'].isoformat(),
-                'notes': log.get('notes', '')
+                'notes': log.get('notes', ''),
+                'is_insulin': log.get('is_insulin', False)
             }
+
+            # Add insulin-specific fields if present
+            if log.get('is_insulin'):
+                formatted_log.update({
+                    'meal_id': str(log.get('meal_id')) if log.get('meal_id') else None,
+                    'meal_type': log.get('meal_type'),
+                    'blood_sugar': log.get('blood_sugar'),
+                    'suggested_dose': log.get('suggested_dose')
+                })
+
             formatted_logs.append(formatted_log)
 
         return jsonify({
-            "logs": formatted_logs
+            "logs": formatted_logs,
+            "pagination": {
+                "total": len(formatted_logs),
+                "limit": limit
+            }
         }), 200
 
     except Exception as e:
         logger.error(f"Error fetching recent medication logs: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
+@medication_routes.route('/api/medication-schedule/<patient_id>', methods=['GET'])
+@token_required
+@api_error_handler
+def get_patient_schedules(current_user, patient_id):
+    if current_user.get('user_type') != 'doctor' and str(current_user['_id']) != patient_id:
+        return jsonify({'message': 'Unauthorized access'}), 403
+
+    try:
+        # Find all active schedules for the patient
+        schedules = list(mongo.db.medication_schedules.find({
+            'patient_id': patient_id,
+            'endDate': {'$gte': datetime.utcnow()}
+        }))
+
+        # Format schedules and add insulin-specific information
+        formatted_schedules = []
+        for schedule in schedules:
+            formatted_schedule = format_schedule(schedule)
+
+            # Add insulin-specific information if it's an insulin schedule
+            if schedule.get('is_insulin'):
+                # Get recent insulin doses
+                recent_doses = list(mongo.db.medication_logs.find({
+                    'patient_id': patient_id,
+                    'medication': schedule['medication'],
+                    'is_insulin': True,
+                    'taken_at': {'$gte': datetime.utcnow() - timedelta(days=7)}
+                }).sort('taken_at', -1).limit(5))
+
+                formatted_schedule['recent_doses'] = [{
+                    'dose': dose['dose'],
+                    'taken_at': dose['taken_at'].isoformat(),
+                    'meal_type': dose.get('meal_type'),
+                    'blood_sugar': dose.get('blood_sugar')
+                } for dose in recent_doses]
+
+            formatted_schedules.append(formatted_schedule)
+
+        return jsonify({'schedules': formatted_schedules}), 200
+
+    except Exception as e:
+        logger.error(f"Error fetching medication schedules: {str(e)}")
+        return jsonify({'message': 'Error fetching medication schedules'}), 500
+
+
+# ... (keep other existing routes and functions) ...
+
+@medication_routes.route('/api/insulin-schedule/summary', methods=['GET'])
+@token_required
+@api_error_handler
+def get_insulin_schedule_summary(current_user):
+    try:
+        # Get date range parameters
+        days = int(request.args.get('days', 7))
+        end_date = datetime.utcnow()
+        start_date = end_date - timedelta(days=days)
+
+        # Get all insulin doses in the date range
+        doses = list(mongo.db.medication_logs.find({
+            'patient_id': str(current_user['_id']),
+            'is_insulin': True,
+            'taken_at': {'$gte': start_date, '$lte': end_date}
+        }).sort('taken_at', 1))
+
+        # Organize doses by medication type and time
+        summary = {}
+        for dose in doses:
+            med_type = dose['medication']
+            if med_type not in summary:
+                summary[med_type] = {
+                    'total_doses': 0,
+                    'avg_dose': 0,
+                    'dose_times': {},
+                    'meal_types': {}
+                }
+
+            time_str = dose['taken_at'].strftime('%H:%M')
+            meal_type = dose.get('meal_type', 'other')
+
+            # Update summary statistics
+            summary[med_type]['total_doses'] += 1
+            summary[med_type]['avg_dose'] = (
+                    (summary[med_type]['avg_dose'] * (summary[med_type]['total_doses'] - 1) +
+                     dose['dose']) / summary[med_type]['total_doses']
+            )
+
+            # Update time distribution
+            if time_str not in summary[med_type]['dose_times']:
+                summary[med_type]['dose_times'][time_str] = 0
+            summary[med_type]['dose_times'][time_str] += 1
+
+            # Update meal type distribution
+            if meal_type not in summary[med_type]['meal_types']:
+                summary[med_type]['meal_types'][meal_type] = 0
+            summary[med_type]['meal_types'][meal_type] += 1
+
+        return jsonify({
+            'summary': summary,
+            'date_range': {
+                'start': start_date.isoformat(),
+                'end': end_date.isoformat()
+            }
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error generating insulin schedule summary: {str(e)}")
         return jsonify({"error": str(e)}), 500

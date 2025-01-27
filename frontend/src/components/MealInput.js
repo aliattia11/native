@@ -177,24 +177,24 @@ const handleActivityUpdate = (newActivities, totalImpact) => {
   // Continue from previous part...
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!patientConstants) {
-      setMessage('Error: Patient constants not loaded');
-      return;
-    }
+  e.preventDefault();
+  if (!patientConstants) {
+    setMessage('Error: Patient constants not loaded');
+    return;
+  }
 
-    if (!mealType) {
-      setMessage('Please select a meal type');
-      return;
-    }
+  if (!mealType) {
+    setMessage('Please select a meal type');
+    return;
+  }
 
-    if (selectedFoods.length === 0) {
-      setMessage('Please add at least one food item');
-      return;
-    }
+  if (selectedFoods.length === 0) {
+    setMessage('Please add at least one food item');
+    return;
+  }
 
-    setIsSubmitting(true);
-    setMessage('Submitting meal...');
+  setIsSubmitting(true);
+  setMessage('Submitting meal...');
 
   try {
     const token = localStorage.getItem('token');
@@ -202,106 +202,128 @@ const handleActivityUpdate = (newActivities, totalImpact) => {
       throw new Error('Authentication token not found');
     }
 
+    // Create meal data object
     const mealData = {
       mealType,
       recordingType: 'meal',
       foodItems: selectedFoods.map(food => {
-          const isWeightMeasurement = food.portion.activeMeasurement === 'weight';
-          const amount = isWeightMeasurement ? food.portion.w_amount : food.portion.amount;
-          const unit = isWeightMeasurement ? food.portion.w_unit : food.portion.unit;
+        const isWeightMeasurement = food.portion.activeMeasurement === 'weight';
+        const amount = isWeightMeasurement ? food.portion.w_amount : food.portion.amount;
+        const unit = isWeightMeasurement ? food.portion.w_unit : food.portion.unit;
 
-          if (!amount || !unit) {
-            throw new Error(`Invalid measurement for food item: ${food.name}`);
-          }
+        if (!amount || !unit) {
+          throw new Error(`Invalid measurement for food item: ${food.name}`);
+        }
 
-          return {
-            name: food.name,
-            portion: {
-              amount: parseFloat(amount) || 1,
-              unit: unit || (isWeightMeasurement ? 'g' : 'ml'),
-              measurement_type: food.portion.activeMeasurement || 'weight'
-            },
-            details: {
-              carbs: parseFloat(food.details.carbs) || 0,
-              protein: parseFloat(food.details.protein) || 0,
-              fat: parseFloat(food.details.fat) || 0,
-              absorption_type: food.details.absorption_type || 'medium',
-              serving_size: {
-                amount: food.details.serving_size?.amount || 1,
-                unit: food.details.serving_size?.unit || 'serving',
-                w_amount: food.details.serving_size?.w_amount,
-                w_unit: food.details.serving_size?.w_unit
-              }
+        return {
+          name: food.name,
+          portion: {
+            amount: parseFloat(amount) || 1,
+            unit: unit || (isWeightMeasurement ? 'g' : 'ml'),
+            measurement_type: food.portion.activeMeasurement || 'weight'
+          },
+          details: {
+            carbs: parseFloat(food.details.carbs) || 0,
+            protein: parseFloat(food.details.protein) || 0,
+            fat: parseFloat(food.details.fat) || 0,
+            absorption_type: food.details.absorption_type || 'medium',
+            serving_size: {
+              amount: food.details.serving_size?.amount || 1,
+              unit: food.details.serving_size?.unit || 'serving',
+              w_amount: food.details.serving_size?.w_amount,
+              w_unit: food.details.serving_size?.w_unit
             }
-          };
-        }),
-        activities: activitiesFromRecording.map(activity => ({
+          }
+        };
+      }),
+      activities: activitiesFromRecording.map(activity => ({
         level: activity.level,
         duration: activity.duration,
         type: activity.type,
         impact: activity.impact,
         startTime: activity.startTime,
         endTime: activity.endTime,
+      })),
+      bloodSugar: bloodSugar ? parseFloat(bloodSugar) : null,
+      bloodSugarSource,
+      intendedInsulin: intendedInsulin ? parseFloat(intendedInsulin) : null,
+      intendedInsulinType,
+      suggestedInsulinType,
+      notes,
+      calculationFactors: {
+        absorptionFactor: insulinBreakdown?.absorptionFactor,
+        timeOfDayFactor: insulinBreakdown?.timeOfDayFactor,
+        mealTimingFactor: insulinBreakdown?.mealTimingFactor,
+        activityImpact: activityImpactFromRecording,
+        healthMultiplier: healthFactors?.healthMultiplier,
+        medications: healthFactors?.medications.map(med => ({
+          name: med.name,
+          factor: med.factor,
+          status: med.status,
+          hoursSinceLastDose: med.hoursSinceLastDose
         })),
-        bloodSugar: bloodSugar ? parseFloat(bloodSugar) : null,
-        bloodSugarSource,
-        intendedInsulin: intendedInsulin ? parseFloat(intendedInsulin) : null,
-        intendedInsulinType,
-        suggestedInsulinType,
-        notes,
-        calculationFactors: {
-          absorptionFactor: insulinBreakdown?.absorptionFactor,
-          timeOfDayFactor: insulinBreakdown?.timeOfDayFactor,
-          mealTimingFactor: insulinBreakdown?.mealTimingFactor,
-          activityImpact: activityImpactFromRecording,
-          healthMultiplier: healthFactors?.healthMultiplier,
-          medications: healthFactors?.medications.map(med => ({
-            name: med.name,
-            factor: med.factor,
-            status: med.status,
-            hoursSinceLastDose: med.hoursSinceLastDose
-          })),
-          conditions: healthFactors?.conditions.map(condition => ({
-            name: condition.name,
-            factor: condition.factor
-          }))
+        conditions: healthFactors?.conditions.map(condition => ({
+          name: condition.name,
+          factor: condition.factor
+        }))
+      }
+    };
+
+    // Add medication scheduling information if insulin is being logged
+    if (intendedInsulin && intendedInsulinType) {
+      mealData.medicationLog = {
+        is_insulin: true,
+        dose: parseFloat(intendedInsulin),
+        medication: intendedInsulinType,
+        scheduled_time: new Date().toISOString(),
+        notes: notes,
+        meal_context: {
+          meal_type: mealType,
+          blood_sugar: bloodSugar ? parseFloat(bloodSugar) : null,
+          suggested_dose: suggestedInsulin ? parseFloat(suggestedInsulin) : null,
         }
       };
-
-      const response = await axios.post(
-        'http://localhost:5000/api/meal',
-        mealData,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-
-      setBackendCalculation(response.data.insulinCalculation);
-      setMessage('Meal logged successfully!');
-
-      // Reset form
-      setMealType('');
-      setSelectedFoods([]);
-      setActivitiesFromRecording([]);
-      setBloodSugar('');
-      setIntendedInsulin('');
-      setSuggestedInsulin('');
-      setInsulinBreakdown(null);
-      setNotes('');
-      setIntendedInsulinType('');
-      setSuggestedInsulinType('regular_insulin');
-
-    } catch (error) {
-      console.error('Error submitting meal:', error);
-      const errorMessage = error.response?.data?.error || error.message;
-      setMessage(`Error: ${errorMessage}`);
-    } finally {
-      setIsSubmitting(false);
     }
-  };
+
+    const response = await axios.post(
+      'http://localhost:5000/api/meal',
+      mealData,
+      {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    setBackendCalculation(response.data.insulinCalculation);
+    setMessage('Meal logged successfully!');
+
+    // Reset form
+    setMealType('');
+    setSelectedFoods([]);
+    setActivitiesFromRecording([]);
+    setBloodSugar('');
+    setIntendedInsulin('');
+    setSuggestedInsulin('');
+    setInsulinBreakdown(null);
+    setNotes('');
+    setIntendedInsulinType('');
+    setSuggestedInsulinType('regular_insulin');
+
+    // Refresh constants to update medication schedules
+    if (intendedInsulin && intendedInsulinType) {
+      await refreshConstants();
+    }
+
+  } catch (error) {
+    console.error('Error submitting meal:', error);
+    const errorMessage = error.response?.data?.error || error.message;
+    setMessage(`Error: ${errorMessage}`);
+  } finally {
+    setIsSubmitting(false);
+  }
+};
 
   if (loading) {
     return <div className={styles.loading}>Loading patient constants...</div>;
