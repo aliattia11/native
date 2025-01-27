@@ -93,63 +93,85 @@ class ConstantConfig:
 
     # New medication factors
     medication_factors: Dict[str, Dict[str, Any]] = field(default_factory=lambda: {
-        # Rapid Acting Insulins
+        # Rapid Acting Insulins (from INSULIN_TYPES)
         'insulin_lispro': {
             'factor': 1.0,
             'description': 'Rapid-acting insulin analogue',
             'duration_based': True,
-            'onset_hours': 0.25,
-            'peak_hours': 1.5,
-            'duration_hours': 4.5,
-            'type': 'rapid_acting_insulin',
+            'onset_hours': 0.25,  # 15 minutes
+            'peak_hours': 1.5,  # 1-2 hours
+            'duration_hours': 4.5,  # 4-5 hours
+            'type': 'rapid_acting',
             'brand_names': ['Humalog', 'Admelog']
         },
         'insulin_aspart': {
             'factor': 1.0,
             'description': 'Rapid-acting insulin analogue',
             'duration_based': True,
-            'onset_hours': 0.25,
-            'peak_hours': 1.5,
-            'duration_hours': 4.0,
-            'type': 'rapid_acting_insulin',
+            'onset_hours': 0.25,  # 15 minutes
+            'peak_hours': 1.5,  # 1-2 hours
+            'duration_hours': 4.0,  # 3-5 hours
+            'type': 'rapid_acting',
             'brand_names': ['NovoLog', 'Fiasp']
         },
         'insulin_glulisine': {
             'factor': 1.0,
             'description': 'Rapid-acting insulin analogue',
             'duration_based': True,
-            'onset_hours': 0.25,
-            'peak_hours': 1.5,
-            'duration_hours': 4.0,
-            'type': 'rapid_acting_insulin',
+            'onset_hours': 0.25,  # 15 minutes
+            'peak_hours': 1.5,  # 1-2 hours
+            'duration_hours': 4.0,  # 4 hours
+            'type': 'rapid_acting',
             'brand_names': ['Apidra']
         },
 
-        # Short Acting Insulins
+        # Short Acting Insulin (from INSULIN_TYPES)
         'regular_insulin': {
             'factor': 1.0,
             'description': 'Short-acting human insulin',
             'duration_based': True,
-            'onset_hours': 0.5,
-            'peak_hours': 3.0,
-            'duration_hours': 6.0,
-            'type': 'short_acting_insulin',
+            'onset_hours': 0.5,  # 30 minutes
+            'peak_hours': 3.0,  # 2-4 hours
+            'duration_hours': 6.0,  # 6-8 hours
+            'type': 'short_acting',
             'brand_names': ['Humulin R', 'Novolin R']
         },
 
-        # Intermediate Acting Insulins
+        # Intermediate Acting Insulin (from INSULIN_TYPES)
         'nph_insulin': {
             'factor': 1.0,
             'description': 'Intermediate-acting human insulin',
             'duration_based': True,
-            'onset_hours': 1.5,
-            'peak_hours': 6.0,
-            'duration_hours': 16.0,
-            'type': 'intermediate_acting_insulin',
+            'onset_hours': 1.5,  # 1-2 hours
+            'peak_hours': 6.0,  # 4-8 hours
+            'duration_hours': 16.0,  # 14-18 hours
+            'type': 'intermediate_acting',
             'brand_names': ['Humulin N', 'Novolin N']
         },
 
-        # Long Acting Insulins
+        # Mixed Insulins (from INSULIN_TYPES)
+        'nph_regular_70_30': {
+            'factor': 1.0,
+            'description': '70% NPH, 30% Regular insulin mixture',
+            'duration_based': True,
+            'onset_hours': 0.5,  # 30 minutes
+            'peak_hours': 4.0,  # 2-6 hours
+            'duration_hours': 14.0,  # 14-16 hours
+            'type': 'mixed',
+            'brand_names': ['Humulin 70/30', 'Novolin 70/30']
+        },
+        'nph_regular_50_50': {
+            'factor': 1.0,
+            'description': '50% NPH, 50% Regular insulin mixture',
+            'duration_based': True,
+            'onset_hours': 0.5,  # 30 minutes
+            'peak_hours': 3.5,  # 2-5 hours
+            'duration_hours': 12.0,  # 10-14 hours
+            'type': 'mixed',
+            'brand_names': ['Humulin 50/50']
+        },
+
+        # Long Acting Insulins (new additions)
         'insulin_glargine': {
             'factor': 1.0,
             'description': 'Long-acting insulin with 24-hour coverage',
@@ -157,7 +179,7 @@ class ConstantConfig:
             'onset_hours': 2,
             'peak_hours': 4,
             'duration_hours': 24,
-            'type': 'long_acting_insulin',
+            'type': 'long_acting',
             'brand_names': ['Lantus', 'Basaglar', 'Toujeo']
         },
         'insulin_detemir': {
@@ -167,7 +189,7 @@ class ConstantConfig:
             'onset_hours': 1,
             'peak_hours': 6,
             'duration_hours': 24,
-            'type': 'long_acting_insulin',
+            'type': 'long_acting',
             'brand_names': ['Levemir']
         },
         'insulin_degludec': {
@@ -177,33 +199,11 @@ class ConstantConfig:
             'onset_hours': 1,
             'peak_hours': 12,
             'duration_hours': 42,
-            'type': 'long_acting_insulin',
+            'type': 'long_acting',
             'brand_names': ['Tresiba']
         },
 
-        # Mixed Insulins
-        'nph_regular_70_30': {
-            'factor': 1.0,
-            'description': '70% NPH, 30% Regular insulin mixture',
-            'duration_based': True,
-            'onset_hours': 0.5,
-            'peak_hours': 4.0,
-            'duration_hours': 14.0,
-            'type': 'mixed_insulin',
-            'brand_names': ['Humulin 70/30', 'Novolin 70/30']
-        },
-        'nph_regular_50_50': {
-            'factor': 1.0,
-            'description': '50% NPH, 50% Regular insulin mixture',
-            'duration_based': True,
-            'onset_hours': 0.5,
-            'peak_hours': 3.5,
-            'duration_hours': 12.0,
-            'type': 'mixed_insulin',
-            'brand_names': ['Humulin 50/50']
-        },
-
-        # Other Medications
+        # Other Medications (keeping existing ones)
         'injectable_contraceptives': {
             'factor': 1.3,
             'description': 'Injectable contraceptives can significantly increase insulin resistance',
@@ -259,6 +259,7 @@ class ConstantConfig:
             'type': 'antidiabetic'
         }
     })
+
 class Constants:
     """Enhanced constants management with dataclass support"""
 
@@ -322,79 +323,7 @@ class Constants:
         {'value': 'italian', 'label': 'Italian Dishes'},
         {'value': 'custom', 'label': 'Custom Foods'}
     ]
-    INSULIN_TYPES = {
-        'rapid_acting': {
-            'insulin_lispro': {
-                'factor': 1.0,
-                'duration_based': True,
-                'onset_hours': 0.25,  # 15 minutes
-                'peak_hours': 1.5,  # 1-2 hours
-                'duration_hours': 4.5,  # 4-5 hours
-                'type': 'rapid_acting',
-                'brand_names': ['Humalog', 'Admelog']
-            },
-            'insulin_aspart': {
-                'factor': 1.0,
-                'duration_based': True,
-                'onset_hours': 0.25,  # 15 minutes
-                'peak_hours': 1.5,  # 1-2 hours
-                'duration_hours': 4.0,  # 3-5 hours
-                'type': 'rapid_acting',
-                'brand_names': ['NovoLog', 'Fiasp']
-            },
-            'insulin_glulisine': {
-                'factor': 1.0,
-                'duration_based': True,
-                'onset_hours': 0.25,  # 15 minutes
-                'peak_hours': 1.5,  # 1-2 hours
-                'duration_hours': 4.0,  # 4 hours
-                'type': 'rapid_acting',
-                'brand_names': ['Apidra']
-            }
-        },
-        'short_acting': {
-            'regular_insulin': {
-                'factor': 1.0,
-                'duration_based': True,
-                'onset_hours': 0.5,  # 30 minutes
-                'peak_hours': 3.0,  # 2-4 hours
-                'duration_hours': 6.0,  # 6-8 hours
-                'type': 'short_acting',
-                'brand_names': ['Humulin R', 'Novolin R']
-            }
-        },
-        'intermediate_acting': {
-            'nph_insulin': {
-                'factor': 1.0,
-                'duration_based': True,
-                'onset_hours': 1.5,  # 1-2 hours
-                'peak_hours': 6.0,  # 4-8 hours
-                'duration_hours': 16.0,  # 14-18 hours
-                'type': 'intermediate_acting',
-                'brand_names': ['Humulin N', 'Novolin N']
-            }
-        },
-        'mixed': {
-            'nph_regular_70_30': {
-                'factor': 1.0,
-                'duration_based': True,
-                'onset_hours': 0.5,  # 30 minutes
-                'peak_hours': 4.0,  # 2-6 hours
-                'duration_hours': 14.0,  # 14-16 hours
-                'type': 'mixed',
-                'brand_names': ['Humulin 70/30', 'Novolin 70/30']
-            },
-            'nph_regular_50_50': {
-                'factor': 1.0,
-                'duration_based': True,
-                'onset_hours': 0.5,  # 30 minutes
-                'peak_hours': 3.5,  # 2-5 hours
-                'duration_hours': 12.0,  # 10-14 hours
-                'type': 'mixed',
-                'brand_names': ['Humulin 50/50']
-            }
-        }
-    }
+
     config = ConstantConfig()
 
     DEFAULT_PATIENT_CONSTANTS = {
@@ -410,7 +339,6 @@ class Constants:
         'time_of_day_factors': config.time_of_day_factors,
         'disease_factors': config.disease_factors,
         'medication_factors': config.medication_factors,
-        'insulin_types': INSULIN_TYPES
     }
 
     def __init__(self, patient_id: Optional[str] = None):
@@ -628,98 +556,87 @@ class Constants:
                 'MEAL_TYPES': cls.MEAL_TYPES,
                 'FOOD_CATEGORIES': cls.FOOD_CATEGORIES,
                 'DEFAULT_PATIENT_CONSTANTS': cls.DEFAULT_PATIENT_CONSTANTS,  # This now contains all the values
-                'INSULIN_TYPES': cls.INSULIN_TYPES
             }
+
     @classmethod
     def export_constants_to_frontend(cls, output_path: str = '../frontend/src/constants/shared_constants.js'):
         """
         Enhanced export of constants to JavaScript, ensuring comprehensive coverage
         """
-        constants = {
-            **cls.get_all_constants(),  # Get all base constants
-            'CONVERSION_UTILS': {
-                'convertToGrams': '''
-                function convertToGrams(amount, unit) {
-                    const volumeMeasurements = SHARED_CONSTANTS.VOLUME_MEASUREMENTS;
-                    const weightMeasurements = SHARED_CONSTANTS.WEIGHT_MEASUREMENTS;
-
-                    if (weightMeasurements[unit]) {
-                        return amount * weightMeasurements[unit].grams;
-                    }
-
-                    if (volumeMeasurements[unit]) {
-                        // For volume, use a default density of 1g/ml for simplicity
-                        return amount * volumeMeasurements[unit].ml;
-                    }
-
-                    // If unit is not found, return the original amount
-                    return amount;
-                }
-                ''',
-                'convertToMl': '''
-                function convertToMl(amount, unit) {
-                    const volumeMeasurements = SHARED_CONSTANTS.VOLUME_MEASUREMENTS;
-                    const weightMeasurements = SHARED_CONSTANTS.WEIGHT_MEASUREMENTS;
-
-                    if (volumeMeasurements[unit]) {
-                        return amount * volumeMeasurements[unit].ml;
-                    }
-
-                    if (weightMeasurements[unit]) {
-                        // For weight, use a default density of 1g/ml for simplicity
-                        return amount * weightMeasurements[unit].grams;
-                    }
-
-                    // If unit is not found, return the original amount
-                    return amount;
-                }
-                '''
-            }
-        }
+        # First get all the base constants
+        constants = cls.get_all_constants()
 
         js_content = f"""// Auto-generated from backend constants - DO NOT EDIT DIRECTLY
-        export const SHARED_CONSTANTS = {json.dumps(constants, indent=2)};
+    export const SHARED_CONSTANTS = {json.dumps(constants, indent=2)};
 
-        // Utility Functions
-        export const convertToGrams = {constants['CONVERSION_UTILS']['convertToGrams']};
-        export const convertToMl = {constants['CONVERSION_UTILS']['convertToMl']};
+    // Utility Functions
+    export const convertToGrams = (amount, unit) => {{
+        const volumeMeasurements = SHARED_CONSTANTS.VOLUME_MEASUREMENTS;
+        const weightMeasurements = SHARED_CONSTANTS.WEIGHT_MEASUREMENTS;
 
-        // Utility function for calculating health factors
-        export const calculateHealthFactors = (diseases, medications) => {{
-            let totalFactor = 1.0;
+        if (weightMeasurements[unit]) {{
+            return amount * weightMeasurements[unit].grams;
+        }}
 
-            // Calculate disease impacts
-            if (diseases && diseases.length > 0) {{
-                diseases.forEach(disease => {{
-                    const diseaseFactor = SHARED_CONSTANTS.DEFAULT_PATIENT_CONSTANTS.disease_factors[disease]?.factor || 1.0;
-                    totalFactor *= diseaseFactor;
-                }});
-            }}
+        if (volumeMeasurements[unit]) {{
+            // For volume, use a default density of 1g/ml for simplicity
+            return amount * volumeMeasurements[unit].ml;
+        }}
 
-            // Calculate medication impacts
-            if (medications && medications.length > 0) {{
-                medications.forEach(med => {{
-                    const medFactor = SHARED_CONSTANTS.DEFAULT_PATIENT_CONSTANTS.medication_factors[med]?.factor || 1.0;
-                    totalFactor *= medFactor;
-                }});
-            }}
+        // If unit is not found, return the original amount
+        return amount;
+    }};
 
-            return totalFactor;
+    export const convertToMl = (amount, unit) => {{
+        const volumeMeasurements = SHARED_CONSTANTS.VOLUME_MEASUREMENTS;
+        const weightMeasurements = SHARED_CONSTANTS.WEIGHT_MEASUREMENTS;
+
+        if (volumeMeasurements[unit]) {{
+            return amount * volumeMeasurements[unit].ml;
+        }}
+
+        if (weightMeasurements[unit]) {{
+            // For weight, use a default density of 1g/ml for simplicity
+            return amount * weightMeasurements[unit].grams;
+        }}
+
+        // If unit is not found, return the original amount
+        return amount;
+    }};
+
+    // Utility function for calculating health factors
+    export const calculateHealthFactors = (diseases, medications) => {{
+        let totalFactor = 1.0;
+
+        // Calculate disease impacts
+        if (diseases && diseases.length > 0) {{
+            diseases.forEach(disease => {{
+                const diseaseFactor = SHARED_CONSTANTS.DEFAULT_PATIENT_CONSTANTS.disease_factors[disease]?.factor || 1.0;
+                totalFactor *= diseaseFactor;
+            }});
+        }}
+
+        // Calculate medication impacts
+        if (medications && medications.length > 0) {{
+            medications.forEach(med => {{
+                const medFactor = SHARED_CONSTANTS.DEFAULT_PATIENT_CONSTANTS.medication_factors[med]?.factor || 1.0;
+                totalFactor *= medFactor;
+            }});
+        }}
+
+        return totalFactor;
+    }};
+export const getInsulinInfo = (insulinName) => {{
+    const medicationFactors = SHARED_CONSTANTS.DEFAULT_PATIENT_CONSTANTS.medication_factors;
+    if (medicationFactors && medicationFactors[insulinName]) {{
+        return {{
+            ...medicationFactors[insulinName],
+            name: insulinName
         }};
-
-        // Utility function for getting insulin information
-        export const getInsulinInfo = (insulinName) => {{
-            for (const category in SHARED_CONSTANTS.INSULIN_TYPES) {{
-                if (SHARED_CONSTANTS.INSULIN_TYPES[category][insulinName]) {{
-                    return {{
-                        ...SHARED_CONSTANTS.INSULIN_TYPES[category][insulinName],
-                        category
-                    }};
-                }}
-            }}
-            return null;
-        }};
-        """
+    }}
+        return null;
+    }};
+    """
 
         frontend_path = Path(output_path)
         frontend_path.parent.mkdir(parents=True, exist_ok=True)

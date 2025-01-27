@@ -1,5 +1,5 @@
 // Auto-generated from backend constants - DO NOT EDIT DIRECTLY
-        export const SHARED_CONSTANTS = {
+    export const SHARED_CONSTANTS = {
   "MEASUREMENT_SYSTEMS": {
     "VOLUME": "volume",
     "WEIGHT": "weight"
@@ -295,7 +295,7 @@
         "onset_hours": 0.25,
         "peak_hours": 1.5,
         "duration_hours": 4.5,
-        "type": "rapid_acting_insulin",
+        "type": "rapid_acting",
         "brand_names": [
           "Humalog",
           "Admelog"
@@ -308,7 +308,7 @@
         "onset_hours": 0.25,
         "peak_hours": 1.5,
         "duration_hours": 4.0,
-        "type": "rapid_acting_insulin",
+        "type": "rapid_acting",
         "brand_names": [
           "NovoLog",
           "Fiasp"
@@ -321,7 +321,7 @@
         "onset_hours": 0.25,
         "peak_hours": 1.5,
         "duration_hours": 4.0,
-        "type": "rapid_acting_insulin",
+        "type": "rapid_acting",
         "brand_names": [
           "Apidra"
         ]
@@ -333,7 +333,7 @@
         "onset_hours": 0.5,
         "peak_hours": 3.0,
         "duration_hours": 6.0,
-        "type": "short_acting_insulin",
+        "type": "short_acting",
         "brand_names": [
           "Humulin R",
           "Novolin R"
@@ -346,10 +346,35 @@
         "onset_hours": 1.5,
         "peak_hours": 6.0,
         "duration_hours": 16.0,
-        "type": "intermediate_acting_insulin",
+        "type": "intermediate_acting",
         "brand_names": [
           "Humulin N",
           "Novolin N"
+        ]
+      },
+      "nph_regular_70_30": {
+        "factor": 1.0,
+        "description": "70% NPH, 30% Regular insulin mixture",
+        "duration_based": true,
+        "onset_hours": 0.5,
+        "peak_hours": 4.0,
+        "duration_hours": 14.0,
+        "type": "mixed",
+        "brand_names": [
+          "Humulin 70/30",
+          "Novolin 70/30"
+        ]
+      },
+      "nph_regular_50_50": {
+        "factor": 1.0,
+        "description": "50% NPH, 50% Regular insulin mixture",
+        "duration_based": true,
+        "onset_hours": 0.5,
+        "peak_hours": 3.5,
+        "duration_hours": 12.0,
+        "type": "mixed",
+        "brand_names": [
+          "Humulin 50/50"
         ]
       },
       "insulin_glargine": {
@@ -359,7 +384,7 @@
         "onset_hours": 2,
         "peak_hours": 4,
         "duration_hours": 24,
-        "type": "long_acting_insulin",
+        "type": "long_acting",
         "brand_names": [
           "Lantus",
           "Basaglar",
@@ -373,7 +398,7 @@
         "onset_hours": 1,
         "peak_hours": 6,
         "duration_hours": 24,
-        "type": "long_acting_insulin",
+        "type": "long_acting",
         "brand_names": [
           "Levemir"
         ]
@@ -385,34 +410,9 @@
         "onset_hours": 1,
         "peak_hours": 12,
         "duration_hours": 42,
-        "type": "long_acting_insulin",
+        "type": "long_acting",
         "brand_names": [
           "Tresiba"
-        ]
-      },
-      "nph_regular_70_30": {
-        "factor": 1.0,
-        "description": "70% NPH, 30% Regular insulin mixture",
-        "duration_based": true,
-        "onset_hours": 0.5,
-        "peak_hours": 4.0,
-        "duration_hours": 14.0,
-        "type": "mixed_insulin",
-        "brand_names": [
-          "Humulin 70/30",
-          "Novolin 70/30"
-        ]
-      },
-      "nph_regular_50_50": {
-        "factor": 1.0,
-        "description": "50% NPH, 50% Regular insulin mixture",
-        "duration_based": true,
-        "onset_hours": 0.5,
-        "peak_hours": 3.5,
-        "duration_hours": 12.0,
-        "type": "mixed_insulin",
-        "brand_names": [
-          "Humulin 50/50"
         ]
       },
       "injectable_contraceptives": {
@@ -469,269 +469,75 @@
         "duration_hours": 168,
         "type": "antidiabetic"
       }
-    },
-    "insulin_types": {
-      "rapid_acting": {
-        "insulin_lispro": {
-          "factor": 1.0,
-          "duration_based": true,
-          "onset_hours": 0.25,
-          "peak_hours": 1.5,
-          "duration_hours": 4.5,
-          "type": "rapid_acting",
-          "brand_names": [
-            "Humalog",
-            "Admelog"
-          ]
-        },
-        "insulin_aspart": {
-          "factor": 1.0,
-          "duration_based": true,
-          "onset_hours": 0.25,
-          "peak_hours": 1.5,
-          "duration_hours": 4.0,
-          "type": "rapid_acting",
-          "brand_names": [
-            "NovoLog",
-            "Fiasp"
-          ]
-        },
-        "insulin_glulisine": {
-          "factor": 1.0,
-          "duration_based": true,
-          "onset_hours": 0.25,
-          "peak_hours": 1.5,
-          "duration_hours": 4.0,
-          "type": "rapid_acting",
-          "brand_names": [
-            "Apidra"
-          ]
-        }
-      },
-      "short_acting": {
-        "regular_insulin": {
-          "factor": 1.0,
-          "duration_based": true,
-          "onset_hours": 0.5,
-          "peak_hours": 3.0,
-          "duration_hours": 6.0,
-          "type": "short_acting",
-          "brand_names": [
-            "Humulin R",
-            "Novolin R"
-          ]
-        }
-      },
-      "intermediate_acting": {
-        "nph_insulin": {
-          "factor": 1.0,
-          "duration_based": true,
-          "onset_hours": 1.5,
-          "peak_hours": 6.0,
-          "duration_hours": 16.0,
-          "type": "intermediate_acting",
-          "brand_names": [
-            "Humulin N",
-            "Novolin N"
-          ]
-        }
-      },
-      "mixed": {
-        "nph_regular_70_30": {
-          "factor": 1.0,
-          "duration_based": true,
-          "onset_hours": 0.5,
-          "peak_hours": 4.0,
-          "duration_hours": 14.0,
-          "type": "mixed",
-          "brand_names": [
-            "Humulin 70/30",
-            "Novolin 70/30"
-          ]
-        },
-        "nph_regular_50_50": {
-          "factor": 1.0,
-          "duration_based": true,
-          "onset_hours": 0.5,
-          "peak_hours": 3.5,
-          "duration_hours": 12.0,
-          "type": "mixed",
-          "brand_names": [
-            "Humulin 50/50"
-          ]
-        }
-      }
     }
-  },
-  "INSULIN_TYPES": {
-    "rapid_acting": {
-      "insulin_lispro": {
-        "factor": 1.0,
-        "duration_based": true,
-        "onset_hours": 0.25,
-        "peak_hours": 1.5,
-        "duration_hours": 4.5,
-        "type": "rapid_acting",
-        "brand_names": [
-          "Humalog",
-          "Admelog"
-        ]
-      },
-      "insulin_aspart": {
-        "factor": 1.0,
-        "duration_based": true,
-        "onset_hours": 0.25,
-        "peak_hours": 1.5,
-        "duration_hours": 4.0,
-        "type": "rapid_acting",
-        "brand_names": [
-          "NovoLog",
-          "Fiasp"
-        ]
-      },
-      "insulin_glulisine": {
-        "factor": 1.0,
-        "duration_based": true,
-        "onset_hours": 0.25,
-        "peak_hours": 1.5,
-        "duration_hours": 4.0,
-        "type": "rapid_acting",
-        "brand_names": [
-          "Apidra"
-        ]
-      }
-    },
-    "short_acting": {
-      "regular_insulin": {
-        "factor": 1.0,
-        "duration_based": true,
-        "onset_hours": 0.5,
-        "peak_hours": 3.0,
-        "duration_hours": 6.0,
-        "type": "short_acting",
-        "brand_names": [
-          "Humulin R",
-          "Novolin R"
-        ]
-      }
-    },
-    "intermediate_acting": {
-      "nph_insulin": {
-        "factor": 1.0,
-        "duration_based": true,
-        "onset_hours": 1.5,
-        "peak_hours": 6.0,
-        "duration_hours": 16.0,
-        "type": "intermediate_acting",
-        "brand_names": [
-          "Humulin N",
-          "Novolin N"
-        ]
-      }
-    },
-    "mixed": {
-      "nph_regular_70_30": {
-        "factor": 1.0,
-        "duration_based": true,
-        "onset_hours": 0.5,
-        "peak_hours": 4.0,
-        "duration_hours": 14.0,
-        "type": "mixed",
-        "brand_names": [
-          "Humulin 70/30",
-          "Novolin 70/30"
-        ]
-      },
-      "nph_regular_50_50": {
-        "factor": 1.0,
-        "duration_based": true,
-        "onset_hours": 0.5,
-        "peak_hours": 3.5,
-        "duration_hours": 12.0,
-        "type": "mixed",
-        "brand_names": [
-          "Humulin 50/50"
-        ]
-      }
-    }
-  },
-  "CONVERSION_UTILS": {
-    "convertToGrams": "\n                function convertToGrams(amount, unit) {\n                    const volumeMeasurements = SHARED_CONSTANTS.VOLUME_MEASUREMENTS;\n                    const weightMeasurements = SHARED_CONSTANTS.WEIGHT_MEASUREMENTS;\n\n                    if (weightMeasurements[unit]) {\n                        return amount * weightMeasurements[unit].grams;\n                    }\n\n                    if (volumeMeasurements[unit]) {\n                        // For volume, use a default density of 1g/ml for simplicity\n                        return amount * volumeMeasurements[unit].ml;\n                    }\n\n                    // If unit is not found, return the original amount\n                    return amount;\n                }\n                ",
-    "convertToMl": "\n                function convertToMl(amount, unit) {\n                    const volumeMeasurements = SHARED_CONSTANTS.VOLUME_MEASUREMENTS;\n                    const weightMeasurements = SHARED_CONSTANTS.WEIGHT_MEASUREMENTS;\n\n                    if (volumeMeasurements[unit]) {\n                        return amount * volumeMeasurements[unit].ml;\n                    }\n\n                    if (weightMeasurements[unit]) {\n                        // For weight, use a default density of 1g/ml for simplicity\n                        return amount * weightMeasurements[unit].grams;\n                    }\n\n                    // If unit is not found, return the original amount\n                    return amount;\n                }\n                "
   }
 };
 
-        // Utility Functions
-        export const convertToGrams = 
-                function convertToGrams(amount, unit) {
-                    const volumeMeasurements = SHARED_CONSTANTS.VOLUME_MEASUREMENTS;
-                    const weightMeasurements = SHARED_CONSTANTS.WEIGHT_MEASUREMENTS;
+    // Utility Functions
+    export const convertToGrams = (amount, unit) => {
+        const volumeMeasurements = SHARED_CONSTANTS.VOLUME_MEASUREMENTS;
+        const weightMeasurements = SHARED_CONSTANTS.WEIGHT_MEASUREMENTS;
 
-                    if (weightMeasurements[unit]) {
-                        return amount * weightMeasurements[unit].grams;
-                    }
+        if (weightMeasurements[unit]) {
+            return amount * weightMeasurements[unit].grams;
+        }
 
-                    if (volumeMeasurements[unit]) {
-                        // For volume, use a default density of 1g/ml for simplicity
-                        return amount * volumeMeasurements[unit].ml;
-                    }
+        if (volumeMeasurements[unit]) {
+            // For volume, use a default density of 1g/ml for simplicity
+            return amount * volumeMeasurements[unit].ml;
+        }
 
-                    // If unit is not found, return the original amount
-                    return amount;
-                }
-                ;
-        export const convertToMl = 
-                function convertToMl(amount, unit) {
-                    const volumeMeasurements = SHARED_CONSTANTS.VOLUME_MEASUREMENTS;
-                    const weightMeasurements = SHARED_CONSTANTS.WEIGHT_MEASUREMENTS;
+        // If unit is not found, return the original amount
+        return amount;
+    };
 
-                    if (volumeMeasurements[unit]) {
-                        return amount * volumeMeasurements[unit].ml;
-                    }
+    export const convertToMl = (amount, unit) => {
+        const volumeMeasurements = SHARED_CONSTANTS.VOLUME_MEASUREMENTS;
+        const weightMeasurements = SHARED_CONSTANTS.WEIGHT_MEASUREMENTS;
 
-                    if (weightMeasurements[unit]) {
-                        // For weight, use a default density of 1g/ml for simplicity
-                        return amount * weightMeasurements[unit].grams;
-                    }
+        if (volumeMeasurements[unit]) {
+            return amount * volumeMeasurements[unit].ml;
+        }
 
-                    // If unit is not found, return the original amount
-                    return amount;
-                }
-                ;
+        if (weightMeasurements[unit]) {
+            // For weight, use a default density of 1g/ml for simplicity
+            return amount * weightMeasurements[unit].grams;
+        }
 
-        // Utility function for calculating health factors
-        export const calculateHealthFactors = (diseases, medications) => {
-            let totalFactor = 1.0;
+        // If unit is not found, return the original amount
+        return amount;
+    };
 
-            // Calculate disease impacts
-            if (diseases && diseases.length > 0) {
-                diseases.forEach(disease => {
-                    const diseaseFactor = SHARED_CONSTANTS.DEFAULT_PATIENT_CONSTANTS.disease_factors[disease]?.factor || 1.0;
-                    totalFactor *= diseaseFactor;
-                });
-            }
+    // Utility function for calculating health factors
+    export const calculateHealthFactors = (diseases, medications) => {
+        let totalFactor = 1.0;
 
-            // Calculate medication impacts
-            if (medications && medications.length > 0) {
-                medications.forEach(med => {
-                    const medFactor = SHARED_CONSTANTS.DEFAULT_PATIENT_CONSTANTS.medication_factors[med]?.factor || 1.0;
-                    totalFactor *= medFactor;
-                });
-            }
+        // Calculate disease impacts
+        if (diseases && diseases.length > 0) {
+            diseases.forEach(disease => {
+                const diseaseFactor = SHARED_CONSTANTS.DEFAULT_PATIENT_CONSTANTS.disease_factors[disease]?.factor || 1.0;
+                totalFactor *= diseaseFactor;
+            });
+        }
 
-            return totalFactor;
+        // Calculate medication impacts
+        if (medications && medications.length > 0) {
+            medications.forEach(med => {
+                const medFactor = SHARED_CONSTANTS.DEFAULT_PATIENT_CONSTANTS.medication_factors[med]?.factor || 1.0;
+                totalFactor *= medFactor;
+            });
+        }
+
+        return totalFactor;
+    };
+export const getInsulinInfo = (insulinName) => {
+    const medicationFactors = SHARED_CONSTANTS.DEFAULT_PATIENT_CONSTANTS.medication_factors;
+    if (medicationFactors && medicationFactors[insulinName]) {
+        return {
+            ...medicationFactors[insulinName],
+            name: insulinName
         };
-
-        // Utility function for getting insulin information
-        export const getInsulinInfo = (insulinName) => {
-            for (const category in SHARED_CONSTANTS.INSULIN_TYPES) {
-                if (SHARED_CONSTANTS.INSULIN_TYPES[category][insulinName]) {
-                    return {
-                        ...SHARED_CONSTANTS.INSULIN_TYPES[category][insulinName],
-                        category
-                    };
-                }
-            }
-            return null;
-        };
-        
+    }
+        return null;
+    };
+    

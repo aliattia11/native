@@ -140,19 +140,39 @@ const handleActivityUpdate = (newActivities, totalImpact) => {
   };
 
   const getAvailableInsulinTypes = () => {
-    const insulinTypes = [];
-    Object.entries(INSULIN_TYPES).forEach(([category, types]) => {
-      Object.entries(types).forEach(([name, details]) => {
-        insulinTypes.push({
-          name: name,
-          displayName: name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-          category: category,
-          ...details
-        });
+  try {
+    if (!patientConstants?.medication_factors) {
+      return [];
+    }
+
+    return Object.entries(patientConstants.medication_factors)
+      .filter(([_, details]) => details.type && details.type.includes('insulin'))
+      .map(([name, details]) => ({
+        name,
+        displayName: name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+        category: details.type,
+        ...details
+      }))
+      .sort((a, b) => {
+        // Sort by type first, then by name
+        if (a.type !== b.type) {
+          // Define order of insulin types
+          const typeOrder = {
+            'rapid_acting_insulin': 1,
+            'short_acting_insulin': 2,
+            'intermediate_acting_insulin': 3,
+            'long_acting_insulin': 4,
+            'mixed_insulin': 5
+          };
+          return (typeOrder[a.type] || 99) - (typeOrder[b.type] || 99);
+        }
+        return a.displayName.localeCompare(b.displayName);
       });
-    });
-    return insulinTypes;
-  };
+  } catch (error) {
+    console.error('Error getting insulin types:', error);
+    return [];
+  }
+};
 
   // Continue from previous part...
 
@@ -348,18 +368,23 @@ const handleActivityUpdate = (newActivities, totalImpact) => {
             <label htmlFor="suggestedInsulin">Suggested Insulin Intake (units)</label>
             <div className={styles.insulinInputGroup}>
               <input
-                id="suggestedInsulin"
-                type="number"
-                value={suggestedInsulin}
-                readOnly
-                placeholder="Calculated based on meal and activities"
+                  id="suggestedInsulin"
+                  type="number"
+                  value={suggestedInsulin}
+                  readOnly
+                  placeholder="Calculated based on meal and activities"
               />
               <input
-                id="suggestedInsulinType"
-                type="text"
-                value={suggestedInsulinType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                readOnly
-                className={styles.insulinTypeReadOnly}
+                  id="suggestedInsulinType"
+                  type="text"
+                  value={(() => {
+                    const insulin = patientConstants?.medication_factors?.[suggestedInsulinType];
+                    if (!insulin) return '';
+                    return `${suggestedInsulinType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} 
+            (${insulin.type.split('_')[0]} acting)`;
+                  })()}
+                  readOnly
+                  className={styles.insulinTypeReadOnly}
               />
             </div>
           </div>
@@ -369,39 +394,40 @@ const handleActivityUpdate = (newActivities, totalImpact) => {
           <label htmlFor="intendedInsulin">Intended Insulin Intake (units)</label>
           <div className={styles.insulinInputGroup}>
             <input
-              id="intendedInsulin"
-              type="number"
-              min="0"
-              step="0.1"
-              value={intendedInsulin}
-              onChange={(e) => setIntendedInsulin(e.target.value)}
+                id="intendedInsulin"
+                type="number"
+                min="0"
+                step="0.1"
+                value={intendedInsulin}
+                onChange={(e) => setIntendedInsulin(e.target.value)}
               placeholder="Enter intended insulin intake"
               required
             />
-            <select
-              id="intendedInsulinType"
-              value={intendedInsulinType}
-              onChange={(e) => setIntendedInsulinType(e.target.value)}
-              required
-              className={styles.insulinTypeSelect}
-            >
-              <option value="">Select Type</option>
-              {getAvailableInsulinTypes().map(type => (
-                <option key={type.name} value={type.name}>
-                  {type.displayName} ({type.category})
-                </option>
-              ))}
-            </select>
+          <select
+  id="intendedInsulinType"
+  value={intendedInsulinType}
+  onChange={(e) => setIntendedInsulinType(e.target.value)}
+  required
+  className={styles.insulinTypeSelect}
+>
+  <option value="">Select Type</option>
+  {getAvailableInsulinTypes().map(insulin => (
+    <option key={insulin.name} value={insulin.name}>
+      {insulin.displayName} ({insulin.type.split('_')[0]} acting
+      {insulin.brand_names ? ` - ${insulin.brand_names.join(', ')}` : ''})
+    </option>
+  ))}
+          </select>
           </div>
         </div>
 
-{selectedFoods.length > 0 && insulinBreakdown && (
-  <div className={styles.sectionCard}>
-    <div className={styles.sectionHeader}>
-      <h3 className={styles.sectionTitle}>
-        Insulin Calculation Summary
-        <div className={styles.tooltip}>
-          <FaInfoCircle className={styles.infoIcon}/>
+        {selectedFoods.length > 0 && insulinBreakdown && (
+            <div className={styles.sectionCard}>
+              <div className={styles.sectionHeader}>
+                <h3 className={styles.sectionTitle}>
+                  Insulin Calculation Summary
+                  <div className={styles.tooltip}>
+                  <FaInfoCircle className={styles.infoIcon}/>
           <span className={styles.tooltipText}>
             Click on any card to see detailed breakdown
           </span>

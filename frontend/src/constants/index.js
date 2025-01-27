@@ -1,9 +1,10 @@
 // frontend/src/constants/index.js
-import { 
+import {
   SHARED_CONSTANTS,
   convertToGrams,
   convertToMl,
-  calculateHealthFactors 
+  calculateHealthFactors,
+  getInsulinInfo
 } from './shared_constants';
 
 // Export everything from SHARED_CONSTANTS
@@ -23,4 +24,4 @@ export const {
 } = SHARED_CONSTANTS;
 
 // Export utility functions
-export { convertToGrams, convertToMl, calculateHealthFactors };
+export { convertToGrams, convertToMl, calculateHealthFactors, getInsulinInfo };
