@@ -19,45 +19,45 @@ function SignIn({ setLoggedIn, setUserType }) {
     if (error) setError('');
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setIsLoading(true);
-    setError('');
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  setIsLoading(true);
+  setError('');
 
-    try {
-      const response = await axios.post('http://localhost:5000/login',
-        formData,
-        {
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        }
-      );
+  try {
+    const response = await axios.post('http://localhost:5000/login',
+      formData,
+      {
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        withCredentials: true // Add this
+      }
+    );
 
-      // Store user data in localStorage
+    if (response.data.token) {
       localStorage.setItem('token', response.data.token);
       localStorage.setItem('userType', response.data.user_type);
       localStorage.setItem('firstName', response.data.firstName);
       localStorage.setItem('lastName', response.data.lastName);
 
-      // Update app state
       setLoggedIn(true);
       setUserType(response.data.user_type);
-
-      // Navigate to dashboard
       navigate('/dashboard');
-
-    } catch (error) {
-      console.error('Login error:', error);
-      setError(
-        error.response?.data?.error ||
-        error.response?.data?.message ||
-        'Unable to connect to server. Please try again later.'
-      );
-    } finally {
-      setIsLoading(false);
+    } else {
+      setError('Invalid response from server');
     }
-  };
+  } catch (error) {
+    console.error('Login error:', error);
+    setError(
+      error.response?.data?.error ||
+      error.response?.data?.message ||
+      'Unable to connect to server. Please check if the server is running.'
+    );
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   return (
     <div className="signin-container">

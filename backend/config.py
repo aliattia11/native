@@ -20,15 +20,15 @@ logging.getLogger('meal_insulin').setLevel(logging.DEBUG)
 mongo = PyMongo()
 
 def create_app_config(app):
-    # Configure CORS with specific settings
+    # Update CORS configuration
     CORS(app, resources={
-        r"/api/*": {
+        r"/*": {  # Change from r"/api/*" to r"/*" to cover all routes
             "origins": ["http://localhost:3000"],
             "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
             "allow_headers": ["Content-Type", "Authorization", "Accept"],
             "expose_headers": ["Content-Type", "Authorization"],
             "supports_credentials": True,
-            "max_age": 120  # Preflight request cache time in seconds
+            "max_age": 120
         }
     })
 

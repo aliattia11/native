@@ -1,0 +1,816 @@
+/* Container and General Layout */
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.title {
+  font-size: 2rem;
+  color: #2c3e50;
+  margin-bottom: 1.5rem;
+  text-align: center;
+}
+
+.subtitle {
+  font-size: 1.5rem;
+  color: #34495e;
+  margin: 1rem 0;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  background: #fff;
+  padding: 1.5rem;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+/* Form Fields */
+.formField {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.formField label {
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.formField input,
+.formField select,
+.formField textarea {
+  padding: 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 1rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.formField input:focus,
+.formField select:focus,
+.formField textarea:focus {
+  border-color: #3498db;
+  box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+  outline: none;
+}
+
+.formField textarea {
+  min-height: 100px;
+  resize: vertical;
+}
+
+.readOnlyField input {
+  background-color: #f8f9fa;
+  cursor: not-allowed;
+}
+
+/* Food Section */
+.foodSection {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.searchContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.searchControls {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.searchInput {
+  flex: 1;
+  padding: 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+}
+
+.categorySelect {
+  min-width: 150px;
+  padding: 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+}
+
+/* Food Items */
+.foodItem {
+  background: #f8f9fa;
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+.foodItemHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.foodItemTitle {
+  font-weight: 600;
+  margin: 0;
+}
+
+.portionControls {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  margin: 0.5rem 0;
+}
+
+.amountControl {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.amountInput {
+  width: 80px;
+  text-align: center;
+}
+
+/* Activity Section */
+.activitySection {
+  background: #f8f9fa;
+  padding: 1rem;
+  border-radius: 8px;
+}
+
+.activityItem {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  align-items: center;
+}
+
+.activityImpact {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  background: #e1f5fe;
+  border-radius: 8px;
+  color: #0277bd;
+}
+
+/* Buttons */
+.button {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s, transform 0.1s;
+}
+
+.addButton {
+  composes: button;
+  background-color: #2ecc71;
+  color: white;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.removeButton {
+  composes: button;
+  background-color: #e74c3c;
+  color: white;
+  padding: 0.5rem;
+}
+
+.submitButton {
+  composes: button;
+  background-color: #3498db;
+  color: white;
+  font-size: 1.1rem;
+  width: 100%;
+  max-width: 300px;
+  margin: 1rem auto;
+}
+
+.button:hover {
+  filter: brightness(1.1);
+}
+
+.button:active {
+  transform: translateY(1px);
+}
+
+/* Messages */
+.message {
+  text-align: center;
+  padding: 1rem;
+  margin: 1rem 0;
+  border-radius: 8px;
+  background-color: #2ecc71;
+  color: white;
+}
+
+.message:empty {
+  display: none;
+}
+
+/* Search Results */
+.searchResults {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 1rem;
+}
+
+.foodCardSimple {
+  background: white;
+  padding: 1rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.foodCardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.foodCardTitle {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.foodCardActions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* Favorites Section */
+.favoritesGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 1rem;
+}
+
+/* Tab Buttons */
+.searchButtons {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.tabButton {
+  composes: button;
+  flex: 1;
+  background-color: #f8f9fa;
+  color: #2c3e50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.tabButton.active {
+  background-color: #3498db;
+  color: white;
+}
+
+/* Food Details */
+.foodDetails {
+  background: white;
+  padding: 0.75rem;
+  border-radius: 6px;
+  margin-top: 0.5rem;
+}
+
+.foodDetails p {
+  margin: 0.25rem 0;
+  color: #666;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .container {
+    padding: 0.5rem;
+  }
+
+  .form {
+    padding: 1rem;
+  }
+
+  .searchControls {
+    flex-direction: column;
+  }
+
+  .activityItem {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .portionControls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .amountControl {
+    justify-content: center;
+  }
+
+  .searchResults,
+  .favoritesGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .foodCardActions {
+    flex-direction: column;
+  }
+
+  .title {
+    font-size: 1.5rem;
+  }
+
+  .subtitle {
+    font-size: 1.25rem;
+  }
+}
+
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+  .container {
+    background-color: #1a1a1a;
+    color: #fff;
+  }
+
+  .form {
+    background-color: #2d2d2d;
+  }
+
+  .formField label {
+    color: #fff;
+  }
+
+  .formField input,
+  .formField select,
+  .formField textarea {
+    background-color: #3d3d3d;
+    border-color: #4d4d4d;
+    color: #fff;
+  }
+
+  .foodItem,
+  .activitySection {
+    background-color: #3d3d3d;
+  }
+
+  .foodCardSimple {
+    background-color: #2d2d2d;
+  }
+
+  .readOnlyField input {
+    background-color: #2d2d2d;
+  }
+
+  .tabButton {
+    background-color: #3d3d3d;
+    color: #fff;
+  }
+
+  .foodDetails {
+    background-color: #2d2d2d;
+  }
+
+  .foodDetails p {
+    color: #ccc;
+  }
+}
+
+/* Insulin Breakdown Section */
+.insulinBreakdown {
+  background: #f8f9fa;
+  padding: 1rem;
+  border-radius: 8px;
+  margin: 1rem 0;
+}
+
+.insulinBreakdown h4 {
+  color: #2c3e50;
+  margin: 0 0 0.75rem 0;
+  font-size: 1.1rem;
+}
+
+.insulinBreakdown ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.insulinBreakdown li {
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #eee;
+  color: #666;
+}
+
+.insulinBreakdown li:last-child {
+  border-bottom: none;
+}
+
+/* Dark Mode Support for Insulin Breakdown */
+@media (prefers-color-scheme: dark) {
+  .insulinBreakdown {
+    background: #3d3d3d;
+  }
+
+  .insulinBreakdown h4 {
+    color: #fff;
+  }
+
+  .insulinBreakdown li {
+    color: #ccc;
+    border-bottom-color: #4d4d4d;
+  }
+}
+.effectsInfo {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e2e8f0;
+}
+
+.effectsInfo h4 {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #2d3748;
+  margin: 0 0 0.5rem 0;
+}
+
+.effectDetail {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.813rem;
+  color: #4a5568;
+  margin-bottom: 0.25rem;
+}
+
+.effectDetail span:first-child {
+  color: #718096;
+}
+
+.increase {
+  color: #e53e3e;
+}
+
+.decrease {
+  color: #38a169;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .effectsInfo {
+    border-top-color: #4a5568;
+  }
+
+  .effectsInfo h4 {
+    color: #e2e8f0;
+  }
+
+  .effectDetail {
+    color: #cbd5e0;
+  }
+
+  .effectDetail span:first-child {
+    color: #a0aec0;
+  }
+
+  .increase {
+    color: #fc8181;
+  }
+
+  .decrease {
+    color: #68d391;
+  }
+}
+
+.calculationComparison {
+  margin-top: 1rem;
+  padding: 1rem;
+  background-color: #f5f5f5;
+  border-radius: 4px;
+}
+
+.calculationComparison pre {
+  background-color: white;
+  padding: 0.5rem;
+  margin: 0.5rem 0;
+  border-radius: 4px;
+  overflow-x: auto;
+}
+
+.calculationDifference {
+  color: #d32f2f;
+  font-weight: bold;
+  margin-top: 1rem;
+  padding: 0.5rem;
+  border: 1px solid #d32f2f;
+  border-radius: 4px;
+}
+.backendCalculation {
+  margin-top: 20px;
+  padding: 15px;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  background-color: #f9f9f9;
+}
+
+.insulinInputGroup {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.insulinTypeSelect {
+  min-width: 150px;
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background-color: white;
+}
+
+.insulinTypeReadOnly {
+  min-width: 150px;
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background-color: #f5f5f5;
+  color: #666;
+}
+
+.mealInputContainer {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.sectionCard {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.sectionTitle {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #2d3748;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.infoIcon {
+  color: #718096;
+  cursor: help;
+}
+
+/* Enhanced Insulin Breakdown Styles */
+.insulinBreakdown {
+  background: #f7fafc;
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.breakdownGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1rem;
+}
+
+.breakdownCard {
+  background: white;
+  padding: 1rem;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.breakdownHeader {
+  font-weight: 600;
+  color: #2d3748;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.breakdownValue {
+  font-size: 1.25rem;
+  color: #2c5282;
+  font-weight: 600;
+}
+
+.breakdownDetail {
+  font-size: 0.875rem;
+  color: #718096;
+  margin-top: 0.25rem;
+}
+
+.impactPositive {
+  color: #38a169;
+}
+
+.impactNegative {
+  color: #e53e3e;
+}
+
+/* Mobile Responsive Adjustments */
+@media (max-width: 768px) {
+  .sectionCard {
+    padding: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .breakdownGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .breakdownCard {
+    padding: 0.75rem;
+  }
+
+  .sectionTitle {
+    font-size: 1.1rem;
+  }
+}
+
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+  .sectionCard {
+    background: #2d3748;
+  }
+
+  .sectionHeader {
+    border-bottom-color: #4a5568;
+  }
+
+  .sectionTitle {
+    color: #e2e8f0;
+  }
+
+  .insulinBreakdown {
+    background: #2d3748;
+  }
+
+  .breakdownCard {
+    background: #1a202c;
+    border-color: #4a5568;
+  }
+
+  .breakdownHeader {
+    color: #e2e8f0;
+  }
+
+  .breakdownValue {
+    color: #63b3ed;
+  }
+
+  .breakdownDetail {
+    color: #a0aec0;
+  }
+}
+
+/* Tooltip Styles */
+.tooltip {
+  position: relative;
+  display: inline-block;
+}
+
+.tooltip .tooltipText {
+  visibility: hidden;
+  background-color: #2d3748;
+  color: white;
+  text-align: center;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  position: absolute;
+  z-index: 1;
+  bottom: 125%;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.875rem;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.tooltip:hover .tooltipText {
+  visibility: visible;
+  opacity: 1;
+}
+.breakdownCard {
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.breakdownCard:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.breakdownCard.expanded {
+  grid-column: 1 / -1;
+}
+
+.breakdownHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.headerContent {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.expandedContent {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e2e8f0;
+}
+
+.expandedContent ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.expandedContent li {
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.expandedContent li:last-child {
+  border-bottom: none;
+}
+
+.activityDetail {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.healthSection {
+  margin-bottom: 1rem;
+}
+
+.healthSection h4 {
+  font-size: 0.875rem;
+  color: #4a5568;
+  margin: 0.5rem 0;
+}
+
+.medicationEffect {
+  margin: 0.5rem 0;
+  padding: 0.5rem;
+  background: #f7fafc;
+  border-radius: 4px;
+}
+
+.effectDetails {
+  font-size: 0.813rem;
+  color: #718096;
+}
+
+.effectDetails p {
+  margin: 0.25rem 0;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .expandedContent {
+    border-top-color: #4a5568;
+  }
+
+  .expandedContent li {
+    border-bottom-color: #4a5568;
+  }
+
+  .activityDetail {
+    border-bottom-color: #4a5568;
+  }
+
+  .medicationEffect {
+    background: #2d3748;
+  }
+}
