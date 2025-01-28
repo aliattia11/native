@@ -1,1 +1,1 @@
-export { default as BloodGlucoseAnalytics } from './BloodGlucoseAnalytics';
+export { default as BloodGlucoseAnalytics } from './BloodGlucoseCorrelationChart ';

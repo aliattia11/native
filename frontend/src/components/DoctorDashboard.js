@@ -5,7 +5,7 @@ import BloodSugarVisualization from './BloodSugarVisualization';
 import MealHistory from './MealHistory';
 import EnhancedPatientConstantsUI from './EnhancedPatientConstantsUI';
 import ActivityDataTable from './ActivityDataTable';
-import BloodGlucoseAnalytics from './Charts/BloodGlucoseAnalytics';
+import BloodGlucoseCorrelationChart from './Charts/BloodGlucoseCorrelationChart ';
 
 
 import styles from './DoctorDashboard.module.css';
@@ -144,7 +144,13 @@ const DoctorDashboard = () => {
                 />
                 <div className={styles.dataCharts}>
 
-<BloodGlucoseAnalytics isDoctor={true} patientId={selectedPatient.id} />
+<div className={styles.correlationChart}>
+  <h3>Blood Glucose Management Overview</h3>
+  <BloodGlucoseCorrelationChart
+      patientId={selectedPatient.id}
+      timeRange="7d"
+  />
+</div>
                   <BloodSugarChart isDoctor={true} patientId={selectedPatient.id} />
                   <BloodSugarVisualization isDoctor={true} patientId={selectedPatient.id} />
                 </div>

@@ -4,7 +4,7 @@ import MealHistory from './MealHistory';
 import BloodSugarInput from './BloodSugarInput';
 import BloodSugarVisualization from './BloodSugarVisualization';
 import BloodSugarChart from './Charts/BloodSugarChart';
-import BloodGlucoseAnalytics from './Charts/BloodGlucoseAnalytics';
+import BloodGlucoseAnalytics from './Charts/BloodGlucoseCorrelationChart ';
 import ActivityRecording from './ActivityRecording';
 import ActivityDataTable from './ActivityDataTable';
 import FoodDatabase from './FoodDatabase';
