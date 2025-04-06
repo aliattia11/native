@@ -1,9 +1,13 @@
-// frontend/src/components/InsulinInput.js
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useConstants } from '../contexts/ConstantsContext';
+import {
+  formatInsulinName,
+  getAvailableInsulinTypes,
+  getInsulinTypesByCategory
+} from '../utils/insulinUtils';
 import styles from './InsulinInput.module.css';
-import { FaInfoCircle } from 'react-icons/fa';
+import { FaInfoCircle, FaChevronDown, FaChevronUp, FaClock } from 'react-icons/fa';
 
 const InsulinInput = ({
   onInsulinChange,
@@ -15,62 +19,22 @@ const InsulinInput = ({
   suggestedInsulinType = null,
   className = ''
 }) => {
-  const { patientConstants, loading, error } = useConstants();
-  const [selectedInsulin, setSelectedInsulin] = useState(initialInsulin || '');
-  const [dose, setDose] = useState(initialDose || '');
+  const { patientConstants, refreshConstants, loading, error } = useConstants();
+  const [selectedInsulin, setSelectedInsulin] = useState(initialInsulin);
+  const [dose, setDose] = useState(initialDose);
   const [scheduledTime, setScheduledTime] = useState('');
   const [notes, setNotes] = useState('');
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [recentDoses, setRecentDoses] = useState([]);
+  const [expanded, setExpanded] = useState(false);
+  const [detailsExpanded, setDetailsExpanded] = useState(false);
+  const [insulinsByCategory, setInsulinsByCategory] = useState({});
 
-  // Prevent propagation of events that could cause form submission
-  const preventEventPropagation = (e) => {
-    e.stopPropagation();
-  };
-
-  // Get insulin options from patient constants with memoization
-  const insulinOptions = useMemo(() => {
-    if (!patientConstants?.medication_factors) {
-      return [];
-    }
-
-    try {
-      return Object.entries(patientConstants.medication_factors)
-        .filter(([name, details]) => {
-          // Check if the name contains 'insulin' and is not a hormone or other medication
-          const isInsulin = name.includes('insulin') &&
-            !['injectable_contraceptives', 'oral_contraceptives'].includes(name);
-          return isInsulin && details && details.type;  // Make sure details and type exist
-        })
-        .map(([name, details]) => ({
-          value: name,
-          label: name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-          type: details.type || 'unknown',  // Provide default if type is missing
-          ...details
-        }))
-        .sort((a, b) => {
-          // First sort by type
-          if (a.type !== b.type) {
-            const typeOrder = {
-              'rapid_acting': 1,
-              'short_acting': 2,
-              'intermediate_acting': 3,
-              'long_acting': 4,
-              'mixed': 5
-            };
-            return (typeOrder[a.type] || 99) - (typeOrder[b.type] || 99);
-          }
-
-          // Then sort by name if types are the same
-          const nameA = a.label || a.value || '';
-          const nameB = b.label || b.value || '';
-          return nameA.localeCompare(nameB);
-        });
-    } catch (err) {
-      console.error('Error processing insulin options:', err);
-      return [];
-    }
+  // Use effect to get and categorize insulin types
+  useEffect(() => {
+    // Set insulin types categorized by action profile
+    setInsulinsByCategory(getInsulinTypesByCategory(patientConstants));
   }, [patientConstants]);
 
   useEffect(() => {
@@ -78,9 +42,9 @@ const InsulinInput = ({
     const now = new Date();
     setScheduledTime(now.toISOString().slice(0, 16));
 
-    // Update state from props when they change
-    setSelectedInsulin(initialInsulin || '');
-    setDose(initialDose || '');
+    // Update state if props change
+    setSelectedInsulin(initialInsulin);
+    setDose(initialDose);
 
     // Fetch recent doses if standalone
     if (isStandalone) {
@@ -91,8 +55,12 @@ const InsulinInput = ({
   const fetchRecentDoses = async () => {
     try {
       const token = localStorage.getItem('token');
-      if (!token) return;
+      if (!token) {
+        console.log('No authentication token found for fetching recent doses');
+        return;
+      }
 
+      // Using the correct endpoint for fetching insulin doses
       const response = await axios.get(
         'http://localhost:5000/api/medication-logs/recent',
         {
@@ -110,12 +78,11 @@ const InsulinInput = ({
         setRecentDoses(response.data.logs);
       }
     } catch (err) {
-      // Silent fail for this non-critical feature
+      console.error('Error fetching recent doses:', err);
     }
   };
 
   const handleDoseChange = (e) => {
-    preventEventPropagation(e);
     const value = e.target.value;
     if (!isNaN(value) && (value === '' || parseFloat(value) >= 0)) {
       setDose(value);
@@ -124,27 +91,30 @@ const InsulinInput = ({
       if (!isStandalone && onInsulinChange) {
         onInsulinChange({
           type: selectedInsulin,
-          dose: value
+          dose: value,
+          notes: notes,
+          administrationTime: scheduledTime
         });
       }
     }
   };
 
   const handleInsulinTypeChange = (e) => {
-    preventEventPropagation(e);
     setSelectedInsulin(e.target.value);
+    setDetailsExpanded(false);
 
     // Notify parent component when embedded
     if (!isStandalone && onInsulinChange) {
       onInsulinChange({
         type: e.target.value,
-        dose: dose
+        dose: dose,
+        notes: notes,
+        administrationTime: scheduledTime
       });
     }
   };
 
   const handleNotesChange = (e) => {
-    preventEventPropagation(e);
     setNotes(e.target.value);
 
     // Include notes in parent notification if embedded
@@ -152,16 +122,36 @@ const InsulinInput = ({
       onInsulinChange({
         type: selectedInsulin,
         dose: dose,
-        notes: e.target.value
+        notes: e.target.value,
+        administrationTime: scheduledTime
       });
     }
   };
 
-  const handleSubmit = async (e) => {
-    if (e) {
-      e.preventDefault();
-      e.stopPropagation();
+  const handleTimeChange = (e) => {
+    setScheduledTime(e.target.value);
+
+    // Notify parent component when embedded
+    if (!isStandalone && onInsulinChange) {
+      onInsulinChange({
+        type: selectedInsulin,
+        dose: dose,
+        notes: notes,
+        administrationTime: e.target.value
+      });
     }
+  };
+
+  const toggleDetails = () => {
+    setDetailsExpanded(!detailsExpanded);
+  };
+
+  const toggleExpanded = () => {
+    setExpanded(!expanded);
+  };
+
+  const handleSubmit = async (e) => {
+    if (e) e.preventDefault();
 
     // For embedded mode, just notify parent and don't try to submit directly
     if (!isStandalone) {
@@ -169,7 +159,8 @@ const InsulinInput = ({
         onInsulinChange({
           type: selectedInsulin,
           dose: dose,
-          notes: notes
+          notes: notes,
+          administrationTime: scheduledTime
         });
       }
       return;
@@ -192,14 +183,16 @@ const InsulinInput = ({
         throw new Error('Session token not found. Please log in again.');
       }
 
-      // Use the meal endpoint with insulin-only data (same as what MealInput uses)
+      // Using the /api/meal endpoint with insulin-specific payload
       const response = await axios.post(
         'http://localhost:5000/api/meal',
         {
+          // This payload structure matches what MealInput sends for a meal
+          // but only includes the insulin-related parts
           mealType: 'insulin_only',
           recordingType: 'insulin',
-          foodItems: [],
-          activities: [],
+          foodItems: [], // Empty array since this is insulin-only
+          activities: [], // No activities for insulin-only recording
           bloodSugar: null,
           bloodSugarSource: 'none',
           intendedInsulin: parseFloat(dose),
@@ -224,12 +217,17 @@ const InsulinInput = ({
       if (response.status === 201 || response.status === 200) {
         setMessage('Insulin dose logged successfully');
         await fetchRecentDoses();
+        await refreshConstants();
 
         // Reset form if standalone
         setSelectedInsulin('');
         setDose('');
         setNotes('');
-        setScheduledTime(new Date().toISOString().slice(0, 16));
+        setExpanded(false);
+
+        // Update time to current
+        const now = new Date();
+        setScheduledTime(now.toISOString().slice(0, 16));
 
         // Notify parent components
         if (onDoseLogged) {
@@ -248,6 +246,7 @@ const InsulinInput = ({
       }
 
       setMessage(`Error: ${errorMessage}`);
+      console.error('Error submitting insulin dose:', err);
     } finally {
       setIsSubmitting(false);
     }
@@ -262,135 +261,191 @@ const InsulinInput = ({
   }
 
   return (
-    <div className={`${styles.insulinInput} ${className}`}>
-      {isStandalone && <h3>Record Insulin</h3>}
+    <div className={`${styles.insulinInputContainer} ${isStandalone ? styles.standalone : ''} ${className}`}>
+      {isStandalone && <h3 className={styles.title}>Record Insulin</h3>}
 
-      {/* We need this form even in embedded mode but will prevent submission */}
-      <form onSubmit={handleSubmit} onClick={preventEventPropagation}>
-        {/* Only show suggested insulin if provided and not null */}
+      <form onSubmit={handleSubmit}>
+        {/* Display suggested insulin if provided */}
         {!isStandalone && suggestedInsulin !== null && (
-          <div className={`${styles.inputGroup} ${styles.readOnlyField}`}>
-            <label htmlFor="suggestedInsulin">Suggested Insulin Intake (units)</label>
-            <div className={styles.insulinInputGroup}>
-              <input
-                id="suggestedInsulin"
-                type="number"
-                value={suggestedInsulin}
-                readOnly
-                placeholder="Calculated based on meal and activities"
-                onClick={preventEventPropagation}
-              />
-              <input
-                id="suggestedInsulinType"
-                type="text"
-                value={(() => {
-                  const insulin = patientConstants?.medication_factors?.[suggestedInsulinType];
-                  if (!insulin) return '';
-                  return `${suggestedInsulinType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} 
-                  (${insulin.type?.split('_')[0] || ''} acting)`;
-                })()}
-                readOnly
-                className={styles.insulinTypeReadOnly}
-                onClick={preventEventPropagation}
-              />
-            </div>
+          <div className={styles.suggestedInsulin}>
+            <p>Suggested: {suggestedInsulin} units of {formatInsulinName(suggestedInsulinType)}</p>
           </div>
         )}
 
-        {/* Insulin type and dose selection */}
+        {/* Insulin type selection */}
         <div className={styles.inputGroup}>
-          <label htmlFor="intendedInsulin">
-            {isStandalone ? 'Insulin Dose (units)' : 'Intended Insulin Intake (units)'}
-          </label>
-          <div className={styles.insulinInputGroup}>
-            <input
-              id="intendedInsulin"
-              type="number"
-              min="0"
-              step="0.1"
-              value={dose}
-              onChange={handleDoseChange}
-              onClick={preventEventPropagation}
-              placeholder="Enter insulin dose"
-              required
-              className={styles.numberInput}
-            />
+          <label htmlFor="insulinType">Insulin Type</label>
+          <div className={styles.selectContainer}>
             <select
-              id="intendedInsulinType"
+              id="insulinType"
               value={selectedInsulin}
               onChange={handleInsulinTypeChange}
-              onClick={preventEventPropagation}
-              required
               className={styles.insulinTypeSelect}
+              required
             >
-              <option value="">Select Type</option>
-              {insulinOptions.map(insulin => (
-                <option
-                  key={insulin.value}
-                  value={insulin.value}
-                  onClick={preventEventPropagation}
-                >
-                  {insulin.label} ({(insulin.type || "").split('_')[0]} acting
-                  {insulin.brand_names ? ` - ${insulin.brand_names.join(', ')}` : ''})
-                </option>
+              <option value="">Select insulin type</option>
+
+              {Object.entries(insulinsByCategory).map(([category, insulins]) => (
+                <optgroup key={category} label={`${category.charAt(0).toUpperCase() + category.slice(1)} Acting`}>
+                  {insulins.map(insulin => (
+                    <option key={insulin.id} value={insulin.id}>
+                      {insulin.name} {insulin.brand_names && `(${insulin.brand_names[0]})`}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
           </div>
         </div>
 
-        {/* Show time selector only in standalone mode */}
-        {isStandalone && (
-          <div className={styles.inputGroup}>
-            <label htmlFor="scheduledTime">Time Taken</label>
-            <input
-              type="datetime-local"
-              id="scheduledTime"
-              value={scheduledTime}
-              onChange={(e) => {
-                preventEventPropagation(e);
-                setScheduledTime(e.target.value);
-              }}
-              onClick={preventEventPropagation}
-              max={new Date().toISOString().slice(0, 16)}
-              required
-              className={styles.timeInput}
-            />
-          </div>
-        )}
-
-        {/* Notes field available in both modes */}
+        {/* Dose input */}
         <div className={styles.inputGroup}>
-          <label htmlFor="notes">Notes (optional)</label>
-          <textarea
-            id="notes"
-            value={notes}
-            onChange={handleNotesChange}
-            onClick={preventEventPropagation}
-            placeholder="Add any additional notes"
-            className={styles.notesInput}
+          <label htmlFor="insulinDose">
+            {isStandalone ? 'Insulin Dose (units)' : 'Intended Insulin Intake (units)'}
+          </label>
+          <input
+            id="insulinDose"
+            type="number"
+            min="0"
+            step="0.5"
+            value={dose}
+            onChange={handleDoseChange}
+            className={styles.doseInput}
+            required={isStandalone}
           />
         </div>
 
+        {/* Combined administration time and notes section */}
+        <div className={styles.collapsibleSection}>
+          <button
+            type="button"
+            onClick={toggleExpanded}
+            className={styles.collapsibleToggle}
+          >
+            <span>Time & Notes</span>
+            {expanded ? <FaChevronUp /> : <FaChevronDown />}
+          </button>
+
+          {expanded && (
+            <div className={styles.collapsibleContent}>
+              {/* Administration time */}
+              <div className={styles.inputGroup}>
+                <label htmlFor="administrationTime">
+                  <FaClock className={styles.timeIcon} /> Administration Time
+                </label>
+                <input
+                  id="administrationTime"
+                  type="datetime-local"
+                  value={scheduledTime}
+                  onChange={handleTimeChange}
+                  className={styles.timeInput}
+                  required={isStandalone}
+                />
+              </div>
+
+              {/* Notes */}
+              <div className={styles.notesContainer}>
+                <label htmlFor="insulinNotes">Notes</label>
+                <textarea
+                  id="insulinNotes"
+                  value={notes}
+                  onChange={handleNotesChange}
+                  placeholder="Add any notes about this insulin dose"
+                  className={styles.notesInput}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Insulin details accordion */}
+        {selectedInsulin && patientConstants?.medication_factors?.[selectedInsulin] && (
+          <div className={styles.insulinInfo}>
+            <button
+              className={styles.infoToggle}
+              onClick={toggleDetails}
+              type="button"
+            >
+              {detailsExpanded ? 'Hide Details' : 'Show Details'}
+              {detailsExpanded ? <FaChevronUp className={styles.toggleIcon} /> : <FaChevronDown className={styles.toggleIcon} />}
+            </button>
+
+            {detailsExpanded && (
+              <div className={styles.expandedInfo}>
+                <div className={styles.infoGrid}>
+                  <div className={styles.infoItem}>
+                    <span className={styles.infoLabel}>Onset:</span>
+                    <span className={styles.infoValue}>{patientConstants.medication_factors[selectedInsulin].onset_hours} hours</span>
+                  </div>
+                  <div className={styles.infoItem}>
+                    <span className={styles.infoLabel}>Peak:</span>
+                    <span className={styles.infoValue}>{patientConstants.medication_factors[selectedInsulin].peak_hours} hours</span>
+                  </div>
+                  <div className={styles.infoItem}>
+                    <span className={styles.infoLabel}>Duration:</span>
+                    <span className={styles.infoValue}>{patientConstants.medication_factors[selectedInsulin].duration_hours} hours</span>
+                  </div>
+                  <div className={styles.infoItem}>
+                    <span className={styles.infoLabel}>Type:</span>
+                    <span className={styles.infoValue}>
+                      {patientConstants.medication_factors[selectedInsulin].type.replace(/_/g, ' ')}
+                    </span>
+                  </div>
+                </div>
+
+                {patientConstants.medication_factors[selectedInsulin].brand_names && (
+                  <div className={styles.brandNames}>
+                    <span className={styles.infoLabel}>Brand Names:</span>
+                    <span className={styles.infoValue}>
+                      {patientConstants.medication_factors[selectedInsulin].brand_names.join(', ')}
+                    </span>
+                  </div>
+                )}
+
+                <p className={styles.description}>
+                  {patientConstants.medication_factors[selectedInsulin].description}
+                </p>
+
+                <div className={styles.insulinTimeline}>
+                  <div className={styles.timelineBar}>
+                    <div
+                      className={styles.onsetMarker}
+                      style={{left: `${(patientConstants.medication_factors[selectedInsulin].onset_hours / patientConstants.medication_factors[selectedInsulin].duration_hours) * 100}%`}}
+                    >
+                      <span>Onset</span>
+                    </div>
+                    <div
+                      className={styles.peakMarker}
+                      style={{left: `${(patientConstants.medication_factors[selectedInsulin].peak_hours / patientConstants.medication_factors[selectedInsulin].duration_hours) * 100}%`}}
+                    >
+                      <span>Peak</span>
+                    </div>
+                    <div className={styles.durationLine}></div>
+                  </div>
+                  <div className={styles.timelineLabels}>
+                    <span>0h</span>
+                    <span>{patientConstants.medication_factors[selectedInsulin].duration_hours}h</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {message && (
-          <div className={`${styles.message} ${
-            message.includes('Error') ? styles.error : styles.success
-          }`}>
+          <div className={`${styles.message} ${message.includes('Error') ? styles.error : styles.success}`}>
             {message}
           </div>
         )}
 
-        {/* Show submit button only in standalone mode */}
+        {/* Submit button only in standalone mode */}
         {isStandalone && (
           <button
             type="submit"
-            disabled={isSubmitting || !selectedInsulin || !dose}
-            onClick={(e) => {
-              preventEventPropagation(e);
-              handleSubmit(e);
-            }}
             className={styles.submitButton}
+            disabled={isSubmitting || !selectedInsulin || !dose}
           >
-            {isSubmitting ? 'Recording...' : 'Record Insulin'}
+            {isSubmitting ? 'Recording...' : 'Record Insulin Dose'}
           </button>
         )}
       </form>
@@ -402,18 +457,22 @@ const InsulinInput = ({
           <div className={styles.dosesList}>
             {recentDoses.map((dose, index) => (
               <div key={index} className={styles.doseItem}>
-                <span className={styles.doseType}>
-                  {dose.medication.replace(/_/g, ' ')}
-                </span>
-                <span className={styles.doseAmount}>
-                  {dose.dose} units
-                </span>
-                <span className={styles.doseTime}>
-                  {new Date(dose.scheduled_time).toLocaleString()}
-                </span>
-                {dose.notes && (
-                  <span className={styles.doseNotes}>{dose.notes}</span>
-                )}
+                <div className={styles.doseHeader}>
+                  <span className={styles.doseType}>
+                    {dose.medication.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                  </span>
+                  <span className={styles.doseAmount}>
+                    {dose.dose} units
+                  </span>
+                </div>
+                <div className={styles.doseDetails}>
+                  <span className={styles.doseTime}>
+                    {new Date(dose.scheduled_time).toLocaleString()}
+                  </span>
+                  {dose.notes && (
+                    <span className={styles.doseNotes}>{dose.notes}</span>
+                  )}
+                </div>
               </div>
             ))}
           </div>

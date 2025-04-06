@@ -1,104 +1,249 @@
-/* frontend/src/components/InsulinInput.module.css */
+/* InsulinInput.module.css */
 
-.insulinInput {
-  background-color: #ffffff;
+.insulinInputContainer {
+  background-color: #f9f9f9;
   border-radius: 8px;
-  padding: 20px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  max-width: 500px;
-  margin: 0 auto;
-}
-
-.insulinInput h3 {
-  color: #2c3e50;
-  margin-bottom: 20px;
-  font-size: 1.5rem;
-}
-
-.inputGroup {
-  margin-bottom: 20px;
-}
-
-.inputGroup label {
-  display: block;
-  margin-bottom: 8px;
-  color: #34495e;
-  font-weight: 500;
-}
-
-.select {
-  width: 100%;
-  padding: 10px;
-  border: 1px solid #dcdfe6;
-  border-radius: 4px;
-  font-size: 1rem;
-  color: #2c3e50;
-  background-color: #fff;
-  transition: border-color 0.2s;
-}
-
-.select:focus {
-  border-color: #3498db;
-  outline: none;
-}
-
-.numberInput,
-.timeInput {
-  width: 100%;
-  padding: 10px;
-  border: 1px solid #dcdfe6;
-  border-radius: 4px;
-  font-size: 1rem;
-  color: #2c3e50;
-}
-
-.numberInput:focus,
-.timeInput:focus {
-  border-color: #3498db;
-  outline: none;
-}
-
-.insulinInfo {
-  background-color: #f8f9fa;
-  border-radius: 4px;
   padding: 15px;
   margin-bottom: 20px;
 }
 
-.insulinInfo h4 {
+.standalone {
+  margin: 20px auto;
+  border: 1px solid #e1e4e8;
+  max-width: 500px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  background-color: #ffffff;
+  padding: 20px;
+}
+
+.title {
+  margin-top: 0;
+  margin-bottom: 15px;
   color: #2c3e50;
-  margin-bottom: 10px;
-  font-size: 1.1rem;
+  font-size: 1.3rem;
+  text-align: center;
 }
 
-.timingInfo {
+.inputGroup {
+  margin-bottom: 15px;
+}
+
+.inputGroup label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: 500;
+  color: #444;
+}
+
+.selectContainer {
+  position: relative;
+}
+
+.selectContainer::after {
+  content: "▼";
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  font-size: 0.8rem;
+  color: #666;
+}
+
+.insulinTypeSelect {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background-color: white;
+  font-size: 1rem;
+  appearance: none;
+}
+
+.doseInput, .timeInput {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 1rem;
+}
+
+.suggestedInsulin {
+  background-color: #f0f8ff;
+  padding: 10px;
+  border-radius: 4px;
+  margin-bottom: 15px;
+  border-left: 3px solid #3498db;
+}
+
+.notesContainer {
+  margin-top: 15px;
+}
+
+.notesInput {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  min-height: 80px;
+  font-size: 1rem;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.insulinInfo {
+  margin-top: 15px;
+  background-color: #f5f5f5;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.infoToggle {
+  width: 100%;
+  padding: 10px;
+  background-color: #e7f4fc;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  color: #2980b9;
+  font-weight: 500;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.infoToggle:hover {
+  background-color: #d5eaf8;
+}
+
+.infoToggle:after {
+  content: "+";
+  font-size: 18px;
+  transition: transform 0.2s ease;
+}
+
+.infoToggle:hover:after {
+  transform: scale(1.2);
+}
+
+.expandedInfo {
+  padding: 15px;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  border-top: 1px solid #e0e0e0;
+  background-color: #ffffff;
+}
+
+.infoGrid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 10px;
+  margin-bottom: 10px;
 }
 
-.timingInfo p {
-  margin: 0;
-  color: #34495e;
+.infoItem {
+  display: flex;
+  flex-direction: column;
+}
+
+.infoLabel {
+  font-weight: 600;
+  color: #555;
+  font-size: 0.85rem;
+}
+
+.infoValue {
+  color: #333;
+}
+
+.brandNames {
+  margin: 10px 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.description {
+  margin-top: 10px;
+  color: #555;
+  font-style: italic;
+}
+
+.insulinTimeline {
+  margin-top: 15px;
+  padding-top: 15px;
+  border-top: 1px dashed #e0e0e0;
+}
+
+.timelineBar {
+  height: 30px;
+  background-color: #f0f0f0;
+  border-radius: 15px;
+  position: relative;
+  margin: 20px 0 5px;
+}
+
+.onsetMarker, .peakMarker {
+  position: absolute;
+  transform: translateX(-50%);
+  bottom: 100%;
+  margin-bottom: 5px;
+}
+
+.onsetMarker span, .peakMarker span {
+  display: inline-block;
+  background-color: #3498db;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 0.8rem;
+}
+
+.onsetMarker:after, .peakMarker:after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  transform: translateX(-50%);
+  border-style: solid;
+  border-width: 5px 5px 0 5px;
+  border-color: #3498db transparent transparent transparent;
+}
+
+.durationLine {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 6px;
+  width: 100%;
+  background-color: #3498db;
+  border-radius: 3px;
+}
+
+.timelineLabels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  color: #666;
+}
+
+.message {
+  padding: 10px;
+  border-radius: 4px;
+  margin-top: 15px;
+  text-align: center;
   font-size: 0.9rem;
 }
 
 .error {
-  background-color: #fff5f5;
-  color: #e53e3e;
-  padding: 10px;
-  border-radius: 4px;
-  margin-bottom: 15px;
-  font-size: 0.9rem;
+  background-color: #ffefef;
+  color: #e74c3c;
+  border: 1px solid #f5b7b1;
 }
 
 .success {
-  background-color: #f0fff4;
-  color: #38a169;
-  padding: 10px;
-  border-radius: 4px;
-  margin-bottom: 15px;
-  font-size: 0.9rem;
+  background-color: #efffef;
+  color: #27ae60;
+  border: 1px solid #abebc6;
 }
 
 .submitButton {
@@ -109,12 +254,18 @@
   border: none;
   border-radius: 4px;
   font-size: 1rem;
+  font-weight: 600;
   cursor: pointer;
-  transition: background-color 0.2s;
+  transition: background-color 0.2s, transform 0.1s;
+  margin-top: 20px;
 }
 
 .submitButton:hover:not(:disabled) {
   background-color: #2980b9;
+}
+
+.submitButton:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .submitButton:disabled {
@@ -122,198 +273,346 @@
   cursor: not-allowed;
 }
 
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .insulinInputContainer {
+    background-color: #2d2d2d;
+  }
+
+  .standalone {
+    background-color: #333;
+    border-color: #444;
+  }
+
+  .title {
+    color: #ecf0f1;
+  }
+
+  .insulinTypeSelect, .doseInput, .timeInput, .notesInput {
+    background-color: #3d3d3d;
+    border-color: #4d4d4d;
+    color: #f0f0f0;
+  }
+
+  .selectContainer::after {
+    color: #aaa;
+  }
+
+  .suggestedInsulin {
+    background-color: #1a3045;
+    border-left-color: #2980b9;
+  }
+
+  .insulinInfo {
+    background-color: #262626;
+  }
+
+  .infoToggle {
+    background-color: #1a3045;
+    color: #74b9ff;
+  }
+
+  .infoToggle:hover {
+    background-color: #1e3a50;
+  }
+
+  .expandedInfo {
+    background-color: #2c2c2c;
+    border-top-color: #444;
+  }
+
+  .infoLabel {
+    color: #aaa;
+  }
+
+  .infoValue, .timelineLabels {
+    color: #ddd;
+  }
+
+  .description {
+    color: #bbb;
+  }
+
+  .timelineBar {
+    background-color: #3d3d3d;
+  }
+
+  .error {
+    background-color: #542a2a;
+    color: #ff7675;
+    border-color: #8b3a3a;
+  }
+
+  .success {
+    background-color: #2a542a;
+    color: #55efc4;
+    border-color: #3a8b3a;
+  }
+
+  .submitButton {
+    background-color: #3498db;
+  }
+
+  .submitButton:hover:not(:disabled) {
+    background-color: #2980b9;
+  }
+
+  .submitButton:disabled {
+    background-color: #5a5a5a;
+  }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .infoGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .insulinTimeline {
+    margin-top: 25px;
+  }
+
+  .standalone {
+    margin: 10px;
+    padding: 15px;
+  }
+
+  .title {
+    font-size: 1.2rem;
+  }
+}
+.collapsibleSection {
+  margin-bottom: 15px;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.collapsibleToggle {
+  width: 100%;
+  padding: 10px 15px;
+  background-color: #f5f5f5;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 500;
+  color: #333;
+  transition: background-color 0.2s;
+}
+
+.collapsibleToggle:hover {
+  background-color: #e9e9e9;
+}
+
+.collapsibleContent {
+  padding: 15px;
+  border-top: 1px solid #eaeaea;
+  background-color: #ffffff;
+}
+
+.timeIcon {
+  margin-right: 5px;
+  color: #666;
+}
+
+.notesContainer {
+  margin-top: 15px;
+}
+
+.notesInput {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  min-height: 80px;
+  font-size: 1rem;
+  font-family: inherit;
+  resize: vertical;
+}
+
+/* Improve infoToggle styling */
+.infoToggle {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  padding: 10px 15px;
+  background-color: #e7f4fc;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  color: #2980b9;
+  font-weight: 500;
+}
+
+.toggleIcon {
+  font-size: 14px;
+  transition: transform 0.2s;
+}
+
+/* Dark mode support for new elements */
+@media (prefers-color-scheme: dark) {
+  .collapsibleSection {
+    border-color: #444;
+  }
+
+  .collapsibleToggle {
+    background-color: #333;
+    color: #e0e0e0;
+  }
+
+  .collapsibleToggle:hover {
+    background-color: #3c3c3c;
+  }
+
+  .collapsibleContent {
+    background-color: #2c2c2c;
+    border-top-color: #444;
+  }
+
+  .timeIcon {
+    color: #aaa;
+  }
+}
 .recentDoses {
-  margin-top: 25px;
-  padding-top: 20px;
+  margin-top: 15px;
+  padding-top: 10px;
   border-top: 1px solid #eee;
 }
 
 .recentDoses h4 {
-  color: #2c3e50;
-  margin-bottom: 15px;
-  font-size: 1.1rem;
-}
-
-.dosesList {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.doseItem {
-  display: grid;
-  grid-template-columns: 2fr 1fr 2fr;
-  align-items: center;
-  padding: 10px;
-  background-color: #f8f9fa;
-  border-radius: 4px;
   font-size: 0.9rem;
+  color: #666;
+  margin: 0 0 8px 0;
+  display: flex;
+  align-items: center;
 }
 
-.doseType {
-  color: #2c3e50;
-  font-weight: 500;
-}
-
-.doseAmount {
+.recentDoses h4::before {
+  content: "✓";
+  margin-right: 5px;
   color: #3498db;
-  font-weight: 600;
-  text-align: center;
-}
-
-.doseTime {
-  color: #7f8c8d;
-  text-align: right;
-  font-size: 0.8rem;
-}
-
-@media (max-width: 480px) {
-  .insulinInput {
-    padding: 15px;
-  }
-
-  .timingInfo {
-    grid-template-columns: 1fr;
-  }
-
-  .doseItem {
-    grid-template-columns: 1fr;
-    gap: 5px;
-  }
-
-  .doseType,
-  .doseAmount,
-  .doseTime {
-    text-align: left;
-  }
-}
-/* InsulinInput.module.css */
-.insulinInput {
-  padding: 1rem;
-  background: #fff;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.standalone {
-  margin: 1rem;
-  border: 1px solid #e1e4e8;
-}
-
-.inputGroup {
-  margin-bottom: 1rem;
-}
-
-.inputGroup label {
-  display: block;
-  margin-bottom: 0.5rem;
-  font-weight: 500;
-}
-
-.select,
-.numberInput,
-.timeInput {
-  width: 100%;
-  padding: 0.5rem;
-  border: 1px solid #d1d5da;
-  border-radius: 4px;
-  font-size: 1rem;
-}
-
-.submitButton {
-  width: 100%;
-  padding: 0.75rem;
-  background-color: #2ea44f;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  font-size: 1rem;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.submitButton:disabled {
-  background-color: #94d3a2;
-  cursor: not-allowed;
-}
-
-.submitButton:hover:not(:disabled) {
-  background-color: #2c974b;
-}
-
-.error {
-  color: #cb2431;
-  padding: 0.5rem;
-  margin-bottom: 1rem;
-  border: 1px solid #ffdce0;
-  border-radius: 4px;
-  background-color: #fff5f6;
-}
-
-.success {
-  color: #22863a;
-  padding: 0.5rem;
-  margin-bottom: 1rem;
-  border: 1px solid #c3e6cb;
-  border-radius: 4px;
-  background-color: #f0fff4;
-}
-
-.insulinInfo {
-  margin: 1rem 0;
-  padding: 1rem;
-  background-color: #f6f8fa;
-  border-radius: 4px;
-}
-
-.timingInfo {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 0.5rem;
-}
-
-.recentDoses {
-  margin-top: 2rem;
+  font-weight: bold;
 }
 
 .dosesList {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 5px;
+  max-height: 180px;
+  overflow-y: auto;
 }
 
 .doseItem {
-  padding: 0.75rem;
-  background-color: #f6f8fa;
-  border-radius: 4px;
-  border-left: 4px solid #2ea44f;
+  padding: 6px 8px;
+  background-color: #f9f9f9;
+  border-left: 3px solid #3498db;
+  border-radius: 3px;
+  font-size: 0.8rem;
 }
 
 .doseHeader {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 0.25rem;
+  align-items: center;
+  margin-bottom: 2px;
 }
 
 .doseType {
-  font-weight: 500;
+  font-weight: 600;
+  color: #333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
 }
 
 .doseAmount {
-  color: #2ea44f;
-  font-weight: 500;
+  font-weight: 700;
+  color: #3498db;
+  white-space: nowrap;
 }
 
 .doseDetails {
   display: flex;
   flex-direction: column;
-  font-size: 0.875rem;
-  color: #586069;
+  color: #777;
+  font-size: 0.75rem;
+  line-height: 1.3;
 }
 
-.description {
-  grid-column: 1 / -1;
-  margin-top: 0.5rem;
+.doseTime {
   font-style: italic;
-  color: #586069;
+}
+
+.doseNotes {
+  margin-top: 2px;
+  color: #666;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.7rem;
+  padding-left: 5px;
+  border-left: 1px solid #ddd;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .recentDoses {
+    border-top-color: #444;
+  }
+
+  .recentDoses h4 {
+    color: #bbb;
+  }
+
+  .recentDoses h4::before {
+    color: #74b9ff;
+  }
+
+  .doseItem {
+    background-color: #2c2c2c;
+    border-left-color: #3498db;
+  }
+
+  .doseType {
+    color: #ddd;
+  }
+
+  .doseAmount {
+    color: #74b9ff;
+  }
+
+  .doseDetails {
+    color: #aaa;
+  }
+
+  .doseTime {
+    color: #999;
+  }
+
+  .doseNotes {
+    color: #aaa;
+    border-left-color: #555;
+  }
+}
+
+/* Responsive adjustments */
+@media (max-width: 480px) {
+  .dosesList {
+    max-height: 160px;
+  }
+
+  .doseItem {
+    padding: 5px 6px;
+  }
+
+  .doseType {
+    max-width: 120px;
+  }
 }
