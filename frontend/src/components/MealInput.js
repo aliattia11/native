@@ -35,11 +35,14 @@ const MealInput = () => {
   const [expandedCard, setExpandedCard] = useState(null);
   const [bloodSugarSource, setBloodSugarSource] = useState('direct');
 
-  // Handler for InsulinInput changes
+  // Enhanced handler for InsulinInput changes
   const handleInsulinChange = (data) => {
     if (data.type) setIntendedInsulinType(data.type);
-    if (data.dose) setIntendedInsulin(data.dose);
+    if (data.dose !== undefined) setIntendedInsulin(data.dose);
     if (data.notes) setNotes(data.notes);
+
+    // Optional: Log to help debug integration issues
+    // console.log('Insulin data from InsulinInput:', data);
   };
 
   // Handler for ActivityRecording updates
@@ -111,8 +114,10 @@ const MealInput = () => {
 
   // Prevent accidental form submissions
   const preventFormSubmission = (e) => {
-    if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') {
+    if ((e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') ||
+        (e.type === 'click' && e.target.type !== 'submit')) {
       e.preventDefault();
+      e.stopPropagation();
       return false;
     }
   };
@@ -161,6 +166,8 @@ const MealInput = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    e.stopPropagation();
+
     if (!patientConstants) {
       setMessage('Error: Patient constants not loaded');
       return;
@@ -320,7 +327,7 @@ const MealInput = () => {
     <div className={styles.container}>
       <h2 className={styles.title}>Log Your Meal</h2>
 
-      <form className={styles.form} onSubmit={handleSubmit} onKeyDown={preventFormSubmission}>
+      <form className={styles.form} onSubmit={handleSubmit} onKeyDown={preventFormSubmission} onClick={preventFormSubmission}>
         <div className={styles.formField}>
           <label htmlFor="mealType">Meal Type</label>
           <select
@@ -369,43 +376,17 @@ const MealInput = () => {
               className={styles.mealInputBloodSugar}
             />
           </div>
-
-          {/* Keep the suggested insulin display here */}
-          <div className={`${styles.formField} ${styles.readOnlyField}`}>
-            <label htmlFor="suggestedInsulin">Suggested Insulin Intake (units)</label>
-            <div className={styles.insulinInputGroup}>
-              <input
-                id="suggestedInsulin"
-                type="number"
-                value={suggestedInsulin}
-                readOnly
-                placeholder="Calculated based on meal and activities"
-              />
-              <input
-                id="suggestedInsulinType"
-                type="text"
-                value={(() => {
-                  const insulin = patientConstants?.medication_factors?.[suggestedInsulinType];
-                  if (!insulin) return '';
-                  return `${suggestedInsulinType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} 
-                  (${insulin.type.split('_')[0]} acting)`;
-                })()}
-                readOnly
-                className={styles.insulinTypeReadOnly}
-              />
-            </div>
-          </div>
         </div>
 
-        {/* Use InsulinInput but don't show the suggested insulin again */}
+        {/* Properly integrate InsulinInput with suggested values */}
         <div className={styles.formField}>
           <InsulinInput
             isStandalone={false}
             initialInsulin={intendedInsulinType}
             initialDose={intendedInsulin}
             onInsulinChange={handleInsulinChange}
-            suggestedInsulin={null}
-            suggestedInsulinType={null}
+            suggestedInsulin={suggestedInsulin}  // Pass the calculated value
+            suggestedInsulinType={suggestedInsulinType}  // Pass the suggested type
             className={styles.mealInputInsulin}
           />
         </div>

@@ -6,6 +6,11 @@ import { MEASUREMENT_SYSTEMS, VOLUME_MEASUREMENTS, WEIGHT_MEASUREMENTS } from '.
 
 import styles from './MealInput.module.css';
 
+// Helper function to prevent event propagation
+const preventEventPropagation = (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+};
 
 const FoodItem = ({ item, updatePortion, removeItem, onPortionChange }) => {
   const [amount, setAmount] = useState(() => {
@@ -61,7 +66,8 @@ const FoodItem = ({ item, updatePortion, removeItem, onPortionChange }) => {
     }
   }, [amount, unit, measurementSystem, item.id, updatePortion, onPortionChange]);
 
-  const handleMeasurementSystemChange = (newSystem) => {
+  const handleMeasurementSystemChange = (e, newSystem) => {
+    preventEventPropagation(e);
     if (newSystem === measurementSystem) return;
 
     let newAmount = amount;
@@ -80,12 +86,17 @@ const FoodItem = ({ item, updatePortion, removeItem, onPortionChange }) => {
     setMeasurementSystem(newSystem);
   };
 
-  const handleAmountChange = (newAmount) => {
+  const handleAmountChange = (e, newAmount) => {
+    if (e) {
+      preventEventPropagation(e);
+    }
     const validAmount = Math.max(0.5, Number(newAmount) || 0.5);
     setAmount(validAmount);
   };
 
-  const handleUnitChange = (newUnit) => {
+  const handleUnitChange = (e) => {
+    preventEventPropagation(e);
+    const newUnit = e.target.value;
     const measurements = getMeasurementData(measurementSystem);
     const oldUnitValue = measurementSystem === MEASUREMENT_SYSTEMS.VOLUME
       ? measurements[unit]?.ml || 1
@@ -107,12 +118,18 @@ const FoodItem = ({ item, updatePortion, removeItem, onPortionChange }) => {
     }));
   };
 
+  // Handle remove food item with event prevention
+  const handleRemoveItem = (e) => {
+    preventEventPropagation(e);
+    removeItem(item.id);
+  };
+
   return (
     <div className={styles.foodItem}>
       <div className={styles.foodItemHeader}>
         <h4 className={styles.foodItemTitle}>{item.name}</h4>
         <button
-          onClick={() => removeItem(item.id)}
+          onClick={handleRemoveItem}
           className={styles.buttonRemove}
         >
           <FaMinus />
@@ -122,7 +139,7 @@ const FoodItem = ({ item, updatePortion, removeItem, onPortionChange }) => {
       <div className={styles.measurementToggle}>
         <div className={styles.toggleButtons}>
           <button
-            onClick={() => handleMeasurementSystemChange(MEASUREMENT_SYSTEMS.WEIGHT)}
+            onClick={(e) => handleMeasurementSystemChange(e, MEASUREMENT_SYSTEMS.WEIGHT)}
             className={`${styles.toggleButton} ${
               measurementSystem === MEASUREMENT_SYSTEMS.WEIGHT ? styles.active : ''
             }`}
@@ -130,7 +147,7 @@ const FoodItem = ({ item, updatePortion, removeItem, onPortionChange }) => {
             Weight
           </button>
           <button
-            onClick={() => handleMeasurementSystemChange(MEASUREMENT_SYSTEMS.VOLUME)}
+            onClick={(e) => handleMeasurementSystemChange(e, MEASUREMENT_SYSTEMS.VOLUME)}
             className={`${styles.toggleButton} ${
               measurementSystem === MEASUREMENT_SYSTEMS.VOLUME ? styles.active : ''
             }`}
@@ -143,7 +160,7 @@ const FoodItem = ({ item, updatePortion, removeItem, onPortionChange }) => {
       <div className={styles.portionControl}>
         <div className={styles.amountControl}>
           <button
-            onClick={() => handleAmountChange(amount - 0.5)}
+            onClick={(e) => handleAmountChange(e, amount - 0.5)}
             className={styles.controlButton}
           >
             <FaMinus className={styles.buttonIcon} />
@@ -152,14 +169,19 @@ const FoodItem = ({ item, updatePortion, removeItem, onPortionChange }) => {
           <input
             type="number"
             value={amount}
-            onChange={(e) => handleAmountChange(e.target.value)}
+            onChange={(e) => handleAmountChange(e, e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                preventEventPropagation(e);
+              }
+            }}
             step="0.5"
             min="0.5"
             className={styles.portionInput}
           />
 
           <button
-            onClick={() => handleAmountChange(amount + 0.5)}
+            onClick={(e) => handleAmountChange(e, amount + 0.5)}
             className={styles.controlButton}
           >
             <FaPlus className={styles.buttonIcon} />
@@ -168,7 +190,8 @@ const FoodItem = ({ item, updatePortion, removeItem, onPortionChange }) => {
 
         <select
           value={unit}
-          onChange={(e) => handleUnitChange(e.target.value)}
+          onChange={handleUnitChange}
+          onClick={preventEventPropagation}
           className={styles.unitSelect}
         >
           {getAvailableUnits().map(({ value, label }) => (
@@ -287,7 +310,8 @@ const FoodSearch = ({ onFoodSelect }) => {
     return () => clearTimeout(debounceTimer);
   }, [searchQuery, selectedCategory, searchFoods]);
 
-  const handleAddToFavorites = async (food) => {
+  const handleAddToFavorites = async (e, food) => {
+    preventEventPropagation(e);
     try {
       const token = localStorage.getItem('token');
       await axios.post('http://localhost:5000/api/food/favorite',
@@ -303,18 +327,38 @@ const FoodSearch = ({ onFoodSelect }) => {
     setTimeout(() => setMessage(''), 3000);
   };
 
+  const handleFoodSelect = (e, food) => {
+    preventEventPropagation(e);
+    onFoodSelect({ ...food, portionTypes });
+  };
+
+  const handleSearchInputChange = (e) => {
+    preventEventPropagation(e);
+    setSearchQuery(e.target.value);
+  };
+
+  const handleCategoryChange = (e) => {
+    preventEventPropagation(e);
+    setSelectedCategory(e.target.value);
+  };
+
+  const handleToggleFavorites = (e, showFavs) => {
+    preventEventPropagation(e);
+    setShowFavorites(showFavs);
+  };
+
   return (
     <div className={styles.foodSearch}>
       <div className={styles.searchButtons}>
         <button
           className={`${styles.tabButton} ${!showFavorites ? styles.active : ''}`}
-          onClick={() => setShowFavorites(false)}
+          onClick={(e) => handleToggleFavorites(e, false)}
         >
           <FaSearch className={styles.buttonIcon} /> Search Foods
         </button>
         <button
           className={`${styles.tabButton} ${showFavorites ? styles.active : ''}`}
-          onClick={() => setShowFavorites(true)}
+          onClick={(e) => handleToggleFavorites(e, true)}
         >
           <FaStar className={styles.buttonIcon} /> Favorites
         </button>
@@ -327,14 +371,19 @@ const FoodSearch = ({ onFoodSelect }) => {
               type="text"
               className={styles.searchInput}
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={handleSearchInputChange}
+              onClick={preventEventPropagation}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') preventEventPropagation(e);
+              }}
               placeholder="Search for food..."
               aria-label="Search foods"
             />
             <select
               className={styles.categorySelect}
               value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
+              onChange={handleCategoryChange}
+              onClick={preventEventPropagation}
               aria-label="Select category"
             >
               <option value="">All Categories</option>
@@ -354,14 +403,14 @@ const FoodSearch = ({ onFoodSelect }) => {
                   <div className={styles.foodCardActions}>
                     <button
                       className={styles.favoriteButton}
-                      onClick={() => handleAddToFavorites(food)}
+                      onClick={(e) => handleAddToFavorites(e, food)}
                       aria-label="Add to favorites"
                     >
                       <FaHeart />
                     </button>
                     <button
                       className={styles.addButton}
-                      onClick={() => onFoodSelect({ ...food, portionTypes })}
+                      onClick={(e) => handleFoodSelect(e, food)}
                       aria-label="Add food"
                     >
                       <FaPlus /> Add
@@ -380,7 +429,7 @@ const FoodSearch = ({ onFoodSelect }) => {
                 <h4 className={styles.foodCardTitle}>{food.name}</h4>
                 <button
                   className={styles.addButton}
-                  onClick={() => onFoodSelect({ ...food, portionTypes })}
+                  onClick={(e) => handleFoodSelect(e, food)}
                   aria-label="Add food"
                 >
                   <FaPlus /> Add
@@ -399,8 +448,13 @@ const FoodSearch = ({ onFoodSelect }) => {
 };
 
 const FoodSection = ({ selectedFoods, onFoodSelect, onUpdatePortion, onRemoveFood, onPortionChange }) => {
+  // Add handler to intercept and prevent bubbling events
+  const handlePreventPropagation = (e) => {
+    preventEventPropagation(e);
+  };
+
   return (
-    <div className={styles.foodSection}>
+    <div className={styles.foodSection} onClick={handlePreventPropagation}>
       <FoodSearch
         onFoodSelect={onFoodSelect}
       />
