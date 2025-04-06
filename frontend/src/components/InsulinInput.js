@@ -16,45 +16,61 @@ const InsulinInput = ({
   className = ''
 }) => {
   const { patientConstants, loading, error } = useConstants();
-  const [selectedInsulin, setSelectedInsulin] = useState(initialInsulin);
-  const [dose, setDose] = useState(initialDose);
+  const [selectedInsulin, setSelectedInsulin] = useState(initialInsulin || '');
+  const [dose, setDose] = useState(initialDose || '');
   const [scheduledTime, setScheduledTime] = useState('');
   const [notes, setNotes] = useState('');
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [recentDoses, setRecentDoses] = useState([]);
 
-  // Get available insulin types with memoization
-  const availableInsulinTypes = useMemo(() => {
+  // Prevent propagation of events that could cause form submission
+  const preventEventPropagation = (e) => {
+    e.stopPropagation();
+  };
+
+  // Get insulin options from patient constants with memoization
+  const insulinOptions = useMemo(() => {
     if (!patientConstants?.medication_factors) {
       return [];
     }
 
-    return Object.entries(patientConstants.medication_factors)
-      .filter(([name, details]) => {
-        // Check if the name contains 'insulin' and is not a hormone or other medication
-        return name.includes('insulin') &&
-          !['injectable_contraceptives', 'oral_contraceptives'].includes(name);
-      })
-      .map(([name, details]) => ({
-        name,
-        displayName: name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-        category: details.type,
-        ...details
-      }))
-      .sort((a, b) => {
-        if (a.type !== b.type) {
-          const typeOrder = {
-            'rapid_acting': 1,
-            'short_acting': 2,
-            'intermediate_acting': 3,
-            'long_acting': 4,
-            'mixed': 5
-          };
-          return (typeOrder[a.type] || 99) - (typeOrder[b.type] || 99);
-        }
-        return a.displayName.localeCompare(b.displayName);
-      });
+    try {
+      return Object.entries(patientConstants.medication_factors)
+        .filter(([name, details]) => {
+          // Check if the name contains 'insulin' and is not a hormone or other medication
+          const isInsulin = name.includes('insulin') &&
+            !['injectable_contraceptives', 'oral_contraceptives'].includes(name);
+          return isInsulin && details && details.type;  // Make sure details and type exist
+        })
+        .map(([name, details]) => ({
+          value: name,
+          label: name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+          type: details.type || 'unknown',  // Provide default if type is missing
+          ...details
+        }))
+        .sort((a, b) => {
+          // First sort by type
+          if (a.type !== b.type) {
+            const typeOrder = {
+              'rapid_acting': 1,
+              'short_acting': 2,
+              'intermediate_acting': 3,
+              'long_acting': 4,
+              'mixed': 5
+            };
+            return (typeOrder[a.type] || 99) - (typeOrder[b.type] || 99);
+          }
+
+          // Then sort by name if types are the same
+          const nameA = a.label || a.value || '';
+          const nameB = b.label || b.value || '';
+          return nameA.localeCompare(nameB);
+        });
+    } catch (err) {
+      console.error('Error processing insulin options:', err);
+      return [];
+    }
   }, [patientConstants]);
 
   useEffect(() => {
@@ -62,9 +78,9 @@ const InsulinInput = ({
     const now = new Date();
     setScheduledTime(now.toISOString().slice(0, 16));
 
-    // Update state if props change
-    setSelectedInsulin(initialInsulin);
-    setDose(initialDose);
+    // Update state from props when they change
+    setSelectedInsulin(initialInsulin || '');
+    setDose(initialDose || '');
 
     // Fetch recent doses if standalone
     if (isStandalone) {
@@ -99,6 +115,7 @@ const InsulinInput = ({
   };
 
   const handleDoseChange = (e) => {
+    preventEventPropagation(e);
     const value = e.target.value;
     if (!isNaN(value) && (value === '' || parseFloat(value) >= 0)) {
       setDose(value);
@@ -114,6 +131,7 @@ const InsulinInput = ({
   };
 
   const handleInsulinTypeChange = (e) => {
+    preventEventPropagation(e);
     setSelectedInsulin(e.target.value);
 
     // Notify parent component when embedded
@@ -126,6 +144,7 @@ const InsulinInput = ({
   };
 
   const handleNotesChange = (e) => {
+    preventEventPropagation(e);
     setNotes(e.target.value);
 
     // Include notes in parent notification if embedded
@@ -139,7 +158,10 @@ const InsulinInput = ({
   };
 
   const handleSubmit = async (e) => {
-    if (e) e.preventDefault();
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
 
     // For embedded mode, just notify parent and don't try to submit directly
     if (!isStandalone) {
@@ -170,7 +192,7 @@ const InsulinInput = ({
         throw new Error('Session token not found. Please log in again.');
       }
 
-      // Use the meal endpoint with insulin-only data
+      // Use the meal endpoint with insulin-only data (same as what MealInput uses)
       const response = await axios.post(
         'http://localhost:5000/api/meal',
         {
@@ -243,34 +265,37 @@ const InsulinInput = ({
     <div className={`${styles.insulinInput} ${className}`}>
       {isStandalone && <h3>Record Insulin</h3>}
 
-      <form onSubmit={handleSubmit}>
-        {/* Display suggested insulin if provided */}
-{!isStandalone && suggestedInsulin !== null && (
-  <div className={`${styles.inputGroup} ${styles.readOnlyField}`}>
-    <label htmlFor="suggestedInsulin">Suggested Insulin Intake (units)</label>
-    <div className={styles.insulinInputGroup}>
-      <input
-        id="suggestedInsulin"
-        type="number"
-        value={suggestedInsulin}
-        readOnly
-        placeholder="Calculated based on meal and activities"
-      />
-      <input
-        id="suggestedInsulinType"
-        type="text"
-        value={(() => {
-          const insulin = patientConstants?.medication_factors?.[suggestedInsulinType];
-          if (!insulin) return '';
-          return `${suggestedInsulinType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} 
-          (${insulin.type.split('_')[0]} acting)`;
-        })()}
-        readOnly
-        className={styles.insulinTypeReadOnly}
-      />
-    </div>
-  </div>
-)}
+      {/* We need this form even in embedded mode but will prevent submission */}
+      <form onSubmit={handleSubmit} onClick={preventEventPropagation}>
+        {/* Only show suggested insulin if provided and not null */}
+        {!isStandalone && suggestedInsulin !== null && (
+          <div className={`${styles.inputGroup} ${styles.readOnlyField}`}>
+            <label htmlFor="suggestedInsulin">Suggested Insulin Intake (units)</label>
+            <div className={styles.insulinInputGroup}>
+              <input
+                id="suggestedInsulin"
+                type="number"
+                value={suggestedInsulin}
+                readOnly
+                placeholder="Calculated based on meal and activities"
+                onClick={preventEventPropagation}
+              />
+              <input
+                id="suggestedInsulinType"
+                type="text"
+                value={(() => {
+                  const insulin = patientConstants?.medication_factors?.[suggestedInsulinType];
+                  if (!insulin) return '';
+                  return `${suggestedInsulinType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} 
+                  (${insulin.type?.split('_')[0] || ''} acting)`;
+                })()}
+                readOnly
+                className={styles.insulinTypeReadOnly}
+                onClick={preventEventPropagation}
+              />
+            </div>
+          </div>
+        )}
 
         {/* Insulin type and dose selection */}
         <div className={styles.inputGroup}>
@@ -285,6 +310,7 @@ const InsulinInput = ({
               step="0.1"
               value={dose}
               onChange={handleDoseChange}
+              onClick={preventEventPropagation}
               placeholder="Enter insulin dose"
               required
               className={styles.numberInput}
@@ -293,13 +319,18 @@ const InsulinInput = ({
               id="intendedInsulinType"
               value={selectedInsulin}
               onChange={handleInsulinTypeChange}
+              onClick={preventEventPropagation}
               required
               className={styles.insulinTypeSelect}
             >
               <option value="">Select Type</option>
-              {availableInsulinTypes.map(insulin => (
-                <option key={insulin.name} value={insulin.name}>
-                  {insulin.displayName} ({insulin.type.split('_')[0]} acting
+              {insulinOptions.map(insulin => (
+                <option
+                  key={insulin.value}
+                  value={insulin.value}
+                  onClick={preventEventPropagation}
+                >
+                  {insulin.label} ({(insulin.type || "").split('_')[0]} acting
                   {insulin.brand_names ? ` - ${insulin.brand_names.join(', ')}` : ''})
                 </option>
               ))}
@@ -315,7 +346,11 @@ const InsulinInput = ({
               type="datetime-local"
               id="scheduledTime"
               value={scheduledTime}
-              onChange={(e) => setScheduledTime(e.target.value)}
+              onChange={(e) => {
+                preventEventPropagation(e);
+                setScheduledTime(e.target.value);
+              }}
+              onClick={preventEventPropagation}
               max={new Date().toISOString().slice(0, 16)}
               required
               className={styles.timeInput}
@@ -330,6 +365,7 @@ const InsulinInput = ({
             id="notes"
             value={notes}
             onChange={handleNotesChange}
+            onClick={preventEventPropagation}
             placeholder="Add any additional notes"
             className={styles.notesInput}
           />
@@ -348,6 +384,10 @@ const InsulinInput = ({
           <button
             type="submit"
             disabled={isSubmitting || !selectedInsulin || !dose}
+            onClick={(e) => {
+              preventEventPropagation(e);
+              handleSubmit(e);
+            }}
             className={styles.submitButton}
           >
             {isSubmitting ? 'Recording...' : 'Record Insulin'}
