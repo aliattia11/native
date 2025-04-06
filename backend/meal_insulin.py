@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify, current_app
 from bson.objectid import ObjectId
 from datetime import datetime
 import json  # Add this import
-
+from flask_cors import cross_origin
 # Updated imports
 from utils.auth import token_required
 from utils.error_handler import api_error_handler
@@ -767,3 +767,32 @@ def submit_blood_sugar(current_user):
     except Exception as e:
         logger.error(f"Error in submit_blood_sugar: {str(e)}")
         return jsonify({"error": str(e)}), 400
+
+
+@meal_insulin_bp.route('/api/import-meals', methods=['POST', 'OPTIONS'])
+@cross_origin(origins=["http://localhost:3000"], methods=['POST', 'OPTIONS'],
+              allow_headers=['Authorization', 'Content-Type'])
+@token_required
+@api_error_handler
+def import_meals(current_user):
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+
+    try:
+        data = request.json
+        meals = data.get('meals', [])
+
+        if not meals:
+            return jsonify({"error": "No meals provided"}), 400
+
+        # Insert meals in bulk
+        result = mongo.db.meals.insert_many(meals)
+
+        return jsonify({
+            "message": "Successfully imported meals",
+            "count": len(result.inserted_ids)
+        }), 201
+
+    except Exception as e:
+        logger.error(f"Error importing meals: {str(e)}")
+        return jsonify({"error": str(e)}), 500

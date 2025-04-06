@@ -30,26 +30,6 @@ def format_schedule(schedule):
     }
 
 
-@medication_routes.route('/api/medication-schedule/<patient_id>', methods=['GET'])
-@token_required
-@api_error_handler
-def get_patient_schedules(current_user, patient_id):
-    if current_user.get('user_type') != 'doctor' and str(current_user['_id']) != patient_id:
-        return jsonify({'message': 'Unauthorized access'}), 403
-
-    try:
-        # Find all active schedules for the patient
-        schedules = list(mongo.db.medication_schedules.find({
-            'patient_id': patient_id,
-            'endDate': {'$gte': datetime.utcnow()}
-        }))
-
-        formatted_schedules = [format_schedule(schedule) for schedule in schedules]
-        return jsonify({'schedules': formatted_schedules}), 200
-
-    except Exception as e:
-        logger.error(f"Error fetching medication schedules: {str(e)}")
-        return jsonify({'message': 'Error fetching medication schedules'}), 500
 
 @medication_routes.route('/api/medication-schedule/<patient_id>/<medication>', methods=['GET'])
 @token_required

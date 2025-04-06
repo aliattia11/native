@@ -139,14 +139,28 @@ const handleActivityUpdate = (newActivities, totalImpact) => {
     setExpandedCard(expandedCard === cardName ? null : cardName);
   };
 
-  const getAvailableInsulinTypes = () => {
+ const getAvailableInsulinTypes = () => {
   try {
     if (!patientConstants?.medication_factors) {
+      console.log('No medication factors found');
       return [];
     }
 
+    console.log('Medication Factors:', patientConstants.medication_factors);
+
     return Object.entries(patientConstants.medication_factors)
-      .filter(([_, details]) => details.type && details.type.includes('insulin'))
+      .filter(([name, details]) => {
+        // Check if the name contains 'insulin' and is not a hormone or other medication
+        const isInsulin = name.includes('insulin') &&
+          !['injectable_contraceptives', 'oral_contraceptives'].includes(name);
+
+        console.log(`Checking ${name}:`, {
+          isInsulin,
+          type: details.type
+        });
+
+        return isInsulin;
+      })
       .map(([name, details]) => ({
         name,
         displayName: name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
@@ -154,15 +168,13 @@ const handleActivityUpdate = (newActivities, totalImpact) => {
         ...details
       }))
       .sort((a, b) => {
-        // Sort by type first, then by name
         if (a.type !== b.type) {
-          // Define order of insulin types
           const typeOrder = {
-            'rapid_acting_insulin': 1,
-            'short_acting_insulin': 2,
-            'intermediate_acting_insulin': 3,
-            'long_acting_insulin': 4,
-            'mixed_insulin': 5
+            'rapid_acting': 1,
+            'short_acting': 2,
+            'intermediate_acting': 3,
+            'long_acting': 4,
+            'mixed': 5
           };
           return (typeOrder[a.type] || 99) - (typeOrder[b.type] || 99);
         }
@@ -174,7 +186,6 @@ const handleActivityUpdate = (newActivities, totalImpact) => {
   }
 };
 
-  // Continue from previous part...
 
   const handleSubmit = async (e) => {
   e.preventDefault();

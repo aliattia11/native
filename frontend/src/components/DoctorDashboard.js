@@ -6,10 +6,9 @@ import MealHistory from './MealHistory';
 import EnhancedPatientConstantsUI from './EnhancedPatientConstantsUI';
 import ActivityDataTable from './ActivityDataTable';
 import BloodGlucoseCorrelationChart from './Charts/BloodGlucoseCorrelationChart ';
-
-
+import DataImport from './DataImport';
 import styles from './DoctorDashboard.module.css';
-
+import { FaSync, FaUserMd, FaClock, FaDatabase } from 'react-icons/fa';
 
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend } from 'chart.js';
 
@@ -20,9 +19,13 @@ const DoctorDashboard = () => {
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showResults, setShowResults] = useState(false);
-  const [loading, setLoading] = useState({ patients: false });
-  const [errors, setErrors] = useState({ patients: '' });
+  const [loading, setLoading] = useState({ patients: false, data: false });
+  const [errors, setErrors] = useState({ patients: '', data: '' });
   const [errorMessage, setErrorMessage] = useState('');
+  const [timeRange, setTimeRange] = useState('7d');
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [activeTab, setActiveTab] = useState('meals');
+  const [currentTime, setCurrentTime] = useState(new Date());
 
   const fetchPatients = useCallback(async () => {
     setLoading(prevLoading => ({ ...prevLoading, patients: true }));
@@ -55,12 +58,34 @@ const DoctorDashboard = () => {
 
   useEffect(() => {
     fetchPatients();
+    
+    // Update current time every minute
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 60000);
+
+    return () => clearInterval(timer);
   }, [fetchPatients]);
+
+  const handleImportComplete = async (result) => {
+    if (result.success) {
+      setRefreshTrigger(prev => prev + 1);
+      await fetchPatients();
+      setErrorMessage(`Successfully imported ${result.count} records`);
+      setTimeout(() => setErrorMessage(''), 3000);
+    }
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('token');
     window.location.href = 'http://localhost:3000/login';
   };
+
+  const handleRefreshData = useCallback(() => {
+    setRefreshTrigger(prev => prev + 1);
+    setErrorMessage('Data refreshed');
+    setTimeout(() => setErrorMessage(''), 2000);
+  }, []);
 
   const filteredPatients = patients.filter(patient =>
     patient.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -97,7 +122,10 @@ const DoctorDashboard = () => {
                   setShowResults(false);
                 }}
               >
-                {patient.name}
+                <div className={styles.patientSearchItemContent}>
+                  <span className={styles.patientName}>{patient.name}</span>
+                  <span className={styles.patientEmail}>{patient.email}</span>
+                </div>
               </div>
             ))
           ) : (
@@ -111,20 +139,36 @@ const DoctorDashboard = () => {
   return (
     <div className={styles.doctorDashboard}>
       <div className={styles.header}>
-        <h1>Doctor Dashboard</h1>
+        <div className={styles.headerLeft}>
+          <FaUserMd className={styles.headerIcon} />
+          <h1>Doctor Dashboard</h1>
+          <div className={styles.headerTime}>
+            <FaClock className={styles.clockIcon} />
+            <span>{currentTime.toLocaleString('en-US', { 
+              timeZone: 'UTC',
+              dateStyle: 'medium',
+              timeStyle: 'short'
+            })}</span>
+          </div>
+        </div>
         <button onClick={handleLogout} className={styles.logoutButton}>Logout</button>
       </div>
 
       {errorMessage && (
-        <div className={styles.errorBanner}>
+        <div className={`${styles.messageBanner} ${errorMessage.includes('Error') ? styles.error : styles.success}`}>
           {errorMessage}
-          <button onClick={() => setErrorMessage('')} className={styles.closeError}>×</button>
+          <button onClick={() => setErrorMessage('')} className={styles.closeMessage}>×</button>
         </div>
       )}
 
       <div className={styles.dashboardContainer}>
-        <div className={styles.patientList}>
-          <h2>Patients</h2>
+        <div className={styles.sidebar}>
+          <div className={styles.patientListHeader}>
+            <h2>Patients</h2>
+            <span className={styles.patientCount}>
+              Total: {patients.length}
+            </span>
+          </div>
           {loading.patients ? (
             <div className={styles.loading}>Loading patients...</div>
           ) : errors.patients ? (
@@ -134,34 +178,98 @@ const DoctorDashboard = () => {
           )}
         </div>
 
-        <div className={styles.patientData}>
+        <div className={styles.mainContent}>
           {selectedPatient ? (
             <>
-              <h2>Patient: {selectedPatient.name}</h2>
-              <div className={styles.patientDataGrid}>
-                <EnhancedPatientConstantsUI
-                  patientId={selectedPatient.id}
-                />
-                <div className={styles.dataCharts}>
-
-<div className={styles.correlationChart}>
-  <h3>Blood Glucose Management Overview</h3>
-  <BloodGlucoseCorrelationChart
-      patientId={selectedPatient.id}
-      timeRange="7d"
-  />
-</div>
-                  <BloodSugarChart isDoctor={true} patientId={selectedPatient.id} />
-                  <BloodSugarVisualization isDoctor={true} patientId={selectedPatient.id} />
+              <div className={styles.patientHeader}>
+                <div className={styles.patientInfo}>
+                  <h2>{selectedPatient.name}</h2>
+                  <span className={styles.patientEmail}>{selectedPatient.email}</span>
                 </div>
+                <div className={styles.patientActions}>
+                  <DataImport 
+                    onImportComplete={handleImportComplete}
+                    className={styles.dataImport}
+                  />
+                  <button 
+                    onClick={handleRefreshData} 
+                    className={styles.refreshButton}
+                  >
+                    <FaSync className={styles.refreshIcon} />
+                    Refresh Data
+                  </button>
+                </div>
+              </div>
+
+              <div className={styles.patientDataGrid}>
+                <div className={styles.constantsSection}>
+                  <EnhancedPatientConstantsUI
+                    patientId={selectedPatient.id}
+                  />
+                </div>
+
+                <div className={styles.dataCharts}>
+                  <div className={styles.correlationChart}>
+                    <div className={styles.chartHeader}>
+                      <h3>Blood Glucose Management Overview</h3>
+                      <div className={styles.chartControls}>
+                        <select 
+                          value={timeRange}
+                          onChange={(e) => setTimeRange(e.target.value)}
+                          className={styles.timeRangeSelect}
+                        >
+                          <option value="24h">Last 24 Hours</option>
+                          <option value="7d">Last 7 Days</option>
+                          <option value="30d">Last 30 Days</option>
+                        </select>
+                      </div>
+                    </div>
+                    <BloodGlucoseCorrelationChart
+                      patientId={selectedPatient.id}
+                      timeRange={timeRange}
+                      refreshTrigger={refreshTrigger}
+                    />
+                  </div>
+
+                  <div className={styles.additionalCharts}>
+                    <BloodSugarChart isDoctor={true} patientId={selectedPatient.id} />
+                    <BloodSugarVisualization isDoctor={true} patientId={selectedPatient.id} />
+                  </div>
+                </div>
+
                 <div className={styles.dataHistory}>
-                  <MealHistory isDoctor={true} patientId={selectedPatient.id} />
-                  <ActivityDataTable isDoctor={true} patientId={selectedPatient.id} />
+                  <div className={styles.historyHeader}>
+                    <h3>Patient History</h3>
+                    <div className={styles.historyTabs}>
+                      <button 
+                        className={`${styles.historyTab} ${activeTab === 'meals' ? styles.active : ''}`}
+                        onClick={() => setActiveTab('meals')}
+                      >
+                        Meals
+                      </button>
+                      <button 
+                        className={`${styles.historyTab} ${activeTab === 'activities' ? styles.active : ''}`}
+                        onClick={() => setActiveTab('activities')}
+                      >
+                        Activities
+                      </button>
+                    </div>
+                  </div>
+                  <div className={styles.historyContent}>
+                    {activeTab === 'meals' ? (
+                      <MealHistory isDoctor={true} patientId={selectedPatient.id} />
+                    ) : (
+                      <ActivityDataTable isDoctor={true} patientId={selectedPatient.id} />
+                    )}
+                  </div>
                 </div>
               </div>
             </>
           ) : (
-            <p className={styles.selectPrompt}>Select a patient to view their data</p>
+            <div className={styles.selectPrompt}>
+              <FaUserMd className={styles.promptIcon} />
+              <p>Select a patient to view their data</p>
+            </div>
           )}
         </div>
       </div>
