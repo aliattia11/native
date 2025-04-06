@@ -407,10 +407,24 @@ def submit_meal(current_user):
         active_conditions = user.get('active_conditions', [])
         active_medications = user.get('active_medications', [])
 
+        # Current server time for record-keeping
+        current_time = datetime.utcnow()
+
+        # Parse administration time for insulin if provided
+        administration_time = current_time
+        if data.get('medicationLog', {}).get('scheduled_time'):
+            try:
+                # Parse the ISO format string from frontend into a datetime object
+                time_str = data['medicationLog']['scheduled_time'].replace('Z', '+00:00')
+                administration_time = datetime.fromisoformat(time_str)
+                logger.debug(f"Using provided administration time: {administration_time}")
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Error parsing administration time: {e}. Using current time instead.")
+
         # Prepare meal document
         meal_doc = {
             'user_id': str(current_user['_id']),
-            'timestamp': datetime.utcnow(),
+            'timestamp': current_time,
             'mealType': data['mealType'],
             'foodItems': data['foodItems'],
             'activities': [{
@@ -435,22 +449,24 @@ def submit_meal(current_user):
             'calculationFactors': calculation_factors
         }
 
+        # Add the insulin administration time to the meal document if insulin was taken
+        if data.get('intendedInsulin') and data.get('intendedInsulinType'):
+            meal_doc['insulinAdministrationTime'] = administration_time
+
         # Insert meal document
         result = mongo.db.meals.insert_one(meal_doc)
 
         # Handle insulin logging in medication system
         if data.get('intendedInsulin') and data.get('intendedInsulinType'):
-            current_time = datetime.utcnow()
-
-            # Create medication log entry
+            # Create medication log entry with consistent administration time
             medication_log = {
                 'patient_id': str(current_user['_id']),
                 'medication': data['intendedInsulinType'],
                 'dose': float(data['intendedInsulin']),
-                'scheduled_time': current_time,
-                'taken_at': current_time,
-                'status': 'taken',
-                'created_at': current_time,
+                'scheduled_time': administration_time,  # When insulin was scheduled to be taken
+                'taken_at': administration_time,  # When insulin was actually taken
+                'status': 'taken',  # Status is 'taken' as we're logging a dose that was administered
+                'created_at': current_time,  # Record creation time (server time)
                 'created_by': str(current_user['_id']),
                 'notes': data.get('notes', ''),
                 'is_insulin': True,
@@ -463,11 +479,8 @@ def submit_meal(current_user):
             # Insert medication log
             log_result = mongo.db.medication_logs.insert_one(medication_log)
 
-            # Format time for schedule
-            time_str = current_time.strftime('%H:%M')
-
             try:
-                # First, try to find existing schedule
+                # Find existing schedule but DO NOT MODIFY the schedule times
                 existing_schedule = mongo.db.medication_schedules.find_one({
                     'patient_id': str(current_user['_id']),
                     'medication': data['intendedInsulinType'],
@@ -475,40 +488,37 @@ def submit_meal(current_user):
                 })
 
                 if existing_schedule:
-                    # Update existing schedule
+                    # Only update the last_used timestamp, not the dailyTimes
                     mongo.db.medication_schedules.update_one(
                         {'_id': existing_schedule['_id']},
                         {
                             '$set': {
                                 'updated_at': current_time,
-                                'last_used': current_time
-                            },
-                            '$addToSet': {
-                                'dailyTimes': time_str
+                                'last_used': administration_time
                             }
                         }
                     )
                     logger.info(f"Updated existing insulin schedule: {existing_schedule['_id']}")
                 else:
-                    # Create new schedule
-                    schedule_doc = {
+                    # If no schedule exists, we'll create a record but NOT automatically
+                    # create a schedule with the patient's administration time
+                    # Create a medication record without dailyTimes
+                    medication_record = {
                         'patient_id': str(current_user['_id']),
                         'medication': data['intendedInsulinType'],
-                        'startDate': current_time,
-                        'endDate': current_time + timedelta(days=30),
-                        'dailyTimes': [time_str],
                         'created_at': current_time,
                         'updated_at': current_time,
-                        'last_used': current_time,
+                        'last_used': administration_time,
                         'created_by': str(current_user['_id']),
                         'is_insulin': True,
-                        'auto_generated': True,
-                        'status': 'active'
+                        'auto_generated': False,
+                        'status': 'active',
+                        'needs_schedule': True  # Flag for doctor to create a proper schedule
                     }
 
-                    # Insert new schedule
-                    schedule_result = mongo.db.medication_schedules.insert_one(schedule_doc)
-                    logger.info(f"Created new insulin schedule with ID: {schedule_result.inserted_id}")
+                    # Insert medication record
+                    med_result = mongo.db.medications.insert_one(medication_record)
+                    logger.info(f"Created new medication record: {med_result.inserted_id}")
 
                 # Update user's active medications if needed
                 if data['intendedInsulinType'] not in user.get('active_medications', []):
@@ -523,11 +533,11 @@ def submit_meal(current_user):
                     logger.info(f"Added {data['intendedInsulinType']} to user's active medications")
 
             except Exception as e:
-                logger.error(f"Error updating medication schedule: {str(e)}")
-                # Continue with meal submission even if schedule update fails
+                logger.error(f"Error updating medication records: {str(e)}")
+                # Continue with meal submission even if medication record updates fail
 
             logger.info(
-                f"Successfully logged insulin dose: {medication_log['dose']} units of {medication_log['medication']}")
+                f"Successfully logged insulin dose: {medication_log['dose']} units of {medication_log['medication']} at {administration_time}")
 
         return jsonify({
             "message": "Meal logged successfully",

@@ -266,17 +266,17 @@ const MealInput = () => {
       // Add medication scheduling information if insulin is being logged
       if (insulinData.dose && insulinData.type) {
         mealData.medicationLog = {
-          is_insulin: true,
-          dose: parseFloat(insulinData.dose),
-          medication: insulinData.type,
-          scheduled_time: new Date().toISOString(),
-          notes: insulinData.notes,
-          meal_context: {
-            meal_type: mealType,
-            blood_sugar: bloodSugar ? parseFloat(bloodSugar) : null,
-            suggested_dose: suggestedInsulin ? parseFloat(suggestedInsulin) : null,
-          }
-        };
+  is_insulin: true,
+  dose: parseFloat(insulinData.dose),
+  medication: insulinData.type,
+  scheduled_time: insulinData.administrationTime || new Date().toISOString(), // Use the stored administration time
+  notes: insulinData.notes,
+  meal_context: {
+    meal_type: mealType,
+    blood_sugar: bloodSugar ? parseFloat(bloodSugar) : null,
+    suggested_dose: suggestedInsulin ? parseFloat(suggestedInsulin) : null,
+  }
+};
       }
 
       const response = await axios.post(
