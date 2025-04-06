@@ -7,42 +7,53 @@ import { FaInfoCircle } from 'react-icons/fa';
 
 const InsulinInput = ({
   onInsulinChange,
-  initialInsulin = null,
-  isStandalone = false,
-  onDoseLogged = null
+  initialInsulin = '',
+  initialDose = '',
+  isStandalone = true,
+  onDoseLogged = null,
+  suggestedInsulin = null,
+  suggestedInsulinType = null,
+  className = ''
 }) => {
   const { patientConstants, loading, error } = useConstants();
-  const [selectedInsulin, setSelectedInsulin] = useState('');
-  const [dose, setDose] = useState('');
+  const [selectedInsulin, setSelectedInsulin] = useState(initialInsulin);
+  const [dose, setDose] = useState(initialDose);
   const [scheduledTime, setScheduledTime] = useState('');
   const [notes, setNotes] = useState('');
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [recentDoses, setRecentDoses] = useState([]);
 
-  // Get insulin options from patient constants with memoization
-  const insulinOptions = useMemo(() => {
+  // Get available insulin types with memoization
+  const availableInsulinTypes = useMemo(() => {
     if (!patientConstants?.medication_factors) {
       return [];
     }
 
     return Object.entries(patientConstants.medication_factors)
-      .filter(([_, details]) => details.type && details.type.includes('_acting'))
+      .filter(([name, details]) => {
+        // Check if the name contains 'insulin' and is not a hormone or other medication
+        return name.includes('insulin') &&
+          !['injectable_contraceptives', 'oral_contraceptives'].includes(name);
+      })
       .map(([name, details]) => ({
-        value: name,
-        label: name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+        name,
+        displayName: name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
         category: details.type,
         ...details
       }))
       .sort((a, b) => {
-        // Sort by type (rapid, short, intermediate, long)
-        const typeOrder = {
-          'rapid_acting': 1,
-          'short_acting': 2,
-          'intermediate_acting': 3,
-          'long_acting': 4
-        };
-        return (typeOrder[a.type] || 99) - (typeOrder[b.type] || 99);
+        if (a.type !== b.type) {
+          const typeOrder = {
+            'rapid_acting': 1,
+            'short_acting': 2,
+            'intermediate_acting': 3,
+            'long_acting': 4,
+            'mixed': 5
+          };
+          return (typeOrder[a.type] || 99) - (typeOrder[b.type] || 99);
+        }
+        return a.displayName.localeCompare(b.displayName);
       });
   }, [patientConstants]);
 
@@ -51,18 +62,21 @@ const InsulinInput = ({
     const now = new Date();
     setScheduledTime(now.toISOString().slice(0, 16));
 
-    // If initial insulin is provided, set it
-    if (initialInsulin) {
-      setSelectedInsulin(initialInsulin);
-    }
+    // Update state if props change
+    setSelectedInsulin(initialInsulin);
+    setDose(initialDose);
 
-    // Fetch recent doses
-    fetchRecentDoses();
-  }, [initialInsulin]);
+    // Fetch recent doses if standalone
+    if (isStandalone) {
+      fetchRecentDoses();
+    }
+  }, [initialInsulin, initialDose, isStandalone]);
 
   const fetchRecentDoses = async () => {
     try {
       const token = localStorage.getItem('token');
+      if (!token) return;
+
       const response = await axios.get(
         'http://localhost:5000/api/medication-logs/recent',
         {
@@ -76,28 +90,68 @@ const InsulinInput = ({
         }
       );
 
-      setRecentDoses(response.data.logs);
+      if (response.data && response.data.logs) {
+        setRecentDoses(response.data.logs);
+      }
     } catch (err) {
-      console.error('Error fetching recent doses:', err);
-      setMessage('Error fetching recent doses');
+      // Silent fail for this non-critical feature
     }
-  };
-
-  const handleInsulinSelect = (e) => {
-    setSelectedInsulin(e.target.value);
-    setMessage('');
   };
 
   const handleDoseChange = (e) => {
     const value = e.target.value;
     if (!isNaN(value) && (value === '' || parseFloat(value) >= 0)) {
       setDose(value);
-      setMessage('');
+
+      // Notify parent component when embedded
+      if (!isStandalone && onInsulinChange) {
+        onInsulinChange({
+          type: selectedInsulin,
+          dose: value
+        });
+      }
+    }
+  };
+
+  const handleInsulinTypeChange = (e) => {
+    setSelectedInsulin(e.target.value);
+
+    // Notify parent component when embedded
+    if (!isStandalone && onInsulinChange) {
+      onInsulinChange({
+        type: e.target.value,
+        dose: dose
+      });
+    }
+  };
+
+  const handleNotesChange = (e) => {
+    setNotes(e.target.value);
+
+    // Include notes in parent notification if embedded
+    if (!isStandalone && onInsulinChange) {
+      onInsulinChange({
+        type: selectedInsulin,
+        dose: dose,
+        notes: e.target.value
+      });
     }
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
+
+    // For embedded mode, just notify parent and don't try to submit directly
+    if (!isStandalone) {
+      if (onInsulinChange) {
+        onInsulinChange({
+          type: selectedInsulin,
+          dose: dose,
+          notes: notes
+        });
+      }
+      return;
+    }
 
     try {
       setIsSubmitting(true);
@@ -112,21 +166,30 @@ const InsulinInput = ({
       }
 
       const token = localStorage.getItem('token');
-      const userId = localStorage.getItem('userId');
-
-      if (!token || !userId) {
-        throw new Error('Authentication required');
+      if (!token) {
+        throw new Error('Session token not found. Please log in again.');
       }
 
-      // Submit insulin dose
+      // Use the meal endpoint with insulin-only data
       const response = await axios.post(
-        `http://localhost:5000/api/medication-log/${userId}`,
+        'http://localhost:5000/api/meal',
         {
-          medication: selectedInsulin,
-          dose: parseFloat(dose),
-          scheduled_time: scheduledTime || new Date().toISOString(),
-          is_insulin: true,
-          notes: notes
+          mealType: 'insulin_only',
+          recordingType: 'insulin',
+          foodItems: [],
+          activities: [],
+          bloodSugar: null,
+          bloodSugarSource: 'none',
+          intendedInsulin: parseFloat(dose),
+          intendedInsulinType: selectedInsulin,
+          notes: notes,
+          medicationLog: {
+            is_insulin: true,
+            dose: parseFloat(dose),
+            medication: selectedInsulin,
+            scheduled_time: scheduledTime || new Date().toISOString(),
+            notes: notes
+          }
         },
         {
           headers: {
@@ -136,34 +199,33 @@ const InsulinInput = ({
         }
       );
 
-      if (response.status === 201) {
+      if (response.status === 201 || response.status === 200) {
         setMessage('Insulin dose logged successfully');
         await fetchRecentDoses();
 
         // Reset form if standalone
-        if (isStandalone) {
-          setSelectedInsulin('');
-          setDose('');
-          setNotes('');
-          setScheduledTime(new Date().toISOString().slice(0, 16));
-        }
+        setSelectedInsulin('');
+        setDose('');
+        setNotes('');
+        setScheduledTime(new Date().toISOString().slice(0, 16));
 
         // Notify parent components
-        if (onInsulinChange) {
-          onInsulinChange({
-            type: selectedInsulin,
-            dose: parseFloat(dose),
-            scheduledTime
-          });
-        }
         if (onDoseLogged) {
           onDoseLogged(response.data);
         }
       }
     } catch (err) {
-      const errorMessage = err.response?.data?.message || err.message;
+      let errorMessage = 'An error occurred while recording insulin dose';
+
+      if (err.response?.data?.error) {
+        errorMessage = err.response.data.error;
+      } else if (err.response?.data?.message) {
+        errorMessage = err.response.data.message;
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+
       setMessage(`Error: ${errorMessage}`);
-      console.error('Error submitting insulin dose:', err);
     } finally {
       setIsSubmitting(false);
     }
@@ -178,86 +240,100 @@ const InsulinInput = ({
   }
 
   return (
-    <div className={styles.insulinInput}>
-      <h3>Record Insulin</h3>
+    <div className={`${styles.insulinInput} ${className}`}>
+      {isStandalone && <h3>Record Insulin</h3>}
 
       <form onSubmit={handleSubmit}>
+        {/* Display suggested insulin if provided */}
+{!isStandalone && suggestedInsulin !== null && (
+  <div className={`${styles.inputGroup} ${styles.readOnlyField}`}>
+    <label htmlFor="suggestedInsulin">Suggested Insulin Intake (units)</label>
+    <div className={styles.insulinInputGroup}>
+      <input
+        id="suggestedInsulin"
+        type="number"
+        value={suggestedInsulin}
+        readOnly
+        placeholder="Calculated based on meal and activities"
+      />
+      <input
+        id="suggestedInsulinType"
+        type="text"
+        value={(() => {
+          const insulin = patientConstants?.medication_factors?.[suggestedInsulinType];
+          if (!insulin) return '';
+          return `${suggestedInsulinType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} 
+          (${insulin.type.split('_')[0]} acting)`;
+        })()}
+        readOnly
+        className={styles.insulinTypeReadOnly}
+      />
+    </div>
+  </div>
+)}
+
+        {/* Insulin type and dose selection */}
         <div className={styles.inputGroup}>
-          <label htmlFor="insulinType">
-            Insulin Type
-            <div className={styles.tooltip}>
-              <FaInfoCircle className={styles.infoIcon} />
-              <span className={styles.tooltipText}>
-                Select the type of insulin you are using
-              </span>
-            </div>
+          <label htmlFor="intendedInsulin">
+            {isStandalone ? 'Insulin Dose (units)' : 'Intended Insulin Intake (units)'}
           </label>
-          <select
-            id="insulinType"
-            value={selectedInsulin}
-            onChange={handleInsulinSelect}
-            className={styles.select}
-            required
-          >
-            <option value="">Select insulin type</option>
-            {insulinOptions.map(option => (
-              <option key={option.value} value={option.value}>
-                {option.label} ({option.type.split('_')[0]} acting)
-              </option>
-            ))}
-          </select>
+          <div className={styles.insulinInputGroup}>
+            <input
+              id="intendedInsulin"
+              type="number"
+              min="0"
+              step="0.1"
+              value={dose}
+              onChange={handleDoseChange}
+              placeholder="Enter insulin dose"
+              required
+              className={styles.numberInput}
+            />
+            <select
+              id="intendedInsulinType"
+              value={selectedInsulin}
+              onChange={handleInsulinTypeChange}
+              required
+              className={styles.insulinTypeSelect}
+            >
+              <option value="">Select Type</option>
+              {availableInsulinTypes.map(insulin => (
+                <option key={insulin.name} value={insulin.name}>
+                  {insulin.displayName} ({insulin.type.split('_')[0]} acting
+                  {insulin.brand_names ? ` - ${insulin.brand_names.join(', ')}` : ''})
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
-        {selectedInsulin && (
-          <>
-            <div className={styles.inputGroup}>
-              <label htmlFor="insulinDose">
-                Dose (units)
-                <div className={styles.tooltip}>
-                  <FaInfoCircle className={styles.infoIcon} />
-                  <span className={styles.tooltipText}>
-                    Enter the number of insulin units
-                  </span>
-                </div>
-              </label>
-              <input
-                id="insulinDose"
-                type="number"
-                value={dose}
-                onChange={handleDoseChange}
-                placeholder="Enter dose"
-                min="0"
-                step="0.5"
-                required
-                className={styles.numberInput}
-              />
-            </div>
-
-            <div className={styles.inputGroup}>
-              <label htmlFor="scheduledTime">Time Taken</label>
-              <input
-                type="datetime-local"
-                id="scheduledTime"
-                value={scheduledTime}
-                onChange={(e) => setScheduledTime(e.target.value)}
-                max={new Date().toISOString().slice(0, 16)}
-                required
-                className={styles.timeInput}
-              />
-            </div>
-
-            <div className={styles.inputGroup}>
-              <label htmlFor="notes">Notes (optional)</label>
-              <textarea
-                id="notes"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Add any additional notes"
-                className={styles.notesInput}
-              />
-            </div>
-          </>
+        {/* Show time selector only in standalone mode */}
+        {isStandalone && (
+          <div className={styles.inputGroup}>
+            <label htmlFor="scheduledTime">Time Taken</label>
+            <input
+              type="datetime-local"
+              id="scheduledTime"
+              value={scheduledTime}
+              onChange={(e) => setScheduledTime(e.target.value)}
+              max={new Date().toISOString().slice(0, 16)}
+              required
+              className={styles.timeInput}
+            />
+          </div>
         )}
+
+        {/* Notes field available in both modes */}
+        <div className={styles.inputGroup}>
+          <label htmlFor="notes">Notes (optional)</label>
+          <textarea
+            id="notes"
+            value={notes}
+            onChange={handleNotesChange}
+            placeholder="Add any additional notes"
+            className={styles.notesInput}
+          />
+        </div>
 
         {message && (
           <div className={`${styles.message} ${
@@ -267,16 +343,20 @@ const InsulinInput = ({
           </div>
         )}
 
-        <button
-          type="submit"
-          disabled={isSubmitting || !selectedInsulin || !dose}
-          className={styles.submitButton}
-        >
-          {isSubmitting ? 'Recording...' : 'Record Insulin'}
-        </button>
+        {/* Show submit button only in standalone mode */}
+        {isStandalone && (
+          <button
+            type="submit"
+            disabled={isSubmitting || !selectedInsulin || !dose}
+            className={styles.submitButton}
+          >
+            {isSubmitting ? 'Recording...' : 'Record Insulin'}
+          </button>
+        )}
       </form>
 
-      {recentDoses.length > 0 && (
+      {/* Show recent doses only in standalone mode */}
+      {isStandalone && recentDoses.length > 0 && (
         <div className={styles.recentDoses}>
           <h4>Recent Insulin Doses</h4>
           <div className={styles.dosesList}>
