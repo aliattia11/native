@@ -8,6 +8,8 @@ import {
 } from '../utils/insulinUtils';
 import styles from './InsulinInput.module.css';
 import { FaInfoCircle, FaChevronDown, FaChevronUp, FaClock } from 'react-icons/fa';
+import TimeInput from './TimeInput';
+import TimeManager from '../utils/TimeManager';
 
 const InsulinInput = ({
   onInsulinChange,
@@ -22,7 +24,7 @@ const InsulinInput = ({
   const { patientConstants, refreshConstants, loading, error } = useConstants();
   const [selectedInsulin, setSelectedInsulin] = useState(initialInsulin);
   const [dose, setDose] = useState(initialDose);
-  const [scheduledTime, setScheduledTime] = useState('');
+  const [scheduledTime, setScheduledTime] = useState(TimeManager.getCurrentTimeISOString());
   const [notes, setNotes] = useState('');
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -39,8 +41,7 @@ const InsulinInput = ({
 
   useEffect(() => {
     // Set default scheduled time to now
-    const now = new Date();
-    setScheduledTime(now.toISOString().slice(0, 16));
+    setScheduledTime(TimeManager.getCurrentTimeISOString());
 
     // Update state if props change
     setSelectedInsulin(initialInsulin);
@@ -128,8 +129,8 @@ const InsulinInput = ({
     }
   };
 
-  const handleTimeChange = (e) => {
-    setScheduledTime(e.target.value);
+  const handleTimeChange = (newTime) => {
+    setScheduledTime(newTime);
 
     // Notify parent component when embedded
     if (!isStandalone && onInsulinChange) {
@@ -137,7 +138,7 @@ const InsulinInput = ({
         type: selectedInsulin,
         dose: dose,
         notes: notes,
-        administrationTime: e.target.value
+        administrationTime: newTime
       });
     }
   };
@@ -226,8 +227,7 @@ const InsulinInput = ({
         setExpanded(false);
 
         // Update time to current
-        const now = new Date();
-        setScheduledTime(now.toISOString().slice(0, 16));
+        setScheduledTime(TimeManager.getCurrentTimeISOString());
 
         // Notify parent components
         if (onDoseLogged) {
@@ -333,9 +333,8 @@ const InsulinInput = ({
                 <label htmlFor="administrationTime">
                   <FaClock className={styles.timeIcon} /> Administration Time
                 </label>
-                <input
-                  id="administrationTime"
-                  type="datetime-local"
+                <TimeInput
+                  mode="timepoint"
                   value={scheduledTime}
                   onChange={handleTimeChange}
                   className={styles.timeInput}
@@ -467,7 +466,7 @@ const InsulinInput = ({
                 </div>
                 <div className={styles.doseDetails}>
                   <span className={styles.doseTime}>
-                    {new Date(dose.scheduled_time).toLocaleString()}
+                    {TimeManager.formatDateTime(dose.scheduled_time)}
                   </span>
                   {dose.notes && (
                     <span className={styles.doseNotes}>{dose.notes}</span>

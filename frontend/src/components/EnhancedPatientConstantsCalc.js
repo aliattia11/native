@@ -1,5 +1,6 @@
-// Part 1: Core Functions and Utilities
-
+// Import the new time utilities
+import TimeManager from '../utils/TimeManager';
+import TimeEffect from '../utils/TimeEffect';
 import {
   MEASUREMENT_SYSTEMS,
   VOLUME_MEASUREMENTS,
@@ -8,7 +9,7 @@ import {
   convertToMl as baseConvertToMl
 } from '../constants';
 
-// Conversion utilities
+// Conversion utilities remain the same
 const convertToGrams = (amount, unit) => {
   if (baseConvertToGrams) {
     return baseConvertToGrams(amount, unit);
@@ -33,7 +34,7 @@ const convertToMl = (amount, unit) => {
 const calculateHealthFactorsData = (patientConstants, options = {}) => {
   if (!patientConstants) return null;
 
-  const currentDate = new Date();
+  const currentDate = options.currentDate || new Date();
   const { formatNames = false } = options;
 
   const result = {
@@ -46,27 +47,27 @@ const calculateHealthFactorsData = (patientConstants, options = {}) => {
 
   // Calculate conditions impact
   if (patientConstants.active_conditions?.length > 0) {
-  result.conditions = patientConstants.active_conditions
-  .map(condition => {
-    const conditionData = patientConstants.disease_factors[condition];
-    if (!conditionData?.factor) return null;
+    result.conditions = patientConstants.active_conditions
+      .map(condition => {
+        const conditionData = patientConstants.disease_factors[condition];
+        if (!conditionData?.factor) return null;
 
-    const factor = parseFloat(conditionData.factor);
-    const percentChange = ((factor - 1) * 100).toFixed(1);
+        const factor = parseFloat(conditionData.factor);
+        const percentChange = ((factor - 1) * 100).toFixed(1);
 
-    return {
-      name: formatNames
-        ? condition.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
-        : condition,
-      factor: factor,
-      percentage: percentChange, // Add this explicit field
-      isIncrease: factor > 1
-    };
-  })
-  .filter(Boolean);
+        return {
+          name: formatNames
+            ? condition.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+            : condition,
+          factor: factor,
+          percentage: percentChange, // Add this explicit field
+          isIncrease: factor > 1
+        };
+      })
+      .filter(Boolean);
   }
 
-  // Calculate medications impact
+  // Calculate medications impact - Use TimeEffect for timing calculations
   if (patientConstants.active_medications?.length > 0) {
     result.medications = patientConstants.active_medications
       .map(medication => {
@@ -74,7 +75,14 @@ const calculateHealthFactorsData = (patientConstants, options = {}) => {
         const schedule = patientConstants.medication_schedules?.[medication];
         if (!medData) return null;
 
-        const medicationEffect = calculateMedicationEffect(medication, medData, schedule, currentDate);
+        // Use TimeEffect to calculate medication timing effects
+        const medicationEffect = TimeEffect.calculateMedicationEffect(
+          medication,
+          medData,
+          schedule,
+          currentDate
+        );
+
         if (!medicationEffect) return null;
 
         return {
@@ -90,7 +98,7 @@ const calculateHealthFactorsData = (patientConstants, options = {}) => {
   }
 
   // Calculate combined health multiplier
-  result.healthMultiplier = calculateHealthFactors(patientConstants);
+  result.healthMultiplier = calculateHealthFactors(patientConstants, currentDate);
 
   // Format summary
   const percentageChange = ((result.healthMultiplier - 1) * 100).toFixed(1);
@@ -105,13 +113,13 @@ const calculateHealthFactorsData = (patientConstants, options = {}) => {
   return result;
 };
 
-// Interface functions
-export const calculateHealthFactorsDetails = (patientConstants) => {
-  return calculateHealthFactorsData(patientConstants);
+// Interface functions remain the same
+export const calculateHealthFactorsDetails = (patientConstants, currentDate) => {
+  return calculateHealthFactorsData(patientConstants, { currentDate });
 };
 
-export const getHealthFactorsDisplayData = (patientConstants) => {
-  const data = calculateHealthFactorsData(patientConstants, { formatNames: true });
+export const getHealthFactorsDisplayData = (patientConstants, currentDate) => {
+  const data = calculateHealthFactorsData(patientConstants, { formatNames: true, currentDate });
   return {
     activeConditions: data.conditions,
     medications: data.medications,
@@ -120,100 +128,23 @@ export const getHealthFactorsDisplayData = (patientConstants) => {
 };
 
 export const getHealthFactorsBreakdown = (patientConstants, currentDate = new Date()) => {
-  const data = calculateHealthFactorsData(patientConstants);
+  const data = calculateHealthFactorsData(patientConstants, { currentDate });
   return {
     conditions: data.conditions,
     medications: data.medications,
     healthMultiplier: data.healthMultiplier
   };
 };
-// Part 2: Medication and Activity Calculations
 
+// Use TimeEffect for medication effect calculations
 export const calculateMedicationEffect = (medication, medData, schedule, currentDate) => {
-  if (!medData) return null;
-
-  if (medData.duration_based && schedule) {
-    const startDate = new Date(schedule.startDate);
-    const endDate = new Date(schedule.endDate);
-
-    // Check schedule validity
-    if (currentDate < startDate) {
-      return {
-        status: 'Scheduled to start',
-        startDate: startDate.toLocaleDateString(),
-        factor: 1.0
-      };
-    }
-
-    if (currentDate > endDate) {
-      return {
-        status: 'Schedule ended',
-        endDate: endDate.toLocaleDateString(),
-        factor: 1.0
-      };
-    }
-
-    // Calculate last dose timing
-    const lastDoseTime = schedule.dailyTimes
-      .map(time => {
-        const [hours, minutes] = time.split(':');
-        const doseTime = new Date(currentDate);
-        doseTime.setHours(hours, minutes, 0, 0);
-        if (doseTime > currentDate) {
-          doseTime.setDate(doseTime.getDate() - 1);
-        }
-        return doseTime;
-      })
-      .sort((a, b) => b - a)[0];
-
-    const hoursSinceLastDose = (currentDate - lastDoseTime) / (1000 * 60 * 60);
-
-    // Calculate medication phase and factor
-    if (hoursSinceLastDose < medData.onset_hours) {
-      return {
-        status: 'Ramping up',
-        factor: 1.0 + ((medData.factor - 1.0) * (hoursSinceLastDose / medData.onset_hours)),
-        lastDose: lastDoseTime.toLocaleString(),
-        hoursSinceLastDose: Math.round(hoursSinceLastDose * 10) / 10
-      };
-    } else if (hoursSinceLastDose < medData.peak_hours) {
-      return {
-        status: 'Peak effect',
-        factor: medData.factor,
-        lastDose: lastDoseTime.toLocaleString(),
-        hoursSinceLastDose: Math.round(hoursSinceLastDose * 10) / 10
-      };
-    } else if (hoursSinceLastDose < medData.duration_hours) {
-      const remainingEffect = (medData.duration_hours - hoursSinceLastDose) /
-                           (medData.duration_hours - medData.peak_hours);
-      return {
-        status: 'Tapering',
-        factor: 1.0 + ((medData.factor - 1.0) * remainingEffect),
-        lastDose: lastDoseTime.toLocaleString(),
-        hoursSinceLastDose: Math.round(hoursSinceLastDose * 10) / 10
-      };
-    }
-
-    return {
-      status: 'No current effect',
-      factor: 1.0,
-      lastDose: lastDoseTime.toLocaleString(),
-      hoursSinceLastDose: Math.round(hoursSinceLastDose * 10) / 10
-    };
-  }
-
-  // Non-duration based medications
-  return {
-    status: 'Constant effect',
-    factor: medData.factor
-  };
+  return TimeEffect.calculateMedicationEffect(medication, medData, schedule, currentDate);
 };
 
-export const calculateHealthFactors = (patientConstants) => {
+export const calculateHealthFactors = (patientConstants, currentDate = new Date()) => {
   if (!patientConstants) return 1.0;
 
   let healthMultiplier = 1.0;
-  const currentDate = new Date();
 
   // Calculate disease impacts
   const activeConditions = patientConstants.active_conditions || [];
@@ -224,7 +155,7 @@ export const calculateHealthFactors = (patientConstants) => {
     }
   });
 
-  // Calculate medication impacts
+  // Calculate medication impacts using TimeEffect
   const activeMedications = patientConstants.active_medications || [];
   activeMedications.forEach(medication => {
     const medData = patientConstants.medication_factors[medication];
@@ -233,7 +164,13 @@ export const calculateHealthFactors = (patientConstants) => {
     if (medData.duration_based) {
       const schedule = patientConstants.medication_schedules?.[medication];
       if (schedule) {
-        const medicationEffect = calculateMedicationEffect(medication, medData, schedule, currentDate);
+        const medicationEffect = TimeEffect.calculateMedicationEffect(
+          medication,
+          medData,
+          schedule,
+          currentDate
+        );
+
         if (medicationEffect) {
           healthMultiplier *= medicationEffect.factor;
         }
@@ -259,10 +196,20 @@ export const calculateActivityImpact = (activities, patientConstants) => {
     // Get the base coefficient (defaults to 1.0 for normal activity)
     const coefficient = patientConstants.activity_coefficients[activity.level.toString()] || 1.0;
 
-    // Calculate duration in hours
-    const duration = typeof activity.duration === 'string'
-      ? parseFloat(activity.duration.split(':')[0]) + (parseFloat(activity.duration.split(':')[1]) || 0) / 60
-      : activity.duration;
+    // Calculate duration in hours using TimeManager
+    let duration;
+
+    // Handle different activity duration formats
+    if (activity.startTime && activity.endTime) {
+      // If we have start and end times, use TimeManager
+      duration = TimeManager.calculateDuration(activity.startTime, activity.endTime).totalHours;
+    } else if (typeof activity.duration === 'string' && activity.duration.includes(':')) {
+      // If duration is in "HH:MM" format
+      duration = TimeManager.durationToHours(activity.duration);
+    } else {
+      // Otherwise use as-is or default to 0
+      duration = parseFloat(activity.duration) || 0;
+    }
 
     // Calculate duration weight (capped at 2 hours)
     const durationWeight = Math.min(duration / 2, 1);
@@ -310,7 +257,6 @@ export const validateMedicationSchedule = (schedule) => {
 
   return errors;
 };
-// Part 3: Nutrition and Insulin Calculations
 
 export const calculateNutrients = (food) => {
   if (!food.details) return { carbs: 0, protein: 0, fat: 0, absorptionType: 'medium' };
@@ -354,23 +300,9 @@ export const calculateTotalNutrients = (selectedFoods) => {
   }, { carbs: 0, protein: 0, fat: 0, absorptionType: 'medium' });
 };
 
-export const get_time_of_day_factor = (patientConstants) => {
-  if (!patientConstants?.time_of_day_factors) {
-    return 1.0;
-  }
-
-  const hour = new Date().getHours();
-
-  // Check each time period
-for (const [, periodData] of Object.entries(patientConstants.time_of_day_factors)) {
-    const [startHour, endHour] = periodData.hours;
-    if (hour >= startHour && hour < endHour) {
-      return periodData.factor;
-    }
-  }
-
-  // Default to daytime factor if no period matches
-  return patientConstants.time_of_day_factors.daytime?.factor || 1.0;
+export const get_time_of_day_factor = (patientConstants, currentTime = new Date()) => {
+  // Use TimeEffect for consistent time of day calculations
+  return TimeEffect.getTimeOfDayFactor(patientConstants?.time_of_day_factors, currentTime);
 };
 
 export const calculateInsulinDose = ({
@@ -381,7 +313,8 @@ export const calculateInsulinDose = ({
   activities,
   patientConstants,
   mealType,
-  absorptionType = 'medium'
+  absorptionType = 'medium',
+  currentTime = new Date()
 }) => {
   if (!patientConstants) {
     throw new Error('Patient constants are required');
@@ -396,7 +329,7 @@ export const calculateInsulinDose = ({
   // Calculate adjustment factors
   const absorptionFactor = patientConstants.absorption_modifiers[absorptionType] || 1.0;
   const mealTimingFactor = (mealType && patientConstants.meal_timing_factors?.[mealType]) || 1.0;
-  const timeOfDayFactor = get_time_of_day_factor(patientConstants);
+  const timeOfDayFactor = TimeEffect.getTimeOfDayFactor(patientConstants.time_of_day_factors, currentTime);
   const activityImpact = calculateActivityImpact(activities, patientConstants);
 
   // Calculate timing adjusted insulin
@@ -409,7 +342,7 @@ export const calculateInsulinDose = ({
   }
 
   // Get health factors and calculate final insulin
-  const healthMultiplier = calculateHealthFactors(patientConstants);
+  const healthMultiplier = calculateHealthFactors(patientConstants, currentTime);
   const totalInsulin = Math.max(0, (adjustedInsulin + correctionInsulin) * healthMultiplier);
 
   return {
@@ -430,7 +363,7 @@ export const calculateInsulinDose = ({
   };
 };
 
-export const calculateInsulinNeeds = (selectedFoods, bloodSugar, activities, patientConstants, mealType) => {
+export const calculateInsulinNeeds = (selectedFoods, bloodSugar, activities, patientConstants, mealType, currentTime = new Date()) => {
   if (selectedFoods.length === 0 || !patientConstants) {
     return {
       suggestedInsulin: '',
@@ -445,7 +378,8 @@ export const calculateInsulinNeeds = (selectedFoods, bloodSugar, activities, pat
       bloodSugar: parseFloat(bloodSugar) || 0,
       activities,
       patientConstants,
-      mealType
+      mealType,
+      currentTime
     });
 
     return {

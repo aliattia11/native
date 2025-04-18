@@ -1,0 +1,105 @@
+.time-input {
+  margin-bottom: 15px;
+}
+
+.time-input-label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+  color: #333;
+}
+
+/* Timepoint mode styles */
+.time-input-timepoint {
+  display: flex;
+  align-items: center;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 5px 10px;
+  background-color: white;
+}
+
+.time-input-icon {
+  margin-right: 8px;
+  color: #555;
+}
+
+.time-input-datetime {
+  border: none;
+  outline: none;
+  width: 100%;
+  padding: 5px;
+  font-size: 14px;
+}
+
+/* Duration mode styles */
+.time-input-duration {
+  display: flex;
+  align-items: center;
+}
+
+.time-input-hours,
+.time-input-minutes {
+  width: 50px;
+  text-align: center;
+  padding: 8px 5px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 16px;
+}
+
+.time-input-separator {
+  margin: 0 8px;
+  font-weight: bold;
+  font-size: 18px;
+}
+
+.time-input-duration-label {
+  margin-left: 10px;
+  color: #777;
+  font-size: 12px;
+}
+
+/* Range mode styles */
+.time-input-range {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.time-input-range-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.time-input-range-label {
+  font-size: 14px;
+  color: #555;
+}
+
+.time-input-duration-display {
+  margin-top: 8px;
+  font-size: 14px;
+  color: #555;
+  font-weight: 500;
+}
+
+/* Responsive layout for range mode */
+@media (min-width: 768px) {
+  .time-input-range {
+    flex-direction: row;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .time-input-range-group {
+    flex: 1;
+    min-width: 200px;
+  }
+
+  .time-input-duration-display {
+    width: 100%;
+    padding-top: 5px;
+  }
+}

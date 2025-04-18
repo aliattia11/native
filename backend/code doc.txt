@@ -57,7 +57,7 @@ native3/
 │       │   │   │   └── BloodSugarChart
 │       │   │   │
 │       │   │   ├── Insulin and Meal Management
-│       │   │   │   ├── EnhancedMealInsulin
+│       │   │   │   ├── Insulin Input
 │       │   │   │   ├── MealInput
 │       │   │   │   │   └── FoodSection (subcomponent)
 │       │   │   │   └── MealHistory

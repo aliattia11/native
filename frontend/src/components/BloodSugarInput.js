@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './BloodSugarInput.css';
+import TimeInput from './TimeInput';
+import TimeManager from '../utils/TimeManager';
 
 const BloodSugarInput = ({
   onBloodSugarChange,
@@ -13,7 +15,8 @@ const BloodSugarInput = ({
   const [unit, setUnit] = useState('mg/dL');
   const [status, setStatus] = useState({ type: '', message: '' });
   const [isLoading, setIsLoading] = useState(false);
-  const [notes, setNotes] = useState(''); // Add notes state
+  const [notes, setNotes] = useState('');
+  const [readingTime, setReadingTime] = useState(TimeManager.getCurrentTimeISOString());
 
   useEffect(() => {
     if (initialValue) {
@@ -44,79 +47,88 @@ const BloodSugarInput = ({
     setStatus({ type: '', message: '' });
   };
 
-  const handleBlur = () => {
-    if (localValue && !isNaN(parseFloat(localValue))) {
-      const error = validateBloodSugar(localValue, unit);
-      if (error) {
-        setStatus({ type: 'error', message: error });
-        return;
-      }
-
-      const bloodSugarMgdl = unit === 'mmol/L'
-        ? mmolToMgdl(parseFloat(localValue))
-        : parseFloat(localValue);
-
-      if (onBloodSugarChange) {
-        onBloodSugarChange(bloodSugarMgdl);
-      }
+const handleBlur = () => {
+  if (localValue && !isNaN(parseFloat(localValue))) {
+    const error = validateBloodSugar(localValue, unit);
+    if (error) {
+      setStatus({ type: 'error', message: error });
+      return;
     }
+
+    const bloodSugarMgdl = unit === 'mmol/L'
+      ? mmolToMgdl(parseFloat(localValue))
+      : parseFloat(localValue);
+
+    if (onBloodSugarChange) {
+      // Pass both the blood sugar value and the reading time
+      onBloodSugarChange(bloodSugarMgdl, readingTime);
+    }
+  }
+};
+
+  const handleReadingTimeChange = (timeValue) => {
+    setReadingTime(timeValue);
   };
 
  const handleSubmit = async (e) => {
   e.preventDefault();
   if (!standalone) return;
 
-  const error = validateBloodSugar(localValue, unit);
-  if (error) {
-    setStatus({ type: 'error', message: error });
-    return;
-  }
 
-  setIsLoading(true);
-  try {
-    const token = localStorage.getItem('token');
-    const bloodSugarMgdl = unit === 'mmol/L'
-      ? mmolToMgdl(parseFloat(localValue))
-      : parseFloat(localValue);
-
-    const response = await fetch('http://localhost:5000/api/meal', {  // Changed endpoint
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        mealType: 'blood_sugar_only',
-        foodItems: [],
-        activities: [],
-        bloodSugar: bloodSugarMgdl,
-        bloodSugarSource: 'standalone',
-        notes: notes,
-        recordingType: 'standalone_blood_sugar',
-        timestamp: new Date().toISOString()
-      }),
-    });
-
-    if (!response.ok) {
-      const data = await response.json();
-      throw new Error(data.error || 'Failed to record blood sugar');
+    const error = validateBloodSugar(localValue, unit);
+    if (error) {
+      setStatus({ type: 'error', message: error });
+      return;
     }
 
-    const result = await response.json();
+    setIsLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const bloodSugarMgdl = unit === 'mmol/L'
+        ? mmolToMgdl(parseFloat(localValue))
+        : parseFloat(localValue);
 
-    setStatus({ type: 'success', message: 'Blood sugar level recorded successfully' });
-    setLocalValue('');
-    setNotes('');
+      const response = await fetch('http://localhost:5000/api/meal', {
+        method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    mealType: 'blood_sugar_only',
+    foodItems: [],
+    activities: [],
+    bloodSugar: bloodSugarMgdl,
+    bloodSugarSource: 'standalone',
+    bloodSugarTimestamp: readingTime, // Add this line
+    notes: notes,
+    recordingType: 'standalone_blood_sugar',
+    timestamp: new Date().toISOString() // This is when the record is created
+  }),
+});
 
-    if (onBloodSugarChange) onBloodSugarChange('');
-    if (onSubmitSuccess) onSubmitSuccess(result);
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to record blood sugar');
+      }
 
-  } catch (error) {
-    setStatus({ type: 'error', message: error.message || 'Error recording blood sugar level' });
-  } finally {
-    setIsLoading(false);
-  }
-};
+      const result = await response.json();
+
+      setStatus({ type: 'success', message: 'Blood sugar level recorded successfully' });
+      setLocalValue('');
+      setNotes('');
+      // Reset reading time to current time after successful submission
+      setReadingTime(TimeManager.getCurrentTimeISOString());
+
+      if (onBloodSugarChange) onBloodSugarChange('');
+      if (onSubmitSuccess) onSubmitSuccess(result);
+
+    } catch (error) {
+      setStatus({ type: 'error', message: error.message || 'Error recording blood sugar level' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className={`blood-sugar-input ${className}`}>
@@ -160,6 +172,19 @@ const BloodSugarInput = ({
               <option value="mmol/L">mmol/L</option>
             </select>
           </div>
+        </div>
+
+        {/* Reading Time Input */}
+        <div className="input-group">
+          <label htmlFor="readingTime">Reading Time:</label>
+          <TimeInput
+            mode="timepoint"
+            value={readingTime}
+            onChange={handleReadingTimeChange}
+            className="time-input-field"
+            disabled={disabled || isLoading}
+            required={standalone}
+          />
         </div>
 
         {/* Add notes textarea only for standalone mode */}

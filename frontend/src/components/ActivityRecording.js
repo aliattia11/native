@@ -1,10 +1,11 @@
-// frontend/src/components/ActivityRecording.js
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import { FaPlus, FaMinus } from 'react-icons/fa';
 import styles from './ActivityRecording.module.css';
 import { ACTIVITY_LEVELS } from '../constants';
 import { useConstants } from '../contexts/ConstantsContext';
+import TimeInput from './TimeInput';
+import TimeManager from '../utils/TimeManager';
 
 // ActivityItem component - memoized for better performance
 const ActivityItem = React.memo(({ item, updateItem, removeItem, activityCoefficients }) => {
@@ -19,16 +20,6 @@ const ActivityItem = React.memo(({ item, updateItem, removeItem, activityCoeffic
   const impactText = impact !== 1
     ? `Effect over 2 hours: ${impactPercentage}% ${impact > 1 ? 'increase' : 'decrease'} in insulin needs`
     : 'No effect on insulin needs';
-
-  const calculateDurationString = useCallback((startTime, endTime) => {
-    if (!startTime || !endTime) return "0:00";
-    const start = new Date(startTime);
-    const end = new Date(endTime);
-    const durationInMinutes = Math.max(0, (end - start) / (1000 * 60));
-    const hours = Math.floor(durationInMinutes / 60);
-    const minutes = Math.round(durationInMinutes % 60);
-    return `${hours}:${minutes.toString().padStart(2, '0')}`;
-  }, []);
 
   return (
     <div className={styles.activityItem}>
@@ -47,28 +38,17 @@ const ActivityItem = React.memo(({ item, updateItem, removeItem, activityCoeffic
         </select>
         <span className={styles.impactIndicator}>{impactText}</span>
       </div>
-      <div className={styles.timeInputs}>
-        <input
-          type="datetime-local"
-          className={styles.timeInput}
-          value={item.startTime}
-          onChange={(e) => updateItem({ ...item, startTime: e.target.value })}
-          required
-          placeholder="Start Time"
-        />
-        <input
-          type="datetime-local"
-          className={styles.timeInput}
-          value={item.endTime}
-          onChange={(e) => updateItem({ ...item, endTime: e.target.value })}
-          required
-          placeholder="End Time"
-          min={item.startTime}
-        />
-      </div>
-      <div className={styles.durationDisplay}>
-        Duration: {calculateDurationString(item.startTime, item.endTime)}
-      </div>
+
+      <TimeInput
+        mode="range"
+        value={{ start: item.startTime, end: item.endTime }}
+        onChange={({ start, end }) => {
+          updateItem({ ...item, startTime: start, endTime: end });
+        }}
+        className={styles.timeInputs}
+        required={true}
+      />
+
       <button className={styles.iconButton} type="button" onClick={removeItem}>
         <FaMinus />
       </button>
@@ -87,21 +67,9 @@ const ActivityRecording = ({
   const [status, setStatus] = useState({ type: '', message: '' });
   const [isLoading, setIsLoading] = useState(false);
 
-  const calculateDurationString = useCallback((startTime, endTime) => {
-    if (!startTime || !endTime) return "0:00";
-    const start = new Date(startTime);
-    const end = new Date(endTime);
-    const durationInMinutes = Math.max(0, (end - start) / (1000 * 60));
-    const hours = Math.floor(durationInMinutes / 60);
-    const minutes = Math.round(durationInMinutes % 60);
-    return `${hours}:${minutes.toString().padStart(2, '0')}`;
-  }, []);
-
+  // Calculate duration in hours using TimeManager
   const calculateDurationInHours = useCallback((startTime, endTime) => {
-    if (!startTime || !endTime) return 0;
-    const start = new Date(startTime);
-    const end = new Date(endTime);
-    return Math.max(0, (end - start) / (1000 * 60 * 60));
+    return TimeManager.calculateDuration(startTime, endTime).totalHours;
   }, []);
 
   const calculateTotalImpact = useCallback((activitiesList) => {
@@ -110,7 +78,7 @@ const ActivityRecording = ({
     return activitiesList.reduce((total, activity) => {
       const coefficient = patientConstants.activity_coefficients[activity.level] || 1.0;
       const duration = calculateDurationInHours(activity.startTime, activity.endTime);
-      
+
       const durationWeight = Math.min(duration / 2, 1);
       const weightedImpact = 1.0 + ((coefficient - 1.0) * durationWeight);
 
@@ -123,12 +91,16 @@ const ActivityRecording = ({
     if (!patientConstants) return [];
     return activities
       .filter(a => a.type === 'expected')
-      .map(activity => ({
-        ...activity,
-        impact: patientConstants.activity_coefficients[activity.level] || 1.0,
-        duration: calculateDurationString(activity.startTime, activity.endTime)
-      }));
-  }, [activities, patientConstants, calculateDurationString]);
+      .map(activity => {
+        const durationData = TimeManager.calculateDuration(activity.startTime, activity.endTime);
+        return {
+          ...activity,
+          impact: patientConstants.activity_coefficients[activity.level] || 1.0,
+          duration: durationData.formatted,
+          durationHours: durationData.totalHours
+        };
+      });
+  }, [activities, patientConstants]);
 
   // Memoize total impact
   const totalImpact = useMemo(() => {
@@ -144,7 +116,7 @@ const ActivityRecording = ({
 
   // Handler functions
   const addActivity = useCallback((type) => {
-    const currentTime = new Date().toISOString().slice(0, 16);
+    const currentTime = TimeManager.getCurrentTimeISOString();
     setActivities(prev => [...prev, {
       level: 0,
       startTime: currentTime,
@@ -166,9 +138,6 @@ const ActivityRecording = ({
     setActivities(prev => prev.filter(a => a !== activity));
   }, []);
 
-  // Continue in Part 2...
-// ... continuing from Part 1
-
   const handleSubmit = useCallback(async (e) => {
     e.preventDefault();
     if (!standalone) return;
@@ -180,14 +149,17 @@ const ActivityRecording = ({
         timestamp: new Date().toISOString(),
         mealType: 'activity_only',
         foodItems: [],
-        activities: activities.map(activity => ({
-          level: activity.level,
-          startTime: activity.startTime,
-          endTime: activity.endTime,
-          duration: calculateDurationString(activity.startTime, activity.endTime),
-          type: activity.type,
-          impact: patientConstants.activity_coefficients[activity.level] || 1.0
-        })),
+        activities: activities.map(activity => {
+          const durationData = TimeManager.calculateDuration(activity.startTime, activity.endTime);
+          return {
+            level: activity.level,
+            startTime: activity.startTime,
+            endTime: activity.endTime,
+            duration: TimeManager.hoursToTimeString(durationData.totalHours),
+            type: activity.type,
+            impact: patientConstants.activity_coefficients[activity.level] || 1.0
+          };
+        }),
         notes: notes,
         recordingType: 'standalone_activity_recording',
         calculationFactors: {
@@ -223,7 +195,7 @@ const ActivityRecording = ({
     } finally {
       setIsLoading(false);
     }
-  }, [standalone, activities, notes, totalImpact, patientConstants, calculateDurationString]);
+  }, [standalone, activities, notes, totalImpact, patientConstants]);
 
   if (loading) {
     return <div className={styles.loading}>Loading activity settings...</div>;
@@ -237,7 +209,7 @@ const ActivityRecording = ({
     ? `Total Impact: ${((totalImpact - 1) * 100).toFixed(1)}% ${totalImpact > 1 ? 'increase' : 'decrease'}`
     : 'No overall impact';
 
- return (
+  return (
     <div className={standalone ? styles.standaloneContainer : styles.inlineContainer}>
       {standalone && <h2 className={styles.title}>Record Activities</h2>}
 
@@ -274,13 +246,8 @@ const ActivityRecording = ({
               <ActivityItem
                 key={index}
                 item={activity}
-                updateItem={(updatedActivity) => {
-                  const newActivities = [...activities];
-                  const realIndex = activities.findIndex(a => a === activity);
-                  newActivities[realIndex] = updatedActivity;
-                  setActivities(newActivities);
-                }}
-                removeItem={() => setActivities(activities.filter(a => a !== activity))}
+                updateItem={(updatedActivity) => updateActivity(activity, updatedActivity)}
+                removeItem={() => removeActivity(activity)}
                 activityCoefficients={patientConstants.activity_coefficients}
               />
             ))}

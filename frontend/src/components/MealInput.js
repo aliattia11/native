@@ -11,6 +11,7 @@ import {
 import InsulinInput from './InsulinInput';
 import BloodSugarInput from './BloodSugarInput';
 import ActivityRecording from './ActivityRecording';
+import TimeManager from '../utils/TimeManager';
 import { MEAL_TYPES } from '../constants';
 import { recommendInsulinType } from '../utils/insulinUtils';
 import styles from './MealInput.module.css';
@@ -23,7 +24,7 @@ const MealInput = () => {
   const [activityImpactFromRecording, setActivityImpactFromRecording] = useState(1.0);
   const [activityImpact, setActivityImpact] = useState(1.0);
   const [bloodSugar, setBloodSugar] = useState('');
-  const [suggestedInsulin, setSuggestedInsulin] = useState('');
+  const [bloodSugarTimestamp, setBloodSugarTimestamp] = useState('');  const [suggestedInsulin, setSuggestedInsulin] = useState('');
   const [suggestedInsulinType, setSuggestedInsulinType] = useState('');
   const [insulinBreakdown, setInsulinBreakdown] = useState(null);
   const [insulinData, setInsulinData] = useState({
@@ -238,8 +239,9 @@ const MealInput = () => {
           startTime: activity.startTime,
           endTime: activity.endTime,
         })),
-        bloodSugar: bloodSugar ? parseFloat(bloodSugar) : null,
-        bloodSugarSource,
+       bloodSugar: bloodSugar ? parseFloat(bloodSugar) : null,
+  bloodSugarTimestamp: bloodSugarTimestamp || new Date().toISOString(),
+         bloodSugarSource,
         intendedInsulin: insulinData.dose ? parseFloat(insulinData.dose) : null,
         intendedInsulinType: insulinData.type,
         suggestedInsulinType,
@@ -371,16 +373,17 @@ const MealInput = () => {
         <div className={styles.measurementSection}>
           <div className={styles.formField}>
             <label htmlFor="bloodSugar">Blood Sugar Level</label>
-            <BloodSugarInput
-              initialValue={bloodSugar}
-              onBloodSugarChange={(value) => {
-                setBloodSugar(value);
-                setBloodSugarSource('direct');
-              }}
-              disabled={isSubmitting}
-              standalone={false}
-              className={styles.mealInputBloodSugar}
-            />
+           <BloodSugarInput
+  initialValue={bloodSugar}
+  onBloodSugarChange={(value, timestamp) => {
+    setBloodSugar(value);
+    setBloodSugarTimestamp(timestamp || new Date().toISOString());
+    setBloodSugarSource('direct');
+  }}
+  disabled={isSubmitting}
+  standalone={false}
+  className={styles.mealInputBloodSugar}
+/>
           </div>
         </div>
 

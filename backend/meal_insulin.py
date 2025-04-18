@@ -424,7 +424,7 @@ def submit_meal(current_user):
         # Prepare meal document
         meal_doc = {
             'user_id': str(current_user['_id']),
-            'timestamp': current_time,
+            'timestamp': current_time,  # When the record was created
             'mealType': data['mealType'],
             'foodItems': data['foodItems'],
             'activities': [{
@@ -437,6 +437,7 @@ def submit_meal(current_user):
             } for activity in data['activities']],
             'nutrition': nutrition,
             'bloodSugar': data.get('bloodSugar'),
+            'bloodSugarTimestamp': data.get('bloodSugarTimestamp') or current_time.isoformat(),  # Added this line
             'intendedInsulin': data.get('intendedInsulin'),
             'intendedInsulinType': data.get('intendedInsulinType'),
             'suggestedInsulin': insulin_calc['total'],
@@ -582,6 +583,7 @@ def get_meals(current_user):
                 "activities": meal['activities'],
                 "nutrition": meal['nutrition'],
                 "bloodSugar": meal.get('bloodSugar'),
+    "bloodSugarTimestamp": meal.get('bloodSugarTimestamp'),  # Add this line
                 "intendedInsulin": meal.get('intendedInsulin'),
                 "intendedInsulinType": meal.get('intendedInsulinType'),  # Add this line
                 "suggestedInsulin": meal['suggestedInsulin'],
@@ -751,8 +753,8 @@ def submit_blood_sugar(current_user):
         meal_doc = {
             'user_id': str(current_user['_id']),
             'timestamp': datetime.utcnow(),
-            'mealType': 'blood_sugar_only',  # Special type for standalone readings
-            'foodItems': [],  # Empty as this is just a blood sugar reading
+            'mealType': 'blood_sugar_only',
+            'foodItems': [],
             'activities': [],
             'nutrition': {
                 'calories': 0,
@@ -762,8 +764,9 @@ def submit_blood_sugar(current_user):
                 'absorption_factor': 1.0
             },
             'bloodSugar': blood_sugar,
+            'bloodSugarTimestamp': data.get('bloodSugarTimestamp') or datetime.utcnow().isoformat(),
             'notes': data.get('notes', ''),
-            'isStandaloneReading': True  # Flag to identify standalone readings
+            'isStandaloneReading': True
         }
 
         # Insert into meals collection
@@ -777,7 +780,6 @@ def submit_blood_sugar(current_user):
     except Exception as e:
         logger.error(f"Error in submit_blood_sugar: {str(e)}")
         return jsonify({"error": str(e)}), 400
-
 
 @meal_insulin_bp.route('/api/import-meals', methods=['POST', 'OPTIONS'])
 @cross_origin(origins=["http://localhost:3000"], methods=['POST', 'OPTIONS'],
