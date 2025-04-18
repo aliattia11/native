@@ -1,9 +1,11 @@
-// frontend/src/components/MedicationSchedule.js
 import React, { useState, useEffect } from 'react';
 import { useConstants } from '../contexts/ConstantsContext';
 import styles from './MedicationSchedule.module.css';
 import axios from 'axios';
 import { validateMedicationSchedule } from './EnhancedPatientConstantsCalc';
+import TimeInput from './TimeInput';
+import TimeManager from '../utils/TimeManager';
+import TimeEffect from '../utils/TimeEffect';
 
 const MedicationSchedule = ({
   medication,
@@ -30,6 +32,7 @@ const MedicationSchedule = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [currentSchedule, setCurrentSchedule] = useState(null);
+  const [medicationEffect, setMedicationEffect] = useState(null);
 
   useEffect(() => {
     const loadInitialSchedule = async () => {
@@ -94,8 +97,33 @@ const MedicationSchedule = ({
         });
       }
     };
+
     loadInitialSchedule();
-  }, [medication, medicationSchedules, patientId]);
+
+    // Calculate medication effect if duration-based
+    if (medicationData?.duration_based && currentSchedule) {
+      const effect = TimeEffect.calculateMedicationEffect(
+        medication,
+        medicationData,
+        currentSchedule
+      );
+      setMedicationEffect(effect);
+    }
+
+    // Set up an interval to recalculate medication effect every minute
+    const effectInterval = setInterval(() => {
+      if (medicationData?.duration_based && currentSchedule) {
+        const effect = TimeEffect.calculateMedicationEffect(
+          medication,
+          medicationData,
+          currentSchedule
+        );
+        setMedicationEffect(effect);
+      }
+    }, 60000); // Update every minute
+
+    return () => clearInterval(effectInterval);
+  }, [medication, medicationData, medicationSchedules, patientId, currentSchedule]);
 
   const validateSchedule = () => {
     return validateMedicationSchedule(schedule);
@@ -116,12 +144,24 @@ const MedicationSchedule = ({
   };
 
   const handleTimeChange = (index, value) => {
-    setSchedule(prev => ({
-      ...prev,
-      dailyTimes: prev.dailyTimes.map((time, i) =>
-        i === index ? value : time
-      ).sort()
-    }));
+    setSchedule(prev => {
+      const updatedTimes = [...prev.dailyTimes];
+      updatedTimes[index] = value;
+      return {
+        ...prev,
+        dailyTimes: updatedTimes.sort()
+      };
+    });
+  };
+
+  const handleStartDateChange = (dateValue) => {
+    const formattedDate = dateValue.slice(0, 10);
+    setSchedule(prev => ({...prev, startDate: formattedDate}));
+  };
+
+  const handleEndDateChange = (dateValue) => {
+    const formattedDate = dateValue.slice(0, 10);
+    setSchedule(prev => ({...prev, endDate: formattedDate}));
   };
 
   const handleScheduleUpdate = async () => {
@@ -177,6 +217,86 @@ const MedicationSchedule = ({
     }
   };
 
+  // Calculate next dose based on schedule
+  const getNextDoseInfo = () => {
+    if (!currentSchedule?.dailyTimes?.length) return null;
+
+    const now = new Date();
+    const today = now.toISOString().split('T')[0];
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+
+    // Find the next dose time
+    const sortedTimes = [...currentSchedule.dailyTimes].sort();
+    let nextDose = null;
+
+    // Check if there's a dose time later today
+    for (const timeStr of sortedTimes) {
+      const [hours, minutes] = timeStr.split(':').map(Number);
+      if (hours > currentHour || (hours === currentHour && minutes > currentMinute)) {
+        nextDose = {
+          time: timeStr,
+          date: today,
+          isToday: true
+        };
+        break;
+      }
+    }
+
+    // If no dose time later today, find first dose tomorrow
+    if (!nextDose && sortedTimes.length > 0) {
+      const tomorrow = new Date(now);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const tomorrowStr = tomorrow.toISOString().split('T')[0];
+      nextDose = {
+        time: sortedTimes[0],
+        date: tomorrowStr,
+        isToday: false
+      };
+    }
+
+    return nextDose;
+  };
+
+  const nextDose = getNextDoseInfo();
+
+  // Format time difference until next dose
+  const formatTimeUntilNextDose = () => {
+    if (!nextDose) return "No scheduled doses";
+
+    const now = new Date();
+    const nextDoseDate = new Date(`${nextDose.date}T${nextDose.time}`);
+    const diffMs = nextDoseDate - now;
+
+    if (diffMs < 0) return "Past due";
+
+    const diffHrs = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+
+    if (diffHrs === 0) {
+      return `In ${diffMins} minute${diffMins !== 1 ? 's' : ''}`;
+    }
+    return `In ${diffHrs} hour${diffHrs !== 1 ? 's' : ''} and ${diffMins} minute${diffMins !== 1 ? 's' : ''}`;
+  };
+
+  // Calculate medication effect strength as percentage
+  const getEffectPercentage = () => {
+    if (!medicationEffect) return 0;
+    return ((medicationEffect.factor - 1) * 100).toFixed(1);
+  };
+
+  // Determine effect strength visualization class
+  const getEffectClass = () => {
+    if (!medicationEffect) return '';
+
+    const effect = medicationEffect.factor - 1;
+    if (effect > 0.1) return styles.strongEffect;
+    if (effect > 0) return styles.moderateEffect;
+    if (effect < -0.1) return styles.strongNegativeEffect;
+    if (effect < 0) return styles.moderateNegativeEffect;
+    return '';
+  };
+
   return (
     <div className={`${styles.medicationSchedule} ${className || ''}`}>
       <div className={styles.scheduleContainer}>
@@ -192,6 +312,7 @@ const MedicationSchedule = ({
               {medication.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
             </h3>
           </div>
+
           {medicationData && (
             <div className={styles.factorInputs}>
               <label>Factor:</label>
@@ -211,32 +332,34 @@ const MedicationSchedule = ({
         {isActive && (
           <>
             <div className={styles.dateTimeContainer}>
-              <div className={styles.inputGroup}>
-                <label htmlFor={`startDate-${medication}`}>Start:</label>
-                <input
-                  id={`startDate-${medication}`}
-                  type="date"
-                  value={schedule.startDate}
-                  onChange={(e) => setSchedule(prev => ({...prev, startDate: e.target.value}))}
-                  min={new Date().toISOString().slice(0, 10)}
-                  className={styles.dateInput}
-                />
-              </div>
-              <div className={styles.inputGroup}>
-                <label htmlFor={`endDate-${medication}`}>End:</label>
-                <input
-                  id={`endDate-${medication}`}
-                  type="date"
-                  value={schedule.endDate}
-                  onChange={(e) => setSchedule(prev => ({...prev, endDate: e.target.value}))}
-                  min={schedule.startDate}
-                  className={styles.dateInput}
-                />
+              <div className={styles.dateInputsRow}>
+                <div className={styles.inputGroup}>
+                  <label htmlFor={`startDate-${medication}`}>Start Date:</label>
+                  <TimeInput
+                    mode="timepoint"
+                    value={schedule.startDate ? `${schedule.startDate}T00:00` : ''}
+                    onChange={handleStartDateChange}
+                    className={styles.dateTimeInput}
+                    label=""
+                  />
+                </div>
+
+                <div className={styles.inputGroup}>
+                  <label htmlFor={`endDate-${medication}`}>End Date:</label>
+                  <TimeInput
+                    mode="timepoint"
+                    value={schedule.endDate ? `${schedule.endDate}T00:00` : ''}
+                    onChange={handleEndDateChange}
+                    className={styles.dateTimeInput}
+                    label=""
+                  />
+                </div>
               </div>
 
               <div className={styles.timesList}>
+                <h4>Daily Medication Times</h4>
                 {schedule.dailyTimes.map((time, index) => (
-                  <div key={index} className={styles.timeInput}>
+                  <div key={index} className={styles.timeInputGroup}>
                     <input
                       type="time"
                       value={time}
@@ -260,7 +383,7 @@ const MedicationSchedule = ({
                   className={styles.addTimeButton}
                   title="Add another time"
                 >
-                  + Time
+                  + Add Time
                 </button>
               </div>
 
@@ -269,7 +392,7 @@ const MedicationSchedule = ({
                 disabled={isSubmitting || !schedule.startDate || !schedule.endDate || schedule.dailyTimes.some(time => !time)}
                 className={styles.updateButton}
               >
-                {isSubmitting ? '...' : 'Update'}
+                {isSubmitting ? 'Updating...' : 'Update Schedule'}
               </button>
             </div>
 
@@ -282,52 +405,97 @@ const MedicationSchedule = ({
             )}
 
             {currentSchedule && (
-              <div className={styles.currentSchedule}>
-                Current: {new Date(currentSchedule.startDate).toLocaleDateString()} -
-                {new Date(currentSchedule.endDate).toLocaleDateString()} at
-                {currentSchedule.dailyTimes.join(', ')}
+              <div className={styles.currentScheduleContainer}>
+                <h4>Current Schedule</h4>
+                <div className={styles.currentScheduleDetails}>
+                  <div className={styles.scheduleRow}>
+                    <span>Start Date:</span>
+                    <span>{TimeManager.formatDateTime(currentSchedule.startDate).split(',')[0]}</span>
+                  </div>
+                  <div className={styles.scheduleRow}>
+                    <span>End Date:</span>
+                    <span>{TimeManager.formatDateTime(currentSchedule.endDate).split(',')[0]}</span>
+                  </div>
+                  <div className={styles.scheduleRow}>
+                    <span>Daily Times:</span>
+                    <span>{currentSchedule.dailyTimes.join(', ')}</span>
+                  </div>
+                  {nextDose && (
+                    <>
+                      <div className={styles.scheduleRow}>
+                        <span>Next Dose:</span>
+                        <span className={styles.nextDose}>
+                          {nextDose.time} {nextDose.isToday ? 'Today' : 'Tomorrow'}
+                        </span>
+                      </div>
+                      <div className={styles.scheduleRow}>
+                        <span>Time Until Next:</span>
+                        <span className={styles.timeUntil}>
+                          {formatTimeUntilNextDose()}
+                        </span>
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
             )}
 
             {medicationData.duration_based && (
-              <div className={styles.durationInfo}>
-                <ul>
-                  <li>Onset: {medicationData.onset_hours}h</li>
-                  <li>Peak: {medicationData.peak_hours}h</li>
-                  <li>Duration: {medicationData.duration_hours}h</li>
-                </ul>
-              </div>
-            )}
+              <div className={styles.pharmacokinetics}>
+                <h4>Pharmacokinetic Profile</h4>
+                <div className={styles.kineticRow}>
+                  <span>Onset:</span>
+                  <span>{medicationData.onset_hours} hours</span>
+                </div>
+                <div className={styles.kineticRow}>
+                  <span>Peak Effect:</span>
+                  <span>{medicationData.peak_hours} hours</span>
+                </div>
+                <div className={styles.kineticRow}>
+                  <span>Duration:</span>
+                  <span>{medicationData.duration_hours} hours</span>
+                </div>
 
-            {medicationData.effects && (
-              <div className={styles.effectsInfo}>
-                <h4>Current Effects</h4>
-                {medicationData.lastDose && (
-                  <>
-                    <div className={styles.effectDetail}>
-                      <span>Last dose:</span>
-                      <span>{new Date(medicationData.lastDose).toLocaleString()}</span>
+                {medicationEffect && (
+                  <div className={styles.currentEffect}>
+                    <h4>Current Effect</h4>
+                    <div className={styles.effectRow}>
+                      <span>Status:</span>
+                      <span>{medicationEffect.status}</span>
                     </div>
-                    <div className={styles.effectDetail}>
-                      <span>Hours since last dose:</span>
-                      <span>{medicationData.hoursSinceLastDose.toFixed(1)}h</span>
+
+                    {medicationEffect.lastDose && (
+                      <>
+                        <div className={styles.effectRow}>
+                          <span>Last Dose:</span>
+                          <span>{TimeManager.formatDateTime(medicationEffect.lastDose)}</span>
+                        </div>
+                        <div className={styles.effectRow}>
+                          <span>Hours Since Dose:</span>
+                          <span>{medicationEffect.hoursSinceLastDose?.toFixed(1)}h</span>
+                        </div>
+                      </>
+                    )}
+
+                    <div className={styles.effectRow}>
+                      <span>Current Effect:</span>
+                      <span className={`${styles.effectStrength} ${getEffectClass()}`}>
+                        {getEffectPercentage()}%
+                        {parseFloat(getEffectPercentage()) > 0 ? ' increase' : ' decrease'}
+                      </span>
                     </div>
-                  </>
-                )}
-                {medicationData.currentPhase && (
-                  <div className={styles.effectDetail}>
-                    <span>Current phase:</span>
-                    <span>{medicationData.currentPhase}</span>
+
+                    <div className={styles.effectVisualization}>
+                      <div
+                        className={styles.effectBar}
+                        style={{
+                          width: `${Math.min(100, Math.abs(getEffectPercentage()))}%`,
+                          backgroundColor: parseFloat(getEffectPercentage()) >= 0 ? '#4caf50' : '#f44336'
+                        }}
+                      ></div>
+                    </div>
                   </div>
                 )}
-                <div className={styles.effectDetail}>
-                  <span>Effect:</span>
-                  <span className={medicationData.effectStrength < 0 ? styles.decrease : styles.increase}>
-                    {Math.abs(medicationData.effectStrength).toFixed(1)}%
-                    {medicationData.effectStrength < 0 ? ' decrease' : ' increase'}
-                    {medicationData.effectType ? ` in ${medicationData.effectType}` : ''}
-                  </span>
-                </div>
               </div>
             )}
           </>
