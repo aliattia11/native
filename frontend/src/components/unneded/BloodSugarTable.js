@@ -32,19 +32,33 @@ const BloodSugarTable = ({ isDoctor = false, patientId = null }) => {
     }
   };
 
-  const columns = React.useMemo(
-    () => [
-      {
-        Header: 'Date',
-        accessor: (row) => new Date(row.timestamp).toLocaleString(),
+const columns = React.useMemo(
+  () => [
+    {
+      Header: 'Reading Date & Time',
+      accessor: (row) => {
+        // Try to use bloodSugarTimestamp if available, otherwise use timestamp
+        const timestamp = row.bloodSugarTimestamp || row.timestamp;
+        return new Date(timestamp).toLocaleString();
       },
-      {
-        Header: 'Blood Sugar Level (mmol/L)',
-        accessor: 'bloodSugar',
-      },
-    ],
-    []
-  );
+      id: 'readingTime'
+    },
+    {
+      Header: 'Blood Sugar Level (mmol/L)',
+      accessor: 'bloodSugar',
+    },
+    {
+      Header: 'Status',
+      accessor: 'status',
+      Cell: ({ value }) => (
+        <span className={`status-badge ${value}`}>
+          {value && value.charAt(0).toUpperCase() + value.slice(1)}
+        </span>
+      ),
+    }
+  ],
+  []
+);
 
   const {
     getTableProps,

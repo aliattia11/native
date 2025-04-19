@@ -387,6 +387,7 @@ def submit_meal(current_user):
         Food Items: {json.dumps(data['foodItems'], indent=2)}
         Activities: {json.dumps(data['activities'], indent=2)}
         Blood Sugar: {data.get('bloodSugar')}
+        Blood Sugar Timestamp: {data.get('bloodSugarTimestamp')}
         Meal Type: {data['mealType']}
         Calculation Factors: {json.dumps(data.get('calculationFactors'), indent=2)}
         ============================
@@ -421,6 +422,21 @@ def submit_meal(current_user):
             except (ValueError, TypeError) as e:
                 logger.warning(f"Error parsing administration time: {e}. Using current time instead.")
 
+        # Process blood sugar timestamp if provided
+        blood_sugar_timestamp = None
+        if data.get('bloodSugarTimestamp'):
+            try:
+                # Convert ISO string to datetime object for proper storage
+                bs_time_str = data['bloodSugarTimestamp'].replace('Z', '+00:00')
+                blood_sugar_timestamp = bs_time_str
+                logger.debug(f"Using provided blood sugar reading time: {blood_sugar_timestamp}")
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Error parsing blood sugar timestamp: {e}. Using current time instead.")
+                blood_sugar_timestamp = current_time.isoformat()
+        else:
+            # If no timestamp provided, use the current time
+            blood_sugar_timestamp = current_time.isoformat()
+
         # Prepare meal document
         meal_doc = {
             'user_id': str(current_user['_id']),
@@ -437,7 +453,8 @@ def submit_meal(current_user):
             } for activity in data['activities']],
             'nutrition': nutrition,
             'bloodSugar': data.get('bloodSugar'),
-            'bloodSugarTimestamp': data.get('bloodSugarTimestamp') or current_time.isoformat(),  # Added this line
+            'bloodSugarTimestamp': blood_sugar_timestamp,
+            'bloodSugarSource': data.get('bloodSugarSource', 'direct'),
             'intendedInsulin': data.get('intendedInsulin'),
             'intendedInsulinType': data.get('intendedInsulinType'),
             'suggestedInsulin': insulin_calc['total'],
@@ -456,6 +473,55 @@ def submit_meal(current_user):
 
         # Insert meal document
         result = mongo.db.meals.insert_one(meal_doc)
+        logger.info(
+            f"Meal document created with ID: {result.inserted_id}, including bloodSugarTimestamp: {blood_sugar_timestamp}")
+
+        # If blood sugar data is present, also save it to the blood_sugar collection
+        blood_sugar_id = None
+        if data.get('bloodSugar') is not None:
+            try:
+                # Get user constants for target glucose
+                user_constants = Constants(str(current_user['_id']))
+                target_glucose = user_constants.get_constant('target_glucose')
+
+                # Determine blood sugar status
+                blood_sugar_value = data.get('bloodSugar')
+                if blood_sugar_value < target_glucose * 0.7:  # Below 70% of target
+                    status = "low"
+                elif blood_sugar_value > target_glucose * 1.3:  # Above 130% of target
+                    status = "high"
+                else:
+                    status = "normal"
+
+                # Create blood sugar document
+                blood_sugar_doc = {
+                    'user_id': str(current_user['_id']),
+                    'bloodSugar': blood_sugar_value,
+                    'status': status,
+                    'target': target_glucose,
+                    'timestamp': current_time,  # When the record was created
+                    'bloodSugarTimestamp': blood_sugar_timestamp,  # When the reading was taken
+                    'notes': data.get('notes', ''),
+                    'source': 'meal_record',  # Note that this came from a meal record
+                    'meal_id': str(result.inserted_id),  # Reference to the meal record
+                    'mealType': data['mealType']  # Include meal type for context
+                }
+
+                # Insert into blood_sugar collection
+                bs_result = mongo.db.blood_sugar.insert_one(blood_sugar_doc)
+                blood_sugar_id = str(bs_result.inserted_id)
+
+                logger.info(
+                    f"Blood sugar record created with ID: {blood_sugar_id}, linked to meal ID: {result.inserted_id}")
+
+                # Update the meal document with the blood sugar ID reference
+                mongo.db.meals.update_one(
+                    {"_id": result.inserted_id},
+                    {"$set": {"blood_sugar_id": blood_sugar_id}}
+                )
+            except Exception as e:
+                logger.warning(f"Error saving blood sugar to separate collection: {e}")
+                # Continue even if this fails - we still have the data in the meal record
 
         # Handle insulin logging in medication system
         if data.get('intendedInsulin') and data.get('intendedInsulinType'):
@@ -474,6 +540,8 @@ def submit_meal(current_user):
                 'meal_id': str(result.inserted_id),
                 'meal_type': data['mealType'],
                 'blood_sugar': data.get('bloodSugar'),
+                'blood_sugar_timestamp': blood_sugar_timestamp,
+                'blood_sugar_id': blood_sugar_id,  # Add reference to blood sugar record if available
                 'suggested_dose': insulin_calc['total']
             }
 
@@ -543,8 +611,10 @@ def submit_meal(current_user):
         return jsonify({
             "message": "Meal logged successfully",
             "id": str(result.inserted_id),
+            "blood_sugar_id": blood_sugar_id,  # Include the blood sugar ID if created
             "nutrition": nutrition,
             "insulinCalculation": insulin_calc,
+            "bloodSugarTimestamp": blood_sugar_timestamp,  # Return the timestamp in the response
             "healthFactors": {
                 "activeConditions": active_conditions,
                 "activeMedications": active_medications,
@@ -583,11 +653,12 @@ def get_meals(current_user):
                 "activities": meal['activities'],
                 "nutrition": meal['nutrition'],
                 "bloodSugar": meal.get('bloodSugar'),
-    "bloodSugarTimestamp": meal.get('bloodSugarTimestamp'),  # Add this line
+                "bloodSugarTimestamp": meal.get('bloodSugarTimestamp'),  # Ensure this is included
+                "bloodSugarSource": meal.get('bloodSugarSource', 'direct'),  # Include source if available
                 "intendedInsulin": meal.get('intendedInsulin'),
-                "intendedInsulinType": meal.get('intendedInsulinType'),  # Add this line
+                "intendedInsulinType": meal.get('intendedInsulinType'),
                 "suggestedInsulin": meal['suggestedInsulin'],
-                "suggestedInsulinType": meal.get('suggestedInsulinType', 'regular_insulin'),  # Add this line
+                "suggestedInsulinType": meal.get('suggestedInsulinType', 'regular_insulin'),
                 "insulinCalculation": meal.get('insulinCalculation', {}),
                 "notes": meal.get('notes', ''),
                 "timestamp": meal['timestamp'].isoformat()

@@ -29,12 +29,18 @@ def get_blood_sugar_status(blood_sugar, target_glucose):
         return "high"
     return "normal"
 
+
 @blood_sugar_bp.route('/api/blood-sugar', methods=['POST'])
 @token_required
 def add_blood_sugar(current_user):
     try:
+        # Get user constants first to avoid issues
         user_constants = Constants(str(current_user['_id']))
+
         blood_sugar = request.json.get('bloodSugar')
+        blood_sugar_timestamp = request.json.get('bloodSugarTimestamp')
+        notes = request.json.get('notes', '')
+        source = request.json.get('bloodSugarSource', 'standalone')
 
         if blood_sugar is None:
             return jsonify({'error': 'Blood sugar value is required'}), 400
@@ -47,27 +53,80 @@ def add_blood_sugar(current_user):
         target_glucose = user_constants.get_constant('target_glucose')
         status = get_blood_sugar_status(blood_sugar, target_glucose)
 
+        # Current server time
+        current_time = datetime.utcnow()
+
+        # Use provided timestamp or default to current time
+        if not blood_sugar_timestamp:
+            blood_sugar_timestamp = current_time.isoformat()
+
+        logger.info(f"Recording blood sugar: {blood_sugar} mg/dL, timestamp: {blood_sugar_timestamp}")
+
         # Create new reading
         new_reading = {
             'user_id': str(current_user['_id']),
             'bloodSugar': blood_sugar,
             'status': status,
             'target': target_glucose,
-            'timestamp': datetime.utcnow()
+            'timestamp': current_time,  # When the reading was recorded
+            'bloodSugarTimestamp': blood_sugar_timestamp,  # When the reading was actually taken
+            'notes': notes,
+            'source': source
         }
 
-        result = mongo.db.blood_sugar.insert_one(new_reading)
+        # Insert into blood_sugar collection first
+        bs_result = mongo.db.blood_sugar.insert_one(new_reading)
+        blood_sugar_id = str(bs_result.inserted_id)
+        logger.info(f"Created blood sugar record with ID: {blood_sugar_id}")
+
+        # Also create a corresponding meal record for standalone readings
+        meal_doc = {
+            'user_id': str(current_user['_id']),
+            'timestamp': current_time,
+            'mealType': 'blood_sugar_only',
+            'foodItems': [],
+            'activities': [],
+            'nutrition': {
+                'calories': 0,
+                'carbs': 0,
+                'protein': 0,
+                'fat': 0,
+                'absorption_factor': 1.0
+            },
+            'bloodSugar': blood_sugar,
+            'bloodSugarTimestamp': blood_sugar_timestamp,
+            'bloodSugarSource': source,
+            'notes': notes,
+            'isStandaloneReading': True,
+            'suggestedInsulin': 0,  # No insulin for standalone reading
+            'insulinCalculation': {},
+            # Add reference to the blood sugar record
+            'blood_sugar_id': blood_sugar_id
+        }
+
+        # Insert into meals collection
+        meal_result = mongo.db.meals.insert_one(meal_doc)
+        meal_id = str(meal_result.inserted_id)
+        logger.info(f"Created standalone blood sugar record in meals collection with ID: {meal_id}")
+
+        # Update the blood sugar record with the meal reference
+        mongo.db.blood_sugar.update_one(
+            {"_id": bs_result.inserted_id},
+            {"$set": {"meal_id": meal_id}}
+        )
+        logger.info(f"Updated blood sugar record {blood_sugar_id} with meal reference {meal_id}")
 
         return jsonify({
             'message': 'Blood sugar reading recorded successfully',
-            'id': str(result.inserted_id),
-            'status': status
+            'id': blood_sugar_id,
+            'meal_id': meal_id,
+            'status': status,
+            'bloodSugarTimestamp': blood_sugar_timestamp
         }), 201
 
     except Exception as e:
         logger.error(f"Error recording blood sugar: {str(e)}")
         return jsonify({'error': str(e)}), 500
-
 
 @blood_sugar_bp.route('/api/blood-sugar', methods=['GET'])
 @token_required

@@ -1,105 +1,191 @@
-import React, { useState, useEffect } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import React, { useState, useEffect, useCallback } from 'react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { useTable, useSortBy, usePagination } from 'react-table';
 import axios from 'axios';
 import moment from 'moment';
 import './BloodSugarVisualization.css';
 
 const BloodSugarVisualization = ({ isDoctor = false, patientId = null }) => {
+  // Shared state
   const [data, setData] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [viewMode, setViewMode] = useState('chart'); // 'chart' or 'table'
+  const [targetGlucose, setTargetGlucose] = useState(100);
   const [dateRange, setDateRange] = useState({
     start: moment().subtract(7, 'days').format('YYYY-MM-DD'),
-    end: moment().format('YYYY-MM-DD')
+    end: moment().add(1, 'day').format('YYYY-MM-DD')
   });
-  const [selectedReading, setSelectedReading] = useState(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [unit, setUnit] = useState('mg/dL');
+  const [activeView, setActiveView] = useState('chart'); // 'chart' or 'table'
 
-  const fetchCombinedData = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const startDate = moment(dateRange.start).format('YYYY-MM-DD');
-      const endDate = moment(dateRange.end).format('YYYY-MM-DD');
+  const fetchData = useCallback(async () => {
+  try {
+    setLoading(true);
+    const token = localStorage.getItem('token');
+    const startDate = moment(dateRange.start).format('YYYY-MM-DD');
+    const endDate = moment(dateRange.end).format('YYYY-MM-DD');
 
-      // Construct the base URL based on whether it's a doctor viewing a patient's data
-      const baseUrl = isDoctor && patientId
-        ? `http://localhost:5000/api/doctor/patient/${patientId}`
-        : 'http://localhost:5000/api';
-
-      // Fetch both meal-related and standalone blood sugar readings
-      const [mealsResponse, bloodSugarResponse] = await Promise.all([
-        axios.get(`${baseUrl}/meals?start_date=${startDate}&end_date=${endDate}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        }),
-        axios.get(`${baseUrl}/blood-sugar?start_date=${startDate}&end_date=${endDate}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        })
-      ]);
-
-      // Process meals data to extract blood sugar readings
-      const mealReadings = mealsResponse.data.meals
-        .filter(meal => meal.bloodSugar)
-        .map(meal => ({
-          timestamp: new Date(meal.timestamp).getTime(),
-          bloodSugar: meal.bloodSugar,
-          type: 'meal',
-          mealType: meal.mealType,
-          notes: meal.notes,
-          foodItems: meal.foodItems,
-          id: meal._id
-        }));
-
-      // Process standalone blood sugar readings
-      const standaloneReadings = bloodSugarResponse.data
-        .map(reading => ({
-          timestamp: new Date(reading.timestamp).getTime(),
-          bloodSugar: reading.bloodSugar,
-          type: 'standalone',
-          notes: reading.notes,
-          id: reading._id
-        }));
-
-      // Combine and sort all readings
-      const combinedData = [...mealReadings, ...standaloneReadings]
-        .sort((a, b) => b.timestamp - a.timestamp);
-
-      setData(combinedData);
-      setLoading(false);
-      setError('');
-    } catch (error) {
-      console.error('Error fetching data:', error);
-      setError('Failed to fetch blood sugar data. Please try again.');
-      setLoading(false);
+    let url = `http://localhost:5000/api/blood-sugar?start_date=${startDate}&end_date=${endDate}&unit=${unit}`;
+    if (isDoctor && patientId) {
+      url = `http://localhost:5000/doctor/patient/${patientId}/blood-sugar?start_date=${startDate}&end_date=${endDate}&unit=${unit}`;
     }
+
+    const response = await axios.get(url, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    // Process the data to use bloodSugarTimestamp instead of timestamp
+    const formattedData = response.data.map(item => {
+      // Use reading time (bloodSugarTimestamp) if available, otherwise use recording time (timestamp)
+      const readingTime = item.bloodSugarTimestamp || item.timestamp;
+
+      return {
+        ...item,
+        // Convert to timestamp for chart
+        readingTime: new Date(readingTime).getTime(),
+        // Format for display
+        formattedReadingTime: moment(readingTime).format('MM/DD/YYYY, HH:mm'),
+        formattedRecordingTime: moment(item.timestamp).format('MM/DD/YYYY, HH:mm'),
+        // Status based on target glucose
+        status: getBloodSugarStatus(item.bloodSugar, item.target || targetGlucose)
+      };
+    });
+
+    // Sort by reading time
+    formattedData.sort((a, b) => a.readingTime - b.readingTime);
+    setData(formattedData);
+
+    // Update target glucose if available from the first reading
+    if (formattedData.length > 0 && formattedData[0].target) {
+      setTargetGlucose(formattedData[0].target);
+    }
+
+    setError('');
+    setLoading(false);
+  } catch (error) {
+    console.error('Error fetching blood sugar data:', error);
+    setError('Failed to fetch blood sugar data. Please try again.');
+    setLoading(false);
+  }
+}, [dateRange, isDoctor, patientId, unit, targetGlucose]);
+
+useEffect(() => {
+  fetchData();
+}, [fetchData]);
+
+  const getBloodSugarStatus = (bloodSugar, target) => {
+    const statusMap = {
+      'low': { color: '#ff4444', label: 'Low' },
+      'normal': { color: '#00C851', label: 'Normal' },
+      'high': { color: '#ff8800', label: 'High' }
+    };
+
+    if (bloodSugar < target * 0.7) return statusMap.low;
+    if (bloodSugar > target * 1.3) return statusMap.high;
+    return statusMap.normal;
   };
 
-  useEffect(() => {
-    fetchCombinedData();
-  }, [dateRange, isDoctor, patientId]);
+  const handleDateChange = (e) => {
+    const { name, value } = e.target;
+    setDateRange(prev => ({ ...prev, [name]: value }));
+  };
 
+  const handleUnitChange = (e) => {
+    setUnit(e.target.value);
+  };
+
+  // Quick date range presets
+  const applyDatePreset = (days) => {
+    setDateRange({
+      start: moment().subtract(days, 'days').format('YYYY-MM-DD'),
+      end: moment().format('YYYY-MM-DD')
+    });
+  };
+
+  // Chart-specific functions
+  const formatXAxis = (tickItem) => {
+    return moment(tickItem).format('DD/MM HH:mm');
+  };
+
+  const formatYAxis = (value) => {
+    return `${value} ${unit}`;
+  };
+
+  const CustomTooltip = ({ active, payload, label }) => {
+    if (active && payload && payload.length) {
+      const item = payload[0].payload;
+      return (
+        <div className="custom-tooltip">
+          <p className="tooltip-time">{`Reading Time: ${moment(label).format('MM/DD/YYYY, HH:mm')}`}</p>
+          <p className="tooltip-value" style={{ color: item.status.color }}>
+            {`Blood Sugar: ${payload[0].value} ${unit}`}
+          </p>
+          <p className="tooltip-status">Status: {item.status.label}</p>
+          {item.notes && <p className="tooltip-notes">Notes: {item.notes}</p>}
+        </div>
+      );
+    }
+    return null;
+  };
+
+  // Table-specific functions
   const columns = React.useMemo(
     () => [
       {
-        Header: 'Date/Time',
-        accessor: row => moment(row.timestamp).format('DD-MM-YYYY HH:mm'),
-        sortType: 'datetime'
+        Header: 'Reading Time',
+        accessor: 'formattedReadingTime',
       },
       {
-        Header: 'Blood Sugar (mg/dL)',
-        accessor: 'bloodSugar'
+        Header: 'Recording Time',
+        accessor: 'formattedRecordingTime',
       },
       {
-        Header: 'Type',
-        accessor: row => row.type === 'meal' ? `Meal (${row.mealType})` : 'Standalone'
+        Header: `Blood Sugar (${unit})`,
+        accessor: 'bloodSugar',
+        Cell: ({ value, row }) => (
+          <span style={{ color: row.original.status.color, fontWeight: 500 }}>
+            {value !== undefined && value !== null ? value : 'N/A'} {unit}
+          </span>
+        ),
+      },
+      {
+        Header: `Target (${unit})`,
+        accessor: 'target',
+        Cell: ({ value }) => (
+          <span>
+            {value !== undefined && value !== null ? value : targetGlucose} {unit}
+          </span>
+        ),
+      },
+      {
+        Header: 'Status',
+        accessor: row => row.status.label,
+        Cell: ({ row }) => (
+          <div className="status-indicator">
+            <div className="status-dot" style={{ backgroundColor: row.original.status.color }}></div>
+            <span>{row.original.status.label}</span>
+          </div>
+        ),
       },
       {
         Header: 'Notes',
         accessor: 'notes',
-        Cell: ({ value }) => value || '-'
-      }
+        Cell: ({ value }) => (
+          <div className="notes-cell">{value || 'No notes'}</div>
+        ),
+      },
     ],
-    []
+    [unit, targetGlucose]
+  );
+
+  const tableInstance = useTable(
+    {
+      columns,
+      data,
+      initialState: { pageIndex: 0, pageSize: 10 },
+    },
+    useSortBy,
+    usePagination
   );
 
   const {
@@ -116,119 +202,78 @@ const BloodSugarVisualization = ({ isDoctor = false, patientId = null }) => {
     nextPage,
     previousPage,
     setPageSize,
-    state: { pageIndex, pageSize }
-  } = useTable(
-    {
-      columns,
-      data,
-      initialState: { pageIndex: 0, pageSize: 10 }
-    },
-    useSortBy,
-    usePagination
-  );
-
-  const CustomTooltip = ({ active, payload, label }) => {
-    if (active && payload && payload.length) {
-      const reading = data.find(d => d.timestamp === label);
-      return (
-        <div className="custom-tooltip">
-          <p className="time">{moment(label).format('DD-MM-YYYY HH:mm')}</p>
-          <p className="blood-sugar">Blood Sugar: {payload[0].value} mg/dL</p>
-          <p className="type">{reading?.type === 'meal' ? `Meal (${reading.mealType})` : 'Standalone'}</p>
-          {reading?.notes && <p className="notes">Notes: {reading.notes}</p>}
-        </div>
-      );
-    }
-    return null;
-  };
-
-  // Reading Details Modal
-  const ReadingDetailsModal = ({ reading, onClose }) => {
-    if (!reading) return null;
-
-    return (
-      <div className="modal-overlay" onClick={onClose}>
-        <div className="modal-content" onClick={e => e.stopPropagation()}>
-          <div className="modal-header">
-            <h3>Blood Sugar Reading Details</h3>
-            <button onClick={onClose}>&times;</button>
-          </div>
-          <div className="modal-body">
-            <p><strong>Date/Time:</strong> {moment(reading.timestamp).format('DD-MM-YYYY HH:mm')}</p>
-            <p><strong>Blood Sugar:</strong> {reading.bloodSugar} mg/dL</p>
-            <p><strong>Type:</strong> {reading.type === 'meal' ? `Meal (${reading.mealType})` : 'Standalone'}</p>
-
-            {reading.type === 'meal' && reading.foodItems && reading.foodItems.length > 0 && (
-              <>
-                <h4>Food Items:</h4>
-                <ul>
-                  {reading.foodItems.map((item, index) => (
-                    <li key={index}>
-                      {item.portion?.amount} {item.portion?.unit} {item.name}
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
-
-            {reading.notes && (
-              <>
-                <h4>Notes:</h4>
-                <p>{reading.notes}</p>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  };
+    state: { pageIndex, pageSize },
+  } = tableInstance;
 
   return (
     <div className="blood-sugar-visualization">
-      <div className="header">
-        <h2>Blood Sugar History</h2>
-        <div className="view-controls">
-          <button
-            className={viewMode === 'chart' ? 'active' : ''}
-            onClick={() => setViewMode('chart')}
-          >
-            Chart View
-          </button>
-          <button
-            className={viewMode === 'table' ? 'active' : ''}
-            onClick={() => setViewMode('table')}
-          >
-            Table View
-          </button>
-        </div>
+      <h2 className="title">Blood Sugar Data</h2>
+
+      <div className="view-toggle">
+        <button
+          className={`toggle-btn ${activeView === 'chart' ? 'active' : ''}`}
+          onClick={() => setActiveView('chart')}
+        >
+          Chart View
+        </button>
+        <button
+          className={`toggle-btn ${activeView === 'table' ? 'active' : ''}`}
+          onClick={() => setActiveView('table')}
+        >
+          Table View
+        </button>
       </div>
 
-      <div className="date-range">
-        <div className="input-group">
-          <label>Start Date:</label>
-          <input
-            type="date"
-            value={dateRange.start}
-            onChange={e => setDateRange(prev => ({ ...prev, start: e.target.value }))}
-          />
+      <div className="controls">
+        <div className="date-controls">
+          <div className="date-input-group">
+            <label htmlFor="start-date">From:</label>
+            <input
+              id="start-date"
+              type="date"
+              name="start"
+              value={dateRange.start}
+              onChange={handleDateChange}
+            />
+          </div>
+          <div className="date-input-group">
+            <label htmlFor="end-date">To:</label>
+            <input
+              id="end-date"
+              type="date"
+              name="end"
+              value={dateRange.end}
+              onChange={handleDateChange}
+            />
+          </div>
         </div>
-        <div className="input-group">
-          <label>End Date:</label>
-          <input
-            type="date"
-            value={dateRange.end}
-            onChange={e => setDateRange(prev => ({ ...prev, end: e.target.value }))}
-          />
+
+        <div className="quick-ranges">
+          <button onClick={() => applyDatePreset(1)}>Last 24h</button>
+          <button onClick={() => applyDatePreset(7)}>Last Week</button>
+          <button onClick={() => applyDatePreset(30)}>Last Month</button>
         </div>
-        <button onClick={fetchCombinedData}>Update</button>
+
+        <div className="unit-selector">
+          <label htmlFor="unit-select">Unit:</label>
+          <select id="unit-select" value={unit} onChange={handleUnitChange}>
+            <option value="mg/dL">mg/dL</option>
+            <option value="mmol/L">mmol/L</option>
+          </select>
+        </div>
+
+        <button className="update-btn" onClick={fetchData}>Update Data</button>
       </div>
 
-      {loading && <div className="loading">Loading data...</div>}
-      {error && <div className="error">{error}</div>}
+      {error && <div className="error-message">{error}</div>}
 
-      {!loading && !error && (
-        <div className="content">
-          {viewMode === 'chart' ? (
+      {loading ? (
+        <div className="loading">Loading blood sugar data...</div>
+      ) : data.length === 0 ? (
+        <div className="no-data">No blood sugar readings found for the selected date range.</div>
+      ) : (
+        <div className="content-container">
+          {activeView === 'chart' && (
             <div className="chart-container">
               <ResponsiveContainer width="100%" height={400}>
                 <LineChart
@@ -237,80 +282,156 @@ const BloodSugarVisualization = ({ isDoctor = false, patientId = null }) => {
                 >
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis
-                    dataKey="timestamp"
+                    dataKey="readingTime"
                     type="number"
                     scale="time"
                     domain={['dataMin', 'dataMax']}
-                    tickFormatter={tick => moment(tick).format('DD-MM HH:mm')}
+                    tickFormatter={formatXAxis}
                     angle={-45}
                     textAnchor="end"
                     height={70}
+                    interval="preserveStartEnd"
                   />
-                  <YAxis />
+                  <YAxis tickFormatter={formatYAxis} />
                   <Tooltip content={<CustomTooltip />} />
                   <Legend />
+
+                  {/* Target glucose reference lines */}
+                  <ReferenceLine
+                    y={targetGlucose}
+                    label={{ value: 'Target', position: 'right' }}
+                    stroke="#666"
+                    strokeDasharray="3 3"
+                  />
+                  <ReferenceLine
+                    y={targetGlucose * 0.7}
+                    label={{ value: 'Low', position: 'right' }}
+                    stroke="#ff4444"
+                    strokeDasharray="3 3"
+                  />
+                  <ReferenceLine
+                    y={targetGlucose * 1.3}
+                    label={{ value: 'High', position: 'right' }}
+                    stroke="#ff8800"
+                    strokeDasharray="3 3"
+                  />
+
                   <Line
                     type="monotone"
                     dataKey="bloodSugar"
+                    name={`Blood Sugar (${unit})`}
                     stroke="#8884d8"
-                    dot={{ onClick: (_, data) => setSelectedReading(data.payload) }}
                     activeDot={{ r: 8 }}
+                    dot={{
+                      stroke: (datum) => datum.status.color,
+                      strokeWidth: 2,
+                      r: 4,
+                      fill: '#fff'
+                    }}
                   />
                 </LineChart>
               </ResponsiveContainer>
+
+              <div className="chart-legend">
+                <div className="legend-item">
+                  <span className="legend-color" style={{ backgroundColor: '#00C851' }}></span>
+                  <span>Normal: {targetGlucose * 0.7} - {targetGlucose * 1.3} {unit}</span>
+                </div>
+                <div className="legend-item">
+                  <span className="legend-color" style={{ backgroundColor: '#ff4444' }}></span>
+                  <span>Low: Below {targetGlucose * 0.7} {unit}</span>
+                </div>
+                <div className="legend-item">
+                  <span className="legend-color" style={{ backgroundColor: '#ff8800' }}></span>
+                  <span>High: Above {targetGlucose * 1.3} {unit}</span>
+                </div>
+              </div>
             </div>
-          ) : (
+          )}
+
+          {activeView === 'table' && (
             <div className="table-container">
               <table {...getTableProps()} className="blood-sugar-table">
                 <thead>
-                  {headerGroups.map(headerGroup => (
-                    <tr {...headerGroup.getHeaderGroupProps()}>
-                      {headerGroup.headers.map(column => (
-                        <th {...column.getHeaderProps(column.getSortByToggleProps())}>
-                          {column.render('Header')}
-                          <span>
-                            {column.isSorted ? (column.isSortedDesc ? ' 🔽' : ' 🔼') : ''}
-                          </span>
-                        </th>
-                      ))}
-                      <th>Actions</th>
-                    </tr>
-                  ))}
+                  {headerGroups.map(headerGroup => {
+                    const { key, ...headerGroupProps } = headerGroup.getHeaderGroupProps();
+                    return (
+                      <tr key={key} {...headerGroupProps}>
+                        {headerGroup.headers.map(column => {
+                          const { key, ...columnProps } = column.getHeaderProps(column.getSortByToggleProps());
+                          return (
+                            <th key={key} {...columnProps}>
+                              {column.render('Header')}
+                              <span>
+                                {column.isSorted
+                                  ? column.isSortedDesc
+                                    ? ' 🔽'
+                                    : ' 🔼'
+                                  : ''}
+                              </span>
+                            </th>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
                 </thead>
                 <tbody {...getTableBodyProps()}>
                   {page.map(row => {
                     prepareRow(row);
+                    const { key, ...rowProps } = row.getRowProps();
                     return (
-                      <tr {...row.getRowProps()}>
-                        {row.cells.map(cell => (
-                          <td {...cell.getCellProps()}>{cell.render('Cell')}</td>
-                        ))}
-                        <td>
-                          <button onClick={() => setSelectedReading(row.original)}>
-                            Details
-                          </button>
-                        </td>
+                      <tr
+                        key={key}
+                        {...rowProps}
+                        className={`status-${row.original.status.label.toLowerCase()}`}
+                      >
+                        {row.cells.map(cell => {
+                          const { key, ...cellProps } = cell.getCellProps();
+                          return (
+                            <td key={key} {...cellProps}>
+                              {cell.render('Cell')}
+                            </td>
+                          );
+                        })}
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
 
+              {/* Pagination */}
               <div className="pagination">
                 <button onClick={() => gotoPage(0)} disabled={!canPreviousPage}>{'<<'}</button>
                 <button onClick={() => previousPage()} disabled={!canPreviousPage}>{'<'}</button>
                 <button onClick={() => nextPage()} disabled={!canNextPage}>{'>'}</button>
                 <button onClick={() => gotoPage(pageCount - 1)} disabled={!canNextPage}>{'>>'}</button>
                 <span>
-                  Page {pageIndex + 1} of {pageOptions.length}
+                  Page {' '}
+                  <strong>
+                    {pageIndex + 1} of {pageOptions.length}
+                  </strong>
+                </span>
+                <span>
+                  | Go to page:{' '}
+                  <input
+                    type="number"
+                    defaultValue={pageIndex + 1}
+                    onChange={e => {
+                      const page = e.target.value ? Number(e.target.value) - 1 : 0;
+                      gotoPage(page);
+                    }}
+                  />
                 </span>
                 <select
                   value={pageSize}
-                  onChange={e => setPageSize(Number(e.target.value))}
+                  onChange={e => {
+                    setPageSize(Number(e.target.value));
+                  }}
                 >
-                  {[10, 20, 30, 40, 50].map(size => (
-                    <option key={size} value={size}>
-                      Show {size}
+                  {[10, 20, 30, 40, 50].map(pageSize => (
+                    <option key={pageSize} value={pageSize}>
+                      Show {pageSize}
                     </option>
                   ))}
                 </select>
@@ -318,13 +439,6 @@ const BloodSugarVisualization = ({ isDoctor = false, patientId = null }) => {
             </div>
           )}
         </div>
-      )}
-
-      {selectedReading && (
-        <ReadingDetailsModal
-          reading={selectedReading}
-          onClose={() => setSelectedReading(null)}
-        />
       )}
     </div>
   );
