@@ -476,6 +476,41 @@ def submit_meal(current_user):
         logger.info(
             f"Meal document created with ID: {result.inserted_id}, including bloodSugarTimestamp: {blood_sugar_timestamp}")
 
+        # Also save activities to the dedicated activities collection
+        if data.get('activities'):
+            activities_collection = mongo.db.activities
+
+            for activity in data['activities']:
+                # Create activity record in the format expected by the activities collection
+                activity_record = {
+                    'user_id': str(current_user['_id']),
+                    'timestamp': current_time,
+                    'type': activity.get('type', 'expected'),
+                    'level': activity.get('level', 0),
+                    'impact': activity.get('impact', 1.0),
+                    'duration': activity.get('duration', '00:00'),
+                    'meal_id': str(result.inserted_id)  # Reference to the meal record
+                }
+
+                # Handle time fields based on the activity's structure
+                if activity.get('startTime') and activity.get('endTime'):
+                    # Add start and end times
+                    activity_record['startTime'] = activity['startTime']
+                    activity_record['endTime'] = activity['endTime']
+
+                    # Also store in the format expected by activity.py
+                    if activity.get('type') == 'expected':
+                        activity_record['expectedTime'] = activity['startTime']
+                    else:
+                        activity_record['completedTime'] = activity['startTime']
+
+                # Insert the activity into the activities collection
+                try:
+                    activity_result = activities_collection.insert_one(activity_record)
+                    logger.info(f"Activity record created with ID: {activity_result.inserted_id}")
+                except Exception as e:
+                    logger.warning(f"Failed to save activity to activities collection: {e}")
+
         # If blood sugar data is present, also save it to the blood_sugar collection
         blood_sugar_id = None
         if data.get('bloodSugar') is not None:

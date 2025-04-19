@@ -69,28 +69,61 @@ def record_activities(current_user):
             'type': activity_type,
             'level': activity['level'],
             'impact': get_activity_impact(activity['level']),
-            'duration': format_duration(parse_duration(activity['duration']))
         }
 
-        if activity_type == 'expected':
-            activity_record['expectedTime'] = datetime.fromisoformat(activity['expectedTime'])
+        # Ensure startTime and endTime are included
+        if 'startTime' in activity:
+            activity_record['startTime'] = activity['startTime']
+        if 'endTime' in activity:
+            activity_record['endTime'] = activity['endTime']
+
+        # Handle duration formats
+        if 'duration' in activity:
+            activity_record['duration'] = activity['duration']
+        elif 'startTime' in activity and 'endTime' in activity:
+            # Calculate and add duration if possible
+            try:
+                activity_record['duration'] = format_duration(
+                    parse_duration(activity.get('duration', '01:00'))
+                )
+            except Exception as e:
+                logger.warning(f"Failed to format duration: {e}")
         else:
-            activity_record['completedTime'] = datetime.fromisoformat(activity['completedTime'])
+            # Default duration if no format provided
+            activity_record['duration'] = '01:00'
+
+        # Handle time fields based on activity type
+        if activity_type == 'expected':
+            expected_time = activity.get('expectedTime', activity.get('startTime'))
+            if expected_time:
+                activity_record['expectedTime'] = expected_time
+        else:
+            completed_time = activity.get('completedTime', activity.get('startTime'))
+            if completed_time:
+                activity_record['completedTime'] = completed_time
 
         return activity_record
 
     try:
         # Process expected activities
+        expected_ids = []
         for activity in expected_activities:
             record = process_activity(activity, 'expected')
-            activities.insert_one(record)
+            result = activities.insert_one(record)
+            expected_ids.append(str(result.inserted_id))
 
         # Process completed activities
+        completed_ids = []
         for activity in completed_activities:
             record = process_activity(activity, 'completed')
-            activities.insert_one(record)
+            result = activities.insert_one(record)
+            completed_ids.append(str(result.inserted_id))
 
-        return jsonify({"message": "Activities recorded successfully"}), 201
+        return jsonify({
+            "message": "Activities recorded successfully",
+            "expected_activity_ids": expected_ids,
+            "completed_activity_ids": completed_ids
+        }), 201
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
@@ -103,7 +136,28 @@ def record_activities(current_user):
 def get_activity_history(current_user):
     try:
         user_id = str(current_user['_id'])
-        user_activities = list(mongo.db.activities.find({"user_id": user_id}).sort("timestamp", -1))
+
+        # Parse query parameters for date filtering
+        start_date_str = request.args.get('start_date')
+        end_date_str = request.args.get('end_date')
+
+        # Build the query
+        query = {"user_id": user_id}
+
+        # Add date range if provided
+        if start_date_str or end_date_str:
+            query['timestamp'] = {}
+            if start_date_str:
+                start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
+                query['timestamp']['$gte'] = start_date
+            if end_date_str:
+                end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
+                # Add one day to include the entire end date
+                end_date = end_date + timedelta(days=1)
+                query['timestamp']['$lt'] = end_date
+
+        # Execute the query
+        user_activities = list(mongo.db.activities.find(query).sort("timestamp", -1))
 
         # Initialize Constants for activity level labels
         activity_level_map = {level['value']: level['label'] for level in Constants.ACTIVITY_LEVELS}
@@ -122,10 +176,14 @@ def get_activity_history(current_user):
             "level": activity['level'],
             "levelLabel": activity_level_map.get(activity['level'], "Unknown"),
             "impact": activity.get('impact', get_activity_impact(activity['level'])),
-            "duration": activity['duration'],
+            "duration": activity.get('duration', ''),
+            "startTime": format_time(activity.get('startTime')),
+            "endTime": format_time(activity.get('endTime')),
             "expectedTime": format_time(activity.get('expectedTime')),
             "completedTime": format_time(activity.get('completedTime')),
-            "timestamp": activity['timestamp'].isoformat()
+            "timestamp": format_time(activity['timestamp']),
+            "meal_id": activity.get('meal_id'),
+            "notes": activity.get('notes', '')
         } for activity in user_activities]
 
         return jsonify(formatted_activities), 200
@@ -141,7 +199,28 @@ def get_patient_activity_history(current_user, patient_id):
         return jsonify({"error": "Unauthorized access"}), 403
 
     try:
-        patient_activities = list(mongo.db.activities.find({"user_id": patient_id}).sort("timestamp", -1))
+        # Parse query parameters for date filtering
+        start_date_str = request.args.get('start_date')
+        end_date_str = request.args.get('end_date')
+
+        # Build the query
+        query = {"user_id": patient_id}
+
+        # Add date range if provided
+        if start_date_str or end_date_str:
+            query['timestamp'] = {}
+            if start_date_str:
+                start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
+                query['timestamp']['$gte'] = start_date
+            if end_date_str:
+                end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
+                # Add one day to include the entire end date
+                end_date = end_date + timedelta(days=1)
+                query['timestamp']['$lt'] = end_date
+
+        # Execute the query
+        patient_activities = list(mongo.db.activities.find(query).sort("timestamp", -1))
+
         activity_level_map = {level['value']: level['label'] for level in Constants.ACTIVITY_LEVELS}
 
         def format_time(time_value):
@@ -158,10 +237,14 @@ def get_patient_activity_history(current_user, patient_id):
             "level": activity['level'],
             "levelLabel": activity_level_map.get(activity['level'], "Unknown"),
             "impact": activity.get('impact', get_activity_impact(activity['level'])),
-            "duration": activity['duration'],
+            "duration": activity.get('duration', ''),
+            "startTime": format_time(activity.get('startTime')),
+            "endTime": format_time(activity.get('endTime')),
             "expectedTime": format_time(activity.get('expectedTime')),
             "completedTime": format_time(activity.get('completedTime')),
-            "timestamp": activity['timestamp'].isoformat()
+            "timestamp": format_time(activity['timestamp']),
+            "meal_id": activity.get('meal_id'),
+            "notes": activity.get('notes', '')
         } for activity in patient_activities]
 
         return jsonify(formatted_activities), 200

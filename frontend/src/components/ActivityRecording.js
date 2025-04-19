@@ -145,21 +145,30 @@ const ActivityRecording = ({
     setIsLoading(true);
     try {
       const token = localStorage.getItem('token');
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      };
+
+      // Process activities for both endpoints to ensure proper format
+      const processedActivitiesData = activities.map(activity => {
+        const durationData = TimeManager.calculateDuration(activity.startTime, activity.endTime);
+        return {
+          level: activity.level,
+          type: activity.type,
+          startTime: activity.startTime,  // Make sure startTime is included
+          endTime: activity.endTime,      // Make sure endTime is included
+          duration: TimeManager.hoursToTimeString(durationData.totalHours),
+          impact: patientConstants.activity_coefficients[activity.level] || 1.0
+        };
+      });
+
+      // 1. First, submit to the meal endpoint with the existing format
       const mealData = {
         timestamp: new Date().toISOString(),
         mealType: 'activity_only',
         foodItems: [],
-        activities: activities.map(activity => {
-          const durationData = TimeManager.calculateDuration(activity.startTime, activity.endTime);
-          return {
-            level: activity.level,
-            startTime: activity.startTime,
-            endTime: activity.endTime,
-            duration: TimeManager.hoursToTimeString(durationData.totalHours),
-            type: activity.type,
-            impact: patientConstants.activity_coefficients[activity.level] || 1.0
-          };
-        }),
+        activities: processedActivitiesData, // Use processed activities with all fields
         notes: notes,
         recordingType: 'standalone_activity_recording',
         calculationFactors: {
@@ -168,15 +177,45 @@ const ActivityRecording = ({
         }
       };
 
-      const response = await axios.post(
-        'http://localhost:5000/api/meal',
-        mealData,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        }
+      // Submit to meal endpoint
+      await axios.post('http://localhost:5000/api/meal', mealData, { headers });
+
+      // 2. Also submit to the dedicated activities endpoint with the format it expects
+      const activitiesData = {
+        expectedActivities: activities
+          .filter(activity => activity.type === 'expected')
+          .map(activity => {
+            const durationData = TimeManager.calculateDuration(activity.startTime, activity.endTime);
+            return {
+              level: activity.level,
+              duration: TimeManager.hoursToTimeString(durationData.totalHours),
+              expectedTime: activity.startTime,
+              startTime: activity.startTime,  // Ensure startTime is included
+              endTime: activity.endTime,      // Ensure endTime is included
+              impact: patientConstants.activity_coefficients[activity.level] || 1.0
+            };
+          }),
+        completedActivities: activities
+          .filter(activity => activity.type === 'completed')
+          .map(activity => {
+            const durationData = TimeManager.calculateDuration(activity.startTime, activity.endTime);
+            return {
+              level: activity.level,
+              duration: TimeManager.hoursToTimeString(durationData.totalHours),
+              completedTime: activity.startTime,
+              startTime: activity.startTime,  // Ensure startTime is included
+              endTime: activity.endTime,      // Ensure endTime is included
+              impact: patientConstants.activity_coefficients[activity.level] || 1.0
+            };
+          }),
+        notes: notes
+      };
+
+      // Submit to activities endpoint
+      await axios.post(
+        'http://localhost:5000/api/record-activities',
+        activitiesData,
+        { headers }
       );
 
       setStatus({
@@ -264,7 +303,25 @@ const ActivityRecording = ({
         {standalone && (
           <div className={styles.activitiesList}>
             <h3 className={styles.subtitle}>Completed Activities</h3>
-            {/* ... rest of the completed activities section ... */}
+            {activities
+              .filter(activity => activity.type === 'completed')
+              .map((activity, index) => (
+                <ActivityItem
+                  key={index}
+                  item={activity}
+                  updateItem={(updatedActivity) => updateActivity(activity, updatedActivity)}
+                  removeItem={() => removeActivity(activity)}
+                  activityCoefficients={patientConstants.activity_coefficients}
+                />
+              ))}
+            <button
+              type="button"
+              onClick={() => addActivity('completed')}
+              className={styles.addButton}
+              disabled={isLoading}
+            >
+              <FaPlus /> Add Completed Activity
+            </button>
           </div>
         )}
 

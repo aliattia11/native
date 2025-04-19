@@ -6,7 +6,7 @@ import BloodSugarVisualization from './BloodSugarVisualization';
 import BloodSugarChart from './Charts/BloodSugarChart';
 import BloodGlucoseAnalytics from './Charts/BloodGlucoseCorrelationChart ';
 import ActivityRecording from './ActivityRecording';
-import ActivityDataTable from './ActivityDataTable';
+import ActivityVisualization from './ActivityVisualization';
 import FoodDatabase from './FoodDatabase';
 import PatientConstants from './PatientConstants';
 import InsulinInput from './InsulinInput';
@@ -75,8 +75,8 @@ const PatientDashboard = ({ handleLogout }) => {
         return <BloodSugarChart key="blood-sugar-chart" />;
       case 'activityRecording':
         return <ActivityRecording key="activity-recording" userType="patient" />;
-      case 'ActivityDataTable':
-        return <ActivityDataTable key="activity-data-table" userType="patient" />;
+      case 'ActivityVisualization':
+        return <ActivityVisualization key="activity-visualization" userType="patient" />;
       default:
         return null;
     }
@@ -142,7 +142,7 @@ const PatientDashboard = ({ handleLogout }) => {
             { name: 'BloodSugarVisualization', label: 'Blood Glucose Visualization' },
             { name: 'BloodGlucoseAnalytics', label: 'Blood Glucose Analytics' },
             { name: 'bloodSugarChart', label: 'Blood Glucose Chart' },
-            { name: 'ActivityDataTable', label: 'Activity Data Table' }
+            { name: 'ActivityVisualization', label: 'Activity Visualization' }
           ].map(({ name, label }) => (
             <button
               key={name}

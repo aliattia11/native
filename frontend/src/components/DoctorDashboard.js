@@ -4,7 +4,7 @@ import BloodSugarChart from './Charts/BloodSugarChart';
 import BloodSugarVisualization from './BloodSugarVisualization';
 import MealHistory from './MealHistory';
 import EnhancedPatientConstantsUI from './EnhancedPatientConstantsUI';
-import ActivityDataTable from './ActivityDataTable';
+import ActivityVisualization from './ActivityVisualization';
 import BloodGlucoseCorrelationChart from './Charts/BloodGlucoseCorrelationChart ';
 import DataImport from './DataImport';
 import styles from './DoctorDashboard.module.css';
@@ -259,7 +259,7 @@ const DoctorDashboard = () => {
                     {activeTab === 'meals' ? (
                       <MealHistory isDoctor={true} patientId={selectedPatient.id} />
                     ) : (
-                      <ActivityDataTable isDoctor={true} patientId={selectedPatient.id} />
+                      <ActivityVisualization isDoctor={true} patientId={selectedPatient.id} />
                     )}
                   </div>
                 </div>
