@@ -361,83 +361,65 @@ def log_medication_dose(current_user, patient_id):
         return jsonify({"error": str(e)}), 500
 
 
+from flask import Blueprint, request, jsonify
+from bson.objectid import ObjectId
+from datetime import datetime
+from utils.auth import token_required
+from utils.error_handler import api_error_handler
+from config import mongo
+import logging
+
+logger = logging.getLogger(__name__)
+medication_routes = Blueprint('medication_routes', __name__)
+
+
 @medication_routes.route('/api/medication-logs/recent', methods=['GET'])
 @token_required
 @api_error_handler
 def get_recent_medication_logs(current_user):
     try:
+        # Get query parameters
         medication_type = request.args.get('medication_type')
-        medication = request.args.get('medication')
-        limit = int(request.args.get('limit', 10))
-        days = int(request.args.get('days', 7))  # Default to last 7 days
+        limit = int(request.args.get('limit', 3))
 
-        # Calculate date range
-        end_date = datetime.utcnow()
-        start_date = end_date - timedelta(days=days)
+        # Build query filter
+        query_filter = {'patient_id': str(current_user['_id'])}
 
-        # Build query
-        query = {
-            'patient_id': str(current_user['_id']),
-            'taken_at': {'$gte': start_date, '$lte': end_date}
-        }
-
+        # Add filter for insulin if specified
         if medication_type == 'insulin':
-            query['is_insulin'] = True
-        if medication:
-            query['medication'] = medication
+            query_filter['is_insulin'] = True
 
-        # Get recent logs
-        logs = list(mongo.db.medication_logs.find(
-            query,
-            {
-                'medication': 1,
-                'dose': 1,
-                'scheduled_time': 1,
-                'taken_at': 1,
-                'notes': 1,
-                'is_insulin': 1,
-                'meal_id': 1,
-                'meal_type': 1,
-                'blood_sugar': 1,
-                'suggested_dose': 1
-            }
+        # Get most recent medication logs
+        recent_logs = list(mongo.db.medication_logs.find(
+            query_filter
         ).sort('taken_at', -1).limit(limit))
 
-        # Format logs
+        # Format response to ensure proper ISO timestamps with timezone
         formatted_logs = []
-        for log in logs:
+        for log in recent_logs:
             formatted_log = {
+                'id': str(log['_id']),
                 'medication': log['medication'],
                 'dose': log['dose'],
-                'scheduled_time': log['scheduled_time'].isoformat(),
-                'taken_at': log['taken_at'].isoformat(),
+                # Ensure these times are ISO strings with explicit timezone
+                'scheduled_time': log['scheduled_time'].isoformat() + 'Z' if isinstance(log['scheduled_time'],
+                                                                                        datetime) else log[
+                    'scheduled_time'],
+                'taken_at': log['taken_at'].isoformat() + 'Z' if isinstance(log['taken_at'], datetime) else log[
+                    'taken_at'],
+                'status': log['status'],
                 'notes': log.get('notes', ''),
                 'is_insulin': log.get('is_insulin', False)
             }
-
-            # Add insulin-specific fields if present
-            if log.get('is_insulin'):
-                formatted_log.update({
-                    'meal_id': str(log.get('meal_id')) if log.get('meal_id') else None,
-                    'meal_type': log.get('meal_type'),
-                    'blood_sugar': log.get('blood_sugar'),
-                    'suggested_dose': log.get('suggested_dose')
-                })
-
             formatted_logs.append(formatted_log)
 
         return jsonify({
-            "logs": formatted_logs,
-            "pagination": {
-                "total": len(formatted_logs),
-                "limit": limit
-            }
-        }), 200
+            'logs': formatted_logs
+        })
 
     except Exception as e:
-        logger.error(f"Error fetching recent medication logs: {str(e)}")
-        return jsonify({"error": str(e)}), 500
-
+        logger.error(f"Error retrieving recent medication logs: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 @medication_routes.route('/api/medication-schedule/<patient_id>', methods=['GET'])
 @token_required

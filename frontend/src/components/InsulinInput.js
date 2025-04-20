@@ -32,6 +32,7 @@ const InsulinInput = ({
   const [expanded, setExpanded] = useState(false);
   const [detailsExpanded, setDetailsExpanded] = useState(false);
   const [insulinsByCategory, setInsulinsByCategory] = useState({});
+  const [isLoadingDoses, setIsLoadingDoses] = useState(false);
 
   // Use effect to get and categorize insulin types
   useEffect(() => {
@@ -55,6 +56,7 @@ const InsulinInput = ({
 
   const fetchRecentDoses = async () => {
     try {
+      setIsLoadingDoses(true);
       const token = localStorage.getItem('token');
       if (!token) {
         console.log('No authentication token found for fetching recent doses');
@@ -70,16 +72,36 @@ const InsulinInput = ({
           },
           params: {
             medication_type: 'insulin',
-            limit: 3
+            limit: 5
           }
         }
       );
 
       if (response.data && response.data.logs) {
-        setRecentDoses(response.data.logs);
+        console.log('Recent doses fetched:', response.data.logs);
+
+        // Make sure we process the timestamp correctly
+        const processedDoses = response.data.logs.map(dose => {
+          // Ensure scheduled_time has timezone information
+          let scheduledTime = dose.scheduled_time;
+          if (scheduledTime && !scheduledTime.endsWith('Z') &&
+              !scheduledTime.includes('+') && !scheduledTime.includes('-', 10)) {
+            scheduledTime += 'Z';  // Append Z to indicate UTC if not present
+          }
+
+          return {
+            ...dose,
+            scheduled_time: scheduledTime
+          };
+        });
+
+        setRecentDoses(processedDoses);
       }
     } catch (err) {
       console.error('Error fetching recent doses:', err);
+      setMessage('Failed to load recent insulin doses');
+    } finally {
+      setIsLoadingDoses(false);
     }
   };
 
@@ -184,6 +206,12 @@ const InsulinInput = ({
         throw new Error('Session token not found. Please log in again.');
       }
 
+      // Convert local time to UTC ISO string for sending to backend
+      const utcScheduledTime = TimeManager.localToUTCISOString(scheduledTime);
+
+      console.log('Submitting insulin dose with scheduled time:', scheduledTime);
+      console.log('UTC scheduled time for backend:', utcScheduledTime);
+
       // Using the /api/meal endpoint with insulin-specific payload
       const response = await axios.post(
         'http://localhost:5000/api/meal',
@@ -203,7 +231,7 @@ const InsulinInput = ({
             is_insulin: true,
             dose: parseFloat(dose),
             medication: selectedInsulin,
-            scheduled_time: scheduledTime || new Date().toISOString(),
+            scheduled_time: utcScheduledTime, // Send UTC time to backend
             notes: notes
           }
         },
@@ -217,6 +245,8 @@ const InsulinInput = ({
 
       if (response.status === 201 || response.status === 200) {
         setMessage('Insulin dose logged successfully');
+
+        // Refresh the list of doses to show the newly added one
         await fetchRecentDoses();
         await refreshConstants();
 
@@ -450,31 +480,37 @@ const InsulinInput = ({
       </form>
 
       {/* Show recent doses only in standalone mode */}
-      {isStandalone && recentDoses.length > 0 && (
+      {isStandalone && (
         <div className={styles.recentDoses}>
           <h4>Recent Insulin Doses</h4>
-          <div className={styles.dosesList}>
-            {recentDoses.map((dose, index) => (
-              <div key={index} className={styles.doseItem}>
-                <div className={styles.doseHeader}>
-                  <span className={styles.doseType}>
-                    {dose.medication.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                  </span>
-                  <span className={styles.doseAmount}>
-                    {dose.dose} units
-                  </span>
+          {isLoadingDoses ? (
+            <div className={styles.loadingDoses}>Loading recent doses...</div>
+          ) : recentDoses.length > 0 ? (
+            <div className={styles.dosesList}>
+              {recentDoses.map((dose, index) => (
+                <div key={index} className={styles.doseItem}>
+                  <div className={styles.doseHeader}>
+                    <span className={styles.doseType}>
+                      {dose.medication.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                    </span>
+                    <span className={styles.doseAmount}>
+                      {dose.dose} units
+                    </span>
+                  </div>
+                  <div className={styles.doseDetails}>
+                    <span className={styles.doseTime}>
+                      {TimeManager.formatDateTime(dose.scheduled_time)}
+                    </span>
+                    {dose.notes && (
+                      <span className={styles.doseNotes}>{dose.notes}</span>
+                    )}
+                  </div>
                 </div>
-                <div className={styles.doseDetails}>
-                  <span className={styles.doseTime}>
-                    {TimeManager.formatDateTime(dose.scheduled_time)}
-                  </span>
-                  {dose.notes && (
-                    <span className={styles.doseNotes}>{dose.notes}</span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <p className={styles.noDoses}>No recent insulin doses found</p>
+          )}
         </div>
       )}
     </div>
