@@ -26,6 +26,8 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
   });
   const [currentTime, setCurrentTime] = useState(moment().valueOf());
   const [userTimeZone, setUserTimeZone] = useState('');
+  // Store the chart instance to access the internal scales
+  const chartInstance = useRef(null);
 
   // Reference for chart container dimensions
   const chartRef = useRef(null);
@@ -54,10 +56,26 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
     return () => clearInterval(timer);
   }, []);
 
+  // Debug log once to display the exact time values
+  useEffect(() => {
+    if (data.length > 0) {
+      console.log("Time scale:", {
+        start: new Date(timeScale.start).toISOString(),
+        end: new Date(timeScale.end).toISOString()
+      });
+      console.log("Current time:", new Date(currentTime).toISOString());
+      console.log("Sample activity:", {
+        start: new Date(data[0].start).toISOString(),
+        end: new Date(data[0].end).toISOString()
+      });
+    }
+  }, [data, timeScale, currentTime]);
+
   // Update time scale when date range changes
   const updateTimeScale = useCallback(() => {
-    const startMoment = moment(dateRange.start);
-    const endMoment = moment(dateRange.end);
+    // Parse using moment to ensure consistent timezone handling
+    const startMoment = moment(dateRange.start).startOf('day');
+    const endMoment = moment(dateRange.end).endOf('day');
     const diffDays = endMoment.diff(startMoment, 'days');
 
     let tickInterval, tickFormat;
@@ -88,9 +106,10 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
   // Generate ticks for the x-axis based on time scale
   const generateTicks = useCallback(() => {
     const ticks = [];
-    let current = moment(timeScale.start);
+    let current = moment(timeScale.start).startOf('hour');
     const end = moment(timeScale.end);
 
+    // Align ticks to exact hour boundaries for consistent grid alignment
     while (current.isBefore(end)) {
       ticks.push(current.valueOf());
       current = current.add(timeScale.tickInterval, 'hours');
@@ -136,6 +155,7 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
       const formattedData = response.data.map(item => {
         // Get the actual start time and convert from UTC to local
         const startTime = item.startTime || item.expectedTime || item.completedTime || item.timestamp;
+        // Ensure consistent timestamp parsing
         const startMoment = moment.utc(startTime).local();
 
         // Calculate end time
@@ -151,12 +171,18 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
           endMoment = moment(startMoment).add(1, 'hour');
         }
 
-        // Calculate duration
+        // Calculate duration in a consistent way
         const durationHours = endMoment.diff(startMoment, 'minutes') / 60;
 
         // Find the activity level info
         const activityLevel = activityLevels.find(level => level.value === item.level) ||
                              { label: 'Unknown', color: '#999999' };
+
+        // Debug log the exact timestamps
+        console.log(`Activity: ${item.id || 'unknown'}`);
+        console.log(`UTC start: ${startTime}`);
+        console.log(`Local start: ${startMoment.format('YYYY-MM-DD HH:mm:ss')}`);
+        console.log(`Local end: ${endMoment.format('YYYY-MM-DD HH:mm:ss')}`);
 
         return {
           ...item,
@@ -173,6 +199,9 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
           activityLevelColor: activityLevel.color,
           // Position on Y-axis based on activity level + small offset for clarity when multiple activities at same level
           y: item.level + (Math.random() * 0.3 - 0.15),
+          // Store the original UTC timestamps for debugging
+          originalStartUTC: startTime,
+          originalEndUTC: item.endTime
         };
       });
 
@@ -239,16 +268,56 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
 
   // Improved custom shape for activity segments with precise timing
   const renderActivitySegment = (props) => {
-    const { cx, cy, payload } = props;
+    const { cx, cy, payload, index, xAxis, yAxis } = props;
 
-    if (!chartRef.current || !chartDimensions.width) {
-      // Default rendering if we don't have chart dimensions yet
+    // If we don't have the chart dimensions or the activity data, render a default shape
+    if (!chartRef.current || !chartDimensions.width || !payload) {
       return (
         <Rectangle
           x={cx - 10}
           y={cy - 10}
           width={20}
           height={20}
+          fill={payload?.activityLevelColor || "#999"}
+          stroke="#000"
+          strokeWidth={1}
+          rx={4}
+          ry={4}
+        />
+      );
+    }
+
+    // If we have access to the chart's x-axis, use it for precise positioning
+    if (xAxis && xAxis.scale) {
+      // Get activity times, ensuring they're within the visible range
+      const chartStart = timeScale.start;
+      const chartEnd = timeScale.end;
+
+      const activityStart = Math.max(payload.start, chartStart);
+      const activityEnd = Math.min(payload.end, chartEnd);
+
+      // Skip if activity is entirely outside the visible range
+      if (activityEnd <= chartStart || activityStart >= chartEnd) {
+        return null;
+      }
+
+      // Get precise pixel positions using the chart's own scale
+      const startX = xAxis.scale(activityStart);
+      const endX = xAxis.scale(activityEnd);
+
+      // Calculate width based on the pixel positions
+      const width = Math.max(endX - startX, 4); // Minimum width for visibility
+
+      // Calculate vertical position based on y-coordinate
+      const height = 20;
+      const yPos = cy - (height / 2);
+
+      return (
+        <Rectangle
+          x={startX}
+          y={yPos}
+          width={width}
+          height={height}
           fill={payload.activityLevelColor}
           stroke="#000"
           strokeWidth={1}
@@ -258,33 +327,47 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
       );
     }
 
-    // Get the XAxis range in pixels
-    const xAxisWidth = chartDimensions.width - 100; // Approximate margins
+    // Fallback method if we don't have direct access to chart scales
+    // Calculate the time range of the visible chart area
+    const timeRangeStart = timeScale.start;
+    const timeRangeEnd = timeScale.end;
+    const totalTimeRange = timeRangeEnd - timeRangeStart;
 
-    // Get the time range of the chart
-    const totalTimeRange = timeScale.end - timeScale.start;
+    // Get activity times, ensuring they're within the visible range
+    const activityStart = Math.max(payload.start, timeRangeStart);
+    const activityEnd = Math.min(payload.end, timeRangeEnd);
 
-    // Make sure activity is within bounds
-    const activityStart = Math.max(payload.start, timeScale.start);
-    const activityEnd = Math.min(payload.end, timeScale.end);
+    // Skip rendering if activity is outside visible range
+    if (activityEnd <= timeRangeStart || activityStart >= timeRangeEnd) {
+      return null;
+    }
 
-    if (activityEnd <= activityStart) return null; // Skip if not visible
+    // More precise margin calculation - use a constant for left margin
+    // Recharts typically uses a 60px left margin
+    const leftMargin = 60;
+    const rightMargin = 40;
 
-    // Calculate pixel positions based on the time proportions
-    const startProportion = (activityStart - timeScale.start) / totalTimeRange;
-    const endProportion = (activityEnd - timeScale.start) / totalTimeRange;
+    // Available width for plotting
+    const plotWidth = chartDimensions.width - leftMargin - rightMargin;
 
-    // Calculate the position and width in pixels
-    const startX = 60 + (startProportion * xAxisWidth); // Left margin offset + position
-    const width = ((endProportion - startProportion) * xAxisWidth);
+    // Calculate scale factor - pixels per millisecond
+    const scaleFactor = plotWidth / totalTimeRange;
 
-    // Use a fixed height for the rectangle
+    // Calculate start position relative to left edge
+    const startPos = (activityStart - timeRangeStart) * scaleFactor;
+    const xPos = leftMargin + startPos;
+
+    // Calculate width based on the activity duration
+    const activityDuration = activityEnd - activityStart;
+    const width = Math.max(activityDuration * scaleFactor, 4); // Ensure minimum width
+
+    // Use a fixed height for better visualization
     const height = 20;
     const yPos = cy - (height / 2);
 
     return (
       <Rectangle
-        x={startX}
+        x={xPos}
         y={yPos}
         width={width}
         height={height}
@@ -494,7 +577,8 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
             <div className="chart-container" ref={chartRef}>
               <ResponsiveContainer width="100%" height={400}>
                 <ScatterChart
-                  margin={{ top: 20, right: 40, bottom: 30, left: 40 }}
+                  margin={{ top: 20, right: 40, bottom: 30, left: 60 }}
+                  ref={chartInstance}
                 >
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis

@@ -181,25 +181,7 @@ const handleSubmit = useCallback(async (e) => {
       };
     });
 
-    // Option 1: If you want to keep meals integration, use this code
-    // and update the backend to avoid duplicate entries in activities collection
-    const mealData = {
-      timestamp: new Date().toISOString(),  // Current UTC time
-      mealType: 'activity_only',
-      foodItems: [],
-      activities: processedActivitiesData,  // Use processed activities with all fields
-      notes: notes,
-      recordingType: 'standalone_activity_recording',
-      calculationFactors: {
-        activityImpact: totalImpact,
-        healthMultiplier: 0.0
-      },
-      skipActivityDuplication: true // Added flag to tell backend not to create duplicate records
-    };
-
-    console.log('Submitting activities to meal endpoint:', mealData);
-
-    // Submit to activity recording endpoint first - this will be the source of truth
+    // First, record the activities in the activities collection
     const activitiesData = {
       expectedActivities: activities
         .filter(activity => activity.type === 'expected')
@@ -249,8 +231,25 @@ const handleSubmit = useCallback(async (e) => {
       { headers }
     );
 
-    // Then, send references to these activities to the meal endpoint
-    mealData.activityIds = activityResponse.data.activity_ids || [];
+    console.log('Activities recorded, response:', activityResponse.data);
+
+    // Prepare the meal data with references to already created activities
+    const mealData = {
+      timestamp: new Date().toISOString(),  // Current UTC time
+      mealType: 'activity_only',
+      foodItems: [],
+      activities: processedActivitiesData,  // Use processed activities with all fields
+      notes: notes,
+      recordingType: 'standalone_activity_recording',
+      calculationFactors: {
+        activityImpact: totalImpact,
+        healthMultiplier: 0.0
+      },
+      skipActivityDuplication: true, // Tell backend not to duplicate activities
+      activityIds: activityResponse.data.activity_ids || [] // Pass the IDs of already created activities
+    };
+
+    console.log('Submitting to meal endpoint with activity references:', mealData);
 
     // Now submit to meal endpoint with references to the already created activities
     await axios.post('http://localhost:5000/api/meal', mealData, { headers });

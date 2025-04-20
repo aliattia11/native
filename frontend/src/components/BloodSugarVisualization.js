@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { useTable, useSortBy, usePagination } from 'react-table';
 import axios from 'axios';
@@ -8,6 +8,7 @@ import './BloodSugarVisualization.css';
 const BloodSugarVisualization = ({ isDoctor = false, patientId = null }) => {
   // Shared state
   const [data, setData] = useState([]);
+  const [filteredData, setFilteredData] = useState([]);
   const [targetGlucose, setTargetGlucose] = useState(100);
   const [dateRange, setDateRange] = useState({
     start: moment().subtract(7, 'days').format('YYYY-MM-DD'),
@@ -18,11 +19,91 @@ const BloodSugarVisualization = ({ isDoctor = false, patientId = null }) => {
   const [unit, setUnit] = useState('mg/dL');
   const [activeView, setActiveView] = useState('chart'); // 'chart' or 'table'
   const [userTimeZone, setUserTimeZone] = useState('');
+  const [timeScale, setTimeScale] = useState({
+    start: moment().subtract(7, 'days').valueOf(),
+    end: moment().valueOf(),
+    tickInterval: 12, // in hours
+    tickFormat: 'DD/MM HH:mm'
+  });
+  const [currentTime, setCurrentTime] = useState(moment().valueOf());
+
+  // Reference for chart container
+  const chartRef = useRef(null);
 
   // Get user's time zone info on component mount
   useEffect(() => {
     setUserTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
   }, []);
+
+  // Filter data based on timeScale
+  useEffect(() => {
+    // Only keep data points that fall within the time scale
+    if (data.length > 0) {
+      const filtered = data.filter(item =>
+        item.readingTime >= timeScale.start &&
+        item.readingTime <= timeScale.end
+      );
+      console.log(`Filtered data from ${data.length} to ${filtered.length} points based on time range`);
+      setFilteredData(filtered);
+    } else {
+      setFilteredData([]);
+    }
+  }, [data, timeScale]);
+
+  // Update current time every minute
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(moment().valueOf());
+    }, 60000); // Update every minute
+
+    return () => clearInterval(timer);
+  }, []);
+
+  // Update time scale when date range changes
+  const updateTimeScale = useCallback(() => {
+    const startMoment = moment(dateRange.start).startOf('day');
+    const endMoment = moment(dateRange.end).endOf('day');
+    const diffDays = endMoment.diff(startMoment, 'days');
+
+    let tickInterval, tickFormat;
+
+    // Determine scaling based on the date range
+    if (diffDays <= 1) {
+      // Last 24 hours - 2 hour ticks
+      tickInterval = 2;
+      tickFormat = 'HH:mm';
+    } else if (diffDays <= 7) {
+      // Last week - 12 hour ticks
+      tickInterval = 12;
+      tickFormat = 'DD/MM HH:mm';
+    } else {
+      // Last month - 1 day ticks
+      tickInterval = 24;
+      tickFormat = 'MM/DD';
+    }
+
+    setTimeScale({
+      start: startMoment.valueOf(),
+      end: endMoment.valueOf(),
+      tickInterval,
+      tickFormat
+    });
+  }, [dateRange]);
+
+  // Generate ticks for the x-axis based on time scale
+  const generateTicks = useCallback(() => {
+    const ticks = [];
+    let current = moment(timeScale.start).startOf('hour');
+    const end = moment(timeScale.end);
+
+    // Align ticks to exact hour boundaries for consistent grid alignment
+    while (current.isBefore(end)) {
+      ticks.push(current.valueOf());
+      current = current.add(timeScale.tickInterval, 'hours');
+    }
+
+    return ticks;
+  }, [timeScale]);
 
   const fetchData = useCallback(async () => {
     try {
@@ -70,6 +151,9 @@ const BloodSugarVisualization = ({ isDoctor = false, patientId = null }) => {
         setTargetGlucose(formattedData[0].target);
       }
 
+      // Update time scale after fetching data
+      updateTimeScale();
+
       setError('');
       setLoading(false);
     } catch (error) {
@@ -77,11 +161,15 @@ const BloodSugarVisualization = ({ isDoctor = false, patientId = null }) => {
       setError('Failed to fetch blood sugar data. Please try again.');
       setLoading(false);
     }
-  }, [dateRange, isDoctor, patientId, unit, targetGlucose]);
+  }, [dateRange, isDoctor, patientId, unit, targetGlucose, updateTimeScale]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  useEffect(() => {
+    updateTimeScale();
+  }, [dateRange, updateTimeScale]);
 
   const getBloodSugarStatus = (bloodSugar, target) => {
     const statusMap = {
@@ -106,21 +194,45 @@ const BloodSugarVisualization = ({ isDoctor = false, patientId = null }) => {
 
   // Quick date range presets
   const applyDatePreset = (days) => {
+    const start = moment().subtract(days, 'days').format('YYYY-MM-DD');
+
+    // Set the end date based on the preset type with specific requirements
+    let end;
+    if (days === 1) {
+      // For "Last 24h": past day plus 12 hours
+      end = moment().add(12, 'hours').format('YYYY-MM-DD HH:mm');
+    } else if (days === 7) {
+      // For "Last Week": past 7 days plus one future day
+      end = moment().add(1, 'day').format('YYYY-MM-DD');
+    } else if (days === 30) {
+      // For "Last Month": past 30 days plus 4 future days
+      end = moment().add(4, 'days').format('YYYY-MM-DD');
+    } else {
+      // Default case
+      end = moment().format('YYYY-MM-DD');
+    }
+
     setDateRange({
-      start: moment().subtract(days, 'days').format('YYYY-MM-DD'),
-      end: moment().format('YYYY-MM-DD')
+      start: start,
+      end: end
     });
   };
 
   // Chart-specific functions
   const formatXAxis = (tickItem) => {
     // Format the timestamp using the user's local timezone
-    return moment(tickItem).format('DD/MM HH:mm');
+    return moment(tickItem).format(timeScale.tickFormat);
   };
 
   const formatYAxis = (value) => {
     return `${value} ${unit}`;
   };
+
+  // Generate custom ticks based on time scale
+  const ticks = generateTicks();
+
+  // Determine if current time is within chart range
+  const currentTimeInRange = currentTime >= timeScale.start && currentTime <= timeScale.end;
 
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
@@ -139,7 +251,7 @@ const BloodSugarVisualization = ({ isDoctor = false, patientId = null }) => {
     return null;
   };
 
-  // Table-specific functions
+  // Table-specific columns
   const columns = React.useMemo(
     () => [
       {
@@ -192,7 +304,7 @@ const BloodSugarVisualization = ({ isDoctor = false, patientId = null }) => {
   const tableInstance = useTable(
     {
       columns,
-      data,
+      data: filteredData, // Use filtered data for the table
       initialState: { pageIndex: 0, pageSize: 10 },
     },
     useSortBy,
@@ -282,32 +394,47 @@ const BloodSugarVisualization = ({ isDoctor = false, patientId = null }) => {
         <button className="update-btn" onClick={fetchData}>Update Data</button>
       </div>
 
+      <div className="current-time-display">
+        <div className="time-info">
+          <span className="time-label">Current Time (Local):</span>
+          <span className="time-value">{moment().format('YYYY-MM-DD HH:mm:ss')}</span>
+        </div>
+        <div className="time-info">
+          <span className="time-label">Current Time (UTC):</span>
+          <span className="time-value">{moment().utc().format('YYYY-MM-DD HH:mm:ss')}</span>
+        </div>
+        <div className="user-info">
+          <span className="user-label">Current User:</span>
+          <span className="user-value">{localStorage.getItem('userLogin') || 'user'}</span>
+        </div>
+      </div>
+
       {error && <div className="error-message">{error}</div>}
 
       {loading ? (
         <div className="loading">Loading blood sugar data...</div>
-      ) : data.length === 0 ? (
-        <div className="no-data">No blood sugar readings found for the selected date range.</div>
       ) : (
         <div className="content-container">
           {activeView === 'chart' && (
-            <div className="chart-container">
+            <div className="chart-container" ref={chartRef}>
               <ResponsiveContainer width="100%" height={400}>
                 <LineChart
-                  data={data}
-                  margin={{ top: 5, right: 30, left: 20, bottom: 25 }}
+                  margin={{ top: 20, right: 40, bottom: 30, left: 40 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis
-                    dataKey="readingTime"
                     type="number"
-                    scale="time"
-                    domain={['dataMin', 'dataMax']}
+                    dataKey="readingTime"
+                    name="Time"
+                    domain={[timeScale.start, timeScale.end]} // Use fixed domain from timeScale
+                    ticks={ticks} // Use our generated ticks
                     tickFormatter={formatXAxis}
                     angle={-45}
                     textAnchor="end"
                     height={70}
-                    interval="preserveStartEnd"
+                    allowDuplicatedCategory={false}
+                    scale="time"
+                    interval={0}
                   />
                   <YAxis tickFormatter={formatYAxis} />
                   <Tooltip content={<CustomTooltip />} />
@@ -333,10 +460,26 @@ const BloodSugarVisualization = ({ isDoctor = false, patientId = null }) => {
                     strokeDasharray="3 3"
                   />
 
+                  {/* Current time reference line */}
+                  {currentTimeInRange && (
+                    <ReferenceLine
+                      x={currentTime}
+                      stroke="#ff0000"
+                      strokeWidth={2}
+                      label={{
+                        value: 'Now',
+                        position: 'top',
+                        fill: '#ff0000',
+                        fontSize: 12
+                      }}
+                    />
+                  )}
+
                   <Line
                     type="monotone"
                     dataKey="bloodSugar"
                     name={`Blood Sugar (${unit})`}
+                    data={filteredData} // Use filtered data instead of all data
                     stroke="#8884d8"
                     activeDot={{ r: 8 }}
                     dot={{
@@ -362,7 +505,18 @@ const BloodSugarVisualization = ({ isDoctor = false, patientId = null }) => {
                   <span className="legend-color" style={{ backgroundColor: '#ff8800' }}></span>
                   <span>High: Above {targetGlucose * 1.3} {unit}</span>
                 </div>
+                <div className="legend-item">
+                  <span className="legend-color" style={{ backgroundColor: '#ff0000' }}></span>
+                  <span>Current Time</span>
+                </div>
               </div>
+
+              {/* Display message if no data points are in the current range */}
+              {filteredData.length === 0 && (
+                <div className="no-data-overlay">
+                  No blood sugar readings found in the selected date range
+                </div>
+              )}
             </div>
           )}
 
@@ -394,26 +548,34 @@ const BloodSugarVisualization = ({ isDoctor = false, patientId = null }) => {
                   })}
                 </thead>
                 <tbody {...getTableBodyProps()}>
-                  {page.map(row => {
-                    prepareRow(row);
-                    const { key, ...rowProps } = row.getRowProps();
-                    return (
-                      <tr
-                        key={key}
-                        {...rowProps}
-                        className={`status-${row.original.status.label.toLowerCase()}`}
-                      >
-                        {row.cells.map(cell => {
-                          const { key, ...cellProps } = cell.getCellProps();
-                          return (
-                            <td key={key} {...cellProps}>
-                              {cell.render('Cell')}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    );
-                  })}
+                  {page.length > 0 ? (
+                    page.map(row => {
+                      prepareRow(row);
+                      const { key, ...rowProps } = row.getRowProps();
+                      return (
+                        <tr
+                          key={key}
+                          {...rowProps}
+                          className={`status-${row.original.status.label.toLowerCase()}`}
+                        >
+                          {row.cells.map(cell => {
+                            const { key, ...cellProps } = cell.getCellProps();
+                            return (
+                              <td key={key} {...cellProps}>
+                                {cell.render('Cell')}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={columns.length} className="no-data">
+                        No blood sugar readings found for the selected date range.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
 
@@ -426,7 +588,7 @@ const BloodSugarVisualization = ({ isDoctor = false, patientId = null }) => {
                 <span>
                   Page {' '}
                   <strong>
-                    {pageIndex + 1} of {pageOptions.length}
+                    {pageIndex + 1} of {pageOptions.length || 1}
                   </strong>
                 </span>
                 <span>

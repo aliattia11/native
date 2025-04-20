@@ -482,8 +482,12 @@ def submit_meal(current_user):
         logger.info(
             f"Meal document created with ID: {result.inserted_id}, including bloodSugarTimestamp: {blood_sugar_timestamp}")
 
+        # Check if we should skip activity duplication
+        should_skip_activity_duplication = data.get('skipActivityDuplication', False)
+
         # Also save activities to the dedicated activities collection
-        if data.get('activities'):
+        # Only if not flagged to skip duplication
+        if data.get('activities') and not should_skip_activity_duplication:
             activities_collection = mongo.db.activities
 
             for activity in data['activities']:
@@ -516,6 +520,18 @@ def submit_meal(current_user):
                     logger.info(f"Activity record created with ID: {activity_result.inserted_id}")
                 except Exception as e:
                     logger.warning(f"Failed to save activity to activities collection: {e}")
+        elif should_skip_activity_duplication and 'activityIds' in data:
+            # Link the existing activities to this meal
+            activities_collection = mongo.db.activities
+            for activity_id in data['activityIds']:
+                try:
+                    activities_collection.update_one(
+                        {'_id': ObjectId(activity_id)},
+                        {'$set': {'meal_id': str(result.inserted_id)}}
+                    )
+                    logger.info(f"Linked existing activity {activity_id} to meal {result.inserted_id}")
+                except Exception as e:
+                    logger.warning(f"Failed to link existing activity {activity_id}: {e}")
 
         # If blood sugar data is present, also save it to the blood_sugar collection
         blood_sugar_id = None
