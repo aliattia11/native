@@ -233,18 +233,9 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
 
   // Improved custom shape for activity segments with precise timing
   const renderActivitySegment = (props) => {
-    const { cx, cy, payload, index } = props;
+    const { cx, cy, payload } = props;
 
-    // Get the total time range of the chart
-    const totalTimeRange = timeScale.end - timeScale.start;
-
-    // Get the time range of this activity
-    const activityStart = Math.max(payload.start, timeScale.start);  // Clip to chart boundaries
-    const activityEnd = Math.min(payload.end, timeScale.end);        // Clip to chart boundaries
-
-    // Calculate position within chart coordinates
-    // This ensures alignment with the time axis
-    if (!chartRef.current || totalTimeRange === 0) {
+    if (!chartRef.current || !chartDimensions.width) {
       // Default rendering if we don't have chart dimensions yet
       return (
         <Rectangle
@@ -261,28 +252,34 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
       );
     }
 
-    // Get chart width (minus margins)
-    const chartWidth = chartDimensions.width - 80; // Subtract approx margins
+    // Get the XAxis range in pixels
+    const xAxisWidth = chartDimensions.width - 100; // Approximate margins
 
-    // Calculate the proportional position and width
-    const startPct = (activityStart - timeScale.start) / totalTimeRange;
-    const endPct = (activityEnd - timeScale.start) / totalTimeRange;
-    const widthPct = endPct - startPct;
+    // Get the time range of the chart
+    const totalTimeRange = timeScale.end - timeScale.start;
 
-    // Convert to pixels
-    const width = Math.max(10, widthPct * chartWidth); // Minimum size for very short activities
+    // Make sure activity is within bounds
+    const activityStart = Math.max(payload.start, timeScale.start);
+    const activityEnd = Math.min(payload.end, timeScale.end);
 
-    // Calculate x position - center the segment based on activity start and end times, not datapoint
-    const xPos = cx - (width / 2); // cx would be the center of the data point
+    if (activityEnd <= activityStart) return null; // Skip if not visible
 
-    // Height of the segment
+    // Calculate pixel positions based on the time proportions
+    const startProportion = (activityStart - timeScale.start) / totalTimeRange;
+    const endProportion = (activityEnd - timeScale.start) / totalTimeRange;
+
+    // Calculate the position and width in pixels
+    const startX = 60 + (startProportion * xAxisWidth); // Left margin offset + position
+    const width = ((endProportion - startProportion) * xAxisWidth);
+
+    // Use a fixed height for the rectangle
     const height = 20;
+    const yPos = cy - (height / 2);
 
     return (
       <Rectangle
-        key={`activity-${index}-${payload.id}`}
-        x={xPos}
-        y={cy - (height / 2)}
+        x={startX}
+        y={yPos}
         width={width}
         height={height}
         fill={payload.activityLevelColor}
