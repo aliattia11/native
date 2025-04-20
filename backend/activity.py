@@ -467,3 +467,146 @@ def get_patient_activity_history(current_user, patient_id):
     except Exception as e:
         logger.error(f"Error fetching patient activity history: {str(e)}")
         return jsonify({"error": "Internal server error"}), 500
+
+
+@activity_bp.route('/api/activity', methods=['GET'])
+@token_required
+def get_activity(current_user):
+    """
+    Get activity data with optional filtering by date range.
+    This endpoint is specifically for the ActivityVisualization component.
+    """
+    try:
+        # Parse query parameters
+        start_date_str = request.args.get('start_date')
+        end_date_str = request.args.get('end_date')
+        include_details = request.args.get('include_details') == 'true'
+
+        user_id = str(current_user['_id'])
+        logger.info(f"Fetching activity data for user {user_id} from {start_date_str} to {end_date_str}")
+
+        # Build the query
+        query = {"user_id": user_id}
+
+        # Add date range filters if provided
+        if start_date_str or end_date_str:
+            start_date = None
+            end_date = None
+
+            if start_date_str:
+                try:
+                    start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
+                except Exception as e:
+                    logger.error(f"Error parsing start date '{start_date_str}': {e}")
+                    return jsonify({"error": f"Invalid start date format: {start_date_str}"}), 400
+
+            if end_date_str:
+                try:
+                    end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
+                    # Add one day to include the entire end date
+                    end_date = end_date + timedelta(days=1)
+                except Exception as e:
+                    logger.error(f"Error parsing end date '{end_date_str}': {e}")
+                    return jsonify({"error": f"Invalid end date format: {end_date_str}"}), 400
+
+            # Create time range filter conditions using $or to include activities that overlap the range
+            time_conditions = []
+
+            # Condition 1: Traditional timestamp filter
+            timestamp_condition = {}
+            if start_date:
+                timestamp_condition["$gte"] = start_date
+            if end_date:
+                timestamp_condition["$lt"] = end_date
+            if timestamp_condition:
+                time_conditions.append({"timestamp": timestamp_condition})
+
+            # Condition 2: Start time within range
+            start_time_conditions = []
+            for time_field in ["startTime", "expectedTime", "completedTime"]:
+                if start_date and end_date:
+                    start_time_conditions.append({
+                        time_field: {"$gte": start_date, "$lt": end_date}
+                    })
+                elif start_date:
+                    start_time_conditions.append({
+                        time_field: {"$gte": start_date}
+                    })
+                elif end_date:
+                    start_time_conditions.append({
+                        time_field: {"$lt": end_date}
+                    })
+
+            # Condition 3: End time within range
+            end_time_conditions = []
+            if "endTime" in mongo.db.activities.find_one({}, {"_id": 0, "endTime": 1}):
+                if start_date and end_date:
+                    end_time_conditions.append({
+                        "endTime": {"$gte": start_date, "$lt": end_date}
+                    })
+                elif start_date:
+                    end_time_conditions.append({
+                        "endTime": {"$gte": start_date}
+                    })
+                elif end_date:
+                    end_time_conditions.append({
+                        "endTime": {"$lt": end_date}
+                    })
+
+            # Condition 4: Activity spans the entire range
+            span_conditions = []
+            if start_date and end_date and "startTime" in mongo.db.activities.find_one({}, {"_id": 0,
+                                                                                            "startTime": 1}) and "endTime" in mongo.db.activities.find_one(
+                    {}, {"_id": 0, "endTime": 1}):
+                span_conditions.append({
+                    "startTime": {"$lte": start_date},
+                    "endTime": {"$gte": end_date}
+                })
+
+            # Combine all conditions with $or
+            all_time_conditions = time_conditions + start_time_conditions + end_time_conditions + span_conditions
+            if all_time_conditions:
+                query["$or"] = all_time_conditions
+
+        # Get the activities
+        user_activities = list(mongo.db.activities.find(query).sort("timestamp", -1))
+        logger.debug(f"Found {len(user_activities)} activities")
+
+        # Format activities for response
+        formatted_activities = []
+        for activity in user_activities:
+            try:
+                # Format basic activity data
+                formatted_activity = {
+                    "_id": str(activity['_id']),
+                    "type": activity.get('type', 'unknown'),
+                    "level": activity.get('level', 0),
+                    "impact": activity.get('impact', 1.0),
+                    "duration": activity.get('duration', '01:00')
+                }
+
+                # Add time fields if they exist
+                for time_field in ["timestamp", "startTime", "endTime", "expectedTime", "completedTime"]:
+                    if time_field in activity and activity[time_field]:
+                        if isinstance(activity[time_field], datetime):
+                            formatted_activity[time_field] = activity[time_field].isoformat()
+                        else:
+                            formatted_activity[time_field] = activity[time_field]
+
+                # Add notes if present
+                if 'notes' in activity:
+                    formatted_activity["notes"] = activity['notes']
+
+                # Add meal reference if present
+                if 'meal_id' in activity:
+                    formatted_activity["meal_id"] = activity['meal_id']
+
+                formatted_activities.append(formatted_activity)
+            except Exception as e:
+                logger.error(f"Error formatting activity {activity.get('_id', 'unknown')}: {e}")
+
+        return jsonify(formatted_activities), 200
+
+    except Exception as e:
+        logger.error(f"Error in get_activity: {str(e)}")
+        return jsonify({"error": str(e)}), 500

@@ -1,413 +1,464 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import axios from 'axios';
-import moment from 'moment';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  ResponsiveContainer,
-  ComposedChart,
-  Line,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  Area,
-  ReferenceLine
+  ScatterChart, Scatter, Rectangle, XAxis, YAxis, CartesianGrid,
+  Tooltip, Legend, ResponsiveContainer, ReferenceLine, ZAxis
 } from 'recharts';
 import { useTable, useSortBy, usePagination } from 'react-table';
-import { useConstants } from '../contexts/ConstantsContext';
-import './ActivityVisualization.css';
-
-// Color palette for different activity levels
-const activityColors = {
-  '-2': '#ff7f0e', // Sedentary (orange)
-  '-1': '#ffbb78', // Light sedentary (light orange)
-  '0': '#aec7e8',  // Normal (light blue)
-  '1': '#1f77b4',  // Active (blue)
-  '2': '#2ca02c'   // Very active (green)
-};
-
-// Activity level labels
-const activityLevelLabels = {
-  '-2': 'Mode 1 (Very Sedentary)',
-  '-1': 'Mode 2 (Sedentary)',
-  '0': 'Normal Activity',
-  '1': 'High Activity',
-  '2': 'Vigorous Activity'
-};
+import axios from 'axios';
+import moment from 'moment';
+import './BloodSugarVisualization.css'; // Reuse the same CSS file
 
 const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
-  // Use patient constants for activity impact parameters
-  const { patientConstants, loading: constantsLoading } = useConstants();
-
-  // State for data handling
-  const [activityData, setActivityData] = useState([]);
-  const [bloodSugarData, setBloodSugarData] = useState([]);
-  const [combinedData, setCombinedData] = useState([]);
-  const [activityLevels, setActivityLevels] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-
-  // UI state
+  // Shared state
+  const [data, setData] = useState([]);
   const [dateRange, setDateRange] = useState({
-    start: moment().subtract(3, 'days').format('YYYY-MM-DD'),
-    end: moment().format('YYYY-MM-DD')
+    start: moment().subtract(7, 'days').format('YYYY-MM-DD'),
+    end: moment().add(1, 'day').format('YYYY-MM-DD')
   });
-  const [selectedActivityLevels, setSelectedActivityLevels] = useState([]);
-  const [showActualBloodSugar, setShowActualBloodSugar] = useState(true);
-  const [showExpectedEffect, setShowExpectedEffect] = useState(true);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
   const [activeView, setActiveView] = useState('chart'); // 'chart' or 'table'
-  const [viewMode, setViewMode] = useState('combined'); // 'combined', 'activities', or 'effect'
+  const [timeScale, setTimeScale] = useState({
+    start: moment().subtract(7, 'days').valueOf(),
+    end: moment().valueOf(),
+    tickInterval: 8, // in hours
+    tickFormat: 'DD/MM HH:mm'
+  });
+  const [currentTime, setCurrentTime] = useState(moment().valueOf());
   const [userTimeZone, setUserTimeZone] = useState('');
+  // Store the chart instance to access the internal scales
+  const chartInstance = useRef(null);
 
-  // Set user's timezone on mount
+  // Reference for chart container dimensions
+  const chartRef = useRef(null);
+  const [chartDimensions, setChartDimensions] = useState({ width: 0, height: 0 });
+
+  // Activity levels mapping for display
+  const activityLevels = [
+    { value: -2, label: 'Sleep', color: '#6a0dad' },
+    { value: -1, label: 'Very Low Activity', color: '#4169e1' },
+    { value: 0, label: 'Normal Activity', color: '#2e8b57' },
+    { value: 1, label: 'High Activity', color: '#ff8c00' },
+    { value: 2, label: 'Vigorous Activity', color: '#dc143c' }
+  ];
+
+  // Get user's time zone on component mount
   useEffect(() => {
     setUserTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
   }, []);
 
-  // Calculate activity effect on blood sugar based on activity parameters
-  // Using useCallback to maintain stable reference
-  const calculateActivityEffect = useCallback((hoursSinceActivity, duration, level, bloodSugarBaseline = 100) => {
-    if (!patientConstants?.activity_coefficients) {
-      return 0;
-    }
-
-    // Convert duration from "HH:MM" format to hours
-    let durationHours = 1; // Default to 1 hour
-    if (typeof duration === 'string' && duration.includes(':')) {
-      const [hours, minutes] = duration.split(':').map(Number);
-      durationHours = hours + (minutes / 60);
-    } else if (typeof duration === 'number') {
-      durationHours = duration;
-    }
-
-    // Get activity coefficient from constants (how much it impacts blood sugar)
-    const activityCoefficient = patientConstants.activity_coefficients[level] || 1.0;
-
-    // Calculate impact multiplier (1.0 means no change, <1.0 means reduction, >1.0 means increase)
-    // For activity, values <1.0 mean blood sugar reduction (e.g. 0.8 = 20% reduction)
-    const impactStrength = (2 - activityCoefficient); // Convert to appropriate scale
-
-    // Calculate activity phases
-    const duringActivityPhase = 0; // Hours from start
-    const peakEffectPhase = durationHours; // Hours from start
-    const extendedEffectPhase = durationHours + 4; // Extended effect (up to 4 hours after activity)
-
-    // No effect before activity started
-    if (hoursSinceActivity < 0) {
-      return 0;
-    }
-    // During activity: increasing effect
-    else if (hoursSinceActivity <= durationHours) {
-      // Progressive impact that builds during the activity
-      const progressFactor = hoursSinceActivity / durationHours;
-      // Max impact is 20-40 points depending on activity level and duration
-      const maxImpact = bloodSugarBaseline * (1 - activityCoefficient) * Math.min(1.0, durationHours / 2);
-      return -maxImpact * progressFactor;
-    }
-    // Post-activity: extended effect with gradual reduction
-    else if (hoursSinceActivity <= extendedEffectPhase) {
-      const remainingEffect = 1 - ((hoursSinceActivity - durationHours) / 4);
-      // Extended effect is about half the intensity of during activity
-      const maxImpact = bloodSugarBaseline * (1 - activityCoefficient) * 0.5 * Math.min(1.0, durationHours / 2);
-      return -maxImpact * remainingEffect;
-    }
-    // No more effect after extended phase
-    else {
-      return 0;
-    }
-  }, [patientConstants]); // Only depend on patientConstants
-
-  // Fetch activity and blood glucose data
+  // Update current time every minute
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        setError('');
+    const timer = setInterval(() => {
+      setCurrentTime(moment().valueOf());
+    }, 60000); // Update every minute
 
-        const token = localStorage.getItem('token');
-        if (!token) {
-          throw new Error('Authentication token not found');
-        }
+    return () => clearInterval(timer);
+  }, []);
 
-        const headers = { Authorization: `Bearer ${token}` };
+  // Debug log once to display the exact time values
+  useEffect(() => {
+    if (data.length > 0) {
+      console.log("Time scale:", {
+        start: new Date(timeScale.start).toISOString(),
+        end: new Date(timeScale.end).toISOString()
+      });
+      console.log("Current time:", new Date(currentTime).toISOString());
+      console.log("Sample activity:", {
+        start: new Date(data[0].start).toISOString(),
+        end: new Date(data[0].end).toISOString()
+      });
+    }
+  }, [data, timeScale, currentTime]);
 
-        // Fetch activity data
-        const activityResponse = await axios.get(
-          'http://localhost:5000/api/activity',
-          {
-            params: {
-              start_date: dateRange.start,
-              end_date: dateRange.end,
-              include_details: true
-            },
-            headers
-          }
-        );
+  // Update time scale when date range changes
+  const updateTimeScale = useCallback(() => {
+    // Parse using moment to ensure consistent timezone handling
+    const startMoment = moment(dateRange.start).startOf('day');
+    const endMoment = moment(dateRange.end).endOf('day');
+    const diffDays = endMoment.diff(startMoment, 'days');
 
-        // Fetch blood sugar data for the same period
-        const bloodSugarResponse = await axios.get(
-          'http://localhost:5000/api/blood-sugar',
-          {
-            params: {
-              start_date: dateRange.start,
-              end_date: dateRange.end
-            },
-            headers
-          }
-        );
+    let tickInterval, tickFormat;
 
-        const activityLogs = activityResponse.data || [];
-        const bloodSugarReadings = bloodSugarResponse.data || [];
+    // Determine scaling based on the date range
+    if (diffDays <= 1) {
+      // Last 24 hours - 1 hour ticks
+      tickInterval = 1;
+      tickFormat = 'HH:mm';
+    } else if (diffDays <= 7) {
+      // Last week - 8 hour ticks
+      tickInterval = 8;
+      tickFormat = 'DD/MM HH:mm';
+    } else {
+      // Last month - 1 day ticks
+      tickInterval = 24;
+      tickFormat = 'MM/DD';
+    }
 
-        // Process activity data
-        const processedActivityData = activityLogs.map(activity => {
-          let startTime, endTime;
+    setTimeScale({
+      start: startMoment.valueOf(),
+      end: endMoment.valueOf(),
+      tickInterval,
+      tickFormat
+    });
+  }, [dateRange]);
 
-          // Try to get the most accurate times from the activity data
-          if (activity.startTime) {
-            startTime = moment.utc(activity.startTime).local();
-          } else if (activity.expectedTime) {
-            startTime = moment.utc(activity.expectedTime).local();
-          } else if (activity.completedTime) {
-            startTime = moment.utc(activity.completedTime).local();
-          } else {
-            startTime = moment.utc(activity.timestamp).local();
-          }
+  // Generate ticks for the x-axis based on time scale
+  const generateTicks = useCallback(() => {
+    const ticks = [];
+    let current = moment(timeScale.start).startOf('hour');
+    const end = moment(timeScale.end);
 
-          // Set end time based on duration
-          if (activity.endTime) {
-            endTime = moment.utc(activity.endTime).local();
-          } else if (activity.duration) {
-            // Parse duration in format "HH:MM"
-            const [hours, minutes] = activity.duration.split(':').map(Number);
-            endTime = moment(startTime).add(hours, 'hours').add(minutes, 'minutes');
-          } else {
-            // Default 30 minute activity
-            endTime = moment(startTime).add(30, 'minutes');
-          }
+    // Align ticks to exact hour boundaries for consistent grid alignment
+    while (current.isBefore(end)) {
+      ticks.push(current.valueOf());
+      current = current.add(timeScale.tickInterval, 'hours');
+    }
 
-          return {
-            id: activity._id || `activity-${startTime.valueOf()}`,
-            activityType: activity.type || 'unknown',
-            level: activity.level || 0,
-            startTime: startTime.valueOf(),
-            endTime: endTime.valueOf(),
-            duration: activity.duration || '00:30',
-            formattedStartTime: startTime.format('MM/DD/YYYY, HH:mm'),
-            formattedEndTime: endTime.format('MM/DD/YYYY, HH:mm'),
-            impact: activity.impact || 1.0,
-            notes: activity.notes || ''
-          };
-        });
+    return ticks;
+  }, [timeScale]);
 
-        // Process blood sugar data
-        const processedBloodSugarData = bloodSugarReadings.map(reading => {
-          const readingTime = moment.utc(reading.bloodSugarTimestamp || reading.timestamp).local();
-
-          return {
-            id: reading._id,
-            bloodSugar: reading.bloodSugar,
-            readingTime: readingTime.valueOf(),
-            formattedTime: readingTime.format('MM/DD/YYYY, HH:mm'),
-            status: reading.status,
-            notes: reading.notes || ''
-          };
-        });
-
-        // Get unique activity levels
-        const levels = [...new Set(processedActivityData.map(item => String(item.level)))];
-
-        setActivityData(processedActivityData);
-        setBloodSugarData(processedBloodSugarData);
-        setActivityLevels(levels);
-
-        // Initialize selected levels if needed
-        if (selectedActivityLevels.length === 0 && levels.length > 0) {
-          setSelectedActivityLevels(levels);
-        }
-
-      } catch (err) {
-        console.error('Error fetching activity data:', err);
-        setError('Failed to load activity data. Please try again.');
-      } finally {
-        setLoading(false);
+  // Handle window resize to update chart dimensions
+  useEffect(() => {
+    const updateDimensions = () => {
+      if (chartRef.current) {
+        const { width, height } = chartRef.current.getBoundingClientRect();
+        setChartDimensions({ width, height });
       }
     };
 
-    fetchData();
-  }, [dateRange, selectedActivityLevels.length]);
+    window.addEventListener('resize', updateDimensions);
 
-  // Generate combined timeline data whenever activity or blood sugar data changes
-  useEffect(() => {
-    if (constantsLoading || !patientConstants?.activity_coefficients || activityData.length === 0) {
-      return;
-    }
+    // Initial dimensions
+    setTimeout(updateDimensions, 300);
 
-    // Find earliest and latest timestamps
-    const allTimestamps = [
-      ...activityData.map(d => d.startTime),
-      ...activityData.map(d => d.endTime),
-      ...bloodSugarData.map(d => d.readingTime)
-    ];
+    return () => window.removeEventListener('resize', updateDimensions);
+  }, []);
 
-    if (allTimestamps.length === 0) {
-      setCombinedData([]);
-      return;
-    }
+  const fetchData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const token = localStorage.getItem('token');
+      const startDate = moment(dateRange.start).format('YYYY-MM-DD');
+      const endDate = moment(dateRange.end).format('YYYY-MM-DD');
 
-    const minTime = Math.min(...allTimestamps);
-    const maxTime = Math.max(...allTimestamps);
-
-    // Get the average blood sugar as a baseline
-    let baselineBloodSugar = 100; // Default
-    if (bloodSugarData.length > 0) {
-      baselineBloodSugar = bloodSugarData.reduce((sum, reading) =>
-        sum + reading.bloodSugar, 0) / bloodSugarData.length;
-    }
-
-    // Generate timeline with 15-minute intervals
-    const timelineData = [];
-    let currentTime = minTime;
-
-    while (currentTime <= maxTime) {
-      const timePoint = {
-        timestamp: currentTime,
-        formattedTime: moment(currentTime).format('MM/DD/YYYY, HH:mm'),
-        activeActivities: {},
-        activityEffects: {},
-        totalActivityEffect: 0
-      };
-
-      // Add blood sugar reading if available at this time
-      const closestBloodSugar = bloodSugarData.find(bs =>
-        Math.abs(bs.readingTime - currentTime) < 15 * 60 * 1000 // Within 15 minutes
-      );
-
-      if (closestBloodSugar) {
-        timePoint.bloodSugar = closestBloodSugar.bloodSugar;
-        timePoint.bloodSugarStatus = closestBloodSugar.status;
-        timePoint.bloodSugarNotes = closestBloodSugar.notes;
+      let url = `http://localhost:5000/api/activity-history?start_date=${startDate}&end_date=${endDate}`;
+      if (isDoctor && patientId) {
+        url = `http://localhost:5000/api/patient/${patientId}/activity-history?start_date=${startDate}&end_date=${endDate}`;
       }
 
-      // Record active activities at this time
-      activityData.forEach(activity => {
-        // Only process activities in selected levels
-        if (!selectedActivityLevels.includes(String(activity.level))) return;
-
-        // Check if the activity is active at this time point
-        if (currentTime >= activity.startTime && currentTime <= activity.endTime) {
-          const levelKey = String(activity.level);
-          // Record activity by level (stack similar activities)
-          if (!timePoint.activeActivities[levelKey]) {
-            timePoint.activeActivities[levelKey] = 0;
-          }
-          timePoint.activeActivities[levelKey] += 1;
-        }
-
-        // Calculate effect from this activity at the current time
-        const hoursSinceStart = (currentTime - activity.startTime) / (60 * 60 * 1000);
-
-        // Calculate expected effect on blood sugar using our model
-        const effect = calculateActivityEffect(
-          hoursSinceStart,
-          activity.duration,
-          activity.level,
-          baselineBloodSugar
-        );
-
-        // Record effect by activity level
-        if (effect !== 0) {
-          const levelKey = String(activity.level);
-          if (!timePoint.activityEffects[levelKey]) {
-            timePoint.activityEffects[levelKey] = 0;
-          }
-          timePoint.activityEffects[levelKey] += effect;
-          timePoint.totalActivityEffect += effect;
-        }
+      const response = await axios.get(url, {
+        headers: { Authorization: `Bearer ${token}` }
       });
 
-      // Add expected blood sugar based on activity effects
-      // Find the closest actual reading before this time point
-      if (showExpectedEffect) {
-        const previousReadings = bloodSugarData.filter(bs => bs.readingTime <= currentTime);
+      // Process and format the activity data for time segments
+      const formattedData = response.data.map(item => {
+        // Get the actual start time and convert from UTC to local
+        const startTime = item.startTime || item.expectedTime || item.completedTime || item.timestamp;
+        // Ensure consistent timestamp parsing
+        const startMoment = moment.utc(startTime).local();
 
-        if (previousReadings.length > 0) {
-          // Sort by time (descending) and get the most recent
-          previousReadings.sort((a, b) => b.readingTime - a.readingTime);
-          const lastReading = previousReadings[0];
-
-          // Calculate hours since last reading
-          const hoursSinceReading = (currentTime - lastReading.readingTime) / (60 * 60 * 1000);
-
-          // Only project forward for a reasonable time (4 hours max)
-          if (hoursSinceReading <= 4) {
-            // Start with the last actual reading and apply the activity effect
-            timePoint.expectedBloodSugar = lastReading.bloodSugar + timePoint.totalActivityEffect;
-          }
+        // Calculate end time
+        let endMoment;
+        if (item.endTime) {
+          endMoment = moment.utc(item.endTime).local();
+        } else if (item.duration) {
+          // Calculate end time based on duration
+          const [hours, minutes] = item.duration.split(':').map(Number);
+          endMoment = moment(startMoment).add(hours, 'hours').add(minutes, 'minutes');
+        } else {
+          // Default to 1 hour if no duration or end time is provided
+          endMoment = moment(startMoment).add(1, 'hour');
         }
-      }
 
-      timelineData.push(timePoint);
-      currentTime += 15 * 60 * 1000; // 15-minute intervals
+        // Calculate duration in a consistent way
+        const durationHours = endMoment.diff(startMoment, 'minutes') / 60;
+
+        // Find the activity level info
+        const activityLevel = activityLevels.find(level => level.value === item.level) ||
+                             { label: 'Unknown', color: '#999999' };
+
+        // Debug log the exact timestamps
+        console.log(`Activity: ${item.id || 'unknown'}`);
+        console.log(`UTC start: ${startTime}`);
+        console.log(`Local start: ${startMoment.format('YYYY-MM-DD HH:mm:ss')}`);
+        console.log(`Local end: ${endMoment.format('YYYY-MM-DD HH:mm:ss')}`);
+
+        return {
+          ...item,
+          id: item.id || String(Math.random()),
+          start: startMoment.valueOf(), // Start time in milliseconds (local time)
+          end: endMoment.valueOf(),     // End time in milliseconds (local time)
+          formattedStart: startMoment.format('MM/DD/YYYY, HH:mm'),
+          formattedEnd: endMoment.format('MM/DD/YYYY, HH:mm'),
+          formattedRecordingTime: moment.utc(item.timestamp).local().format('MM/DD/YYYY, HH:mm'),
+          durationHours,
+          formattedDuration: item.duration || `${Math.floor(durationHours)}:${Math.round((durationHours % 1) * 60).toString().padStart(2, '0')}`,
+          level: item.level,
+          activityLevelLabel: activityLevel.label,
+          activityLevelColor: activityLevel.color,
+          // Position on Y-axis based on activity level + small offset for clarity when multiple activities at same level
+          y: item.level + (Math.random() * 0.3 - 0.15),
+          // Store the original UTC timestamps for debugging
+          originalStartUTC: startTime,
+          originalEndUTC: item.endTime
+        };
+      });
+
+      // Sort by start time
+      formattedData.sort((a, b) => a.start - b.start);
+      setData(formattedData);
+
+      // Update time scale after fetching data
+      updateTimeScale();
+
+      setError('');
+      setLoading(false);
+    } catch (error) {
+      console.error('Error fetching activity data:', error);
+      setError('Failed to fetch activity data. Please try again.');
+      setLoading(false);
+    }
+  }, [dateRange, isDoctor, patientId, updateTimeScale]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  // Update time scale when date range changes
+  useEffect(() => {
+    updateTimeScale();
+  }, [dateRange, updateTimeScale]);
+
+  const handleDateChange = (e) => {
+    const { name, value } = e.target;
+    setDateRange(prev => ({ ...prev, [name]: value }));
+  };
+
+  // Quick date range presets with specific extensions
+  const applyDatePreset = (days) => {
+    const start = moment().subtract(days, 'days').format('YYYY-MM-DD');
+
+    // Set the end date based on the preset type with specific requirements
+    let end;
+    if (days === 1) {
+      // For "Last 24h": past day plus 12 hours
+      end = moment().add(12, 'hours').format('YYYY-MM-DD HH:mm');
+    } else if (days === 7) {
+      // For "Last Week": past 7 days plus one future day
+      end = moment().add(1, 'day').format('YYYY-MM-DD');
+    } else if (days === 30) {
+      // For "Last Month": past 30 days plus 4 future days
+      end = moment().add(4, 'days').format('YYYY-MM-DD');
+    } else {
+      // Default case
+      end = moment().format('YYYY-MM-DD');
     }
 
-    setCombinedData(timelineData);
+    setDateRange({
+      start: start,
+      end: end
+    });
+  };
 
-  }, [activityData, bloodSugarData, patientConstants, constantsLoading, selectedActivityLevels, showExpectedEffect, calculateActivityEffect]);
+  // Chart-specific functions
+  const formatXAxis = (tickItem) => {
+    return moment(tickItem).format(timeScale.tickFormat);
+  };
 
-  // Table columns definition
-  const columns = useMemo(() => [
-    {
-      Header: 'Start Time',
-      accessor: 'formattedStartTime',
-      sortType: (a, b) => a.original.startTime - b.original.startTime
-    },
-    {
-      Header: 'End Time',
-      accessor: 'formattedEndTime'
-    },
-    {
-      Header: 'Duration',
-      accessor: 'duration',
-      Cell: ({ value }) => value || '00:30'
-    },
-    {
-      Header: 'Activity Type',
-      accessor: 'activityType',
-      Cell: ({ value }) => value.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
-    },
-    {
-      Header: 'Activity Level',
-      accessor: 'level',
-      Cell: ({ value }) => activityLevelLabels[value] || 'Normal Activity'
-    },
-    {
-      Header: 'Impact',
-      accessor: 'impact',
-      Cell: ({ value }) => {
-        const percent = ((1 - value) * 100).toFixed(0);
-        return percent === '0' ? 'No Impact' : `${Math.abs(percent)}% ${value < 1 ? 'Decrease' : 'Increase'}`;
-      }
-    },
-    {
-      Header: 'Notes',
-      accessor: 'notes',
-      Cell: ({ value }) => value || 'No notes'
+  // Improved custom shape for activity segments with precise timing
+  const renderActivitySegment = (props) => {
+    const { cx, cy, payload, index, xAxis, yAxis } = props;
+
+    // If we don't have the chart dimensions or the activity data, render a default shape
+    if (!chartRef.current || !chartDimensions.width || !payload) {
+      return (
+        <Rectangle
+          x={cx - 10}
+          y={cy - 10}
+          width={20}
+          height={20}
+          fill={payload?.activityLevelColor || "#999"}
+          stroke="#000"
+          strokeWidth={1}
+          rx={4}
+          ry={4}
+        />
+      );
     }
-  ], []);
 
-  // Filter activity data by selected levels
-  const filteredActivityData = useMemo(() => {
-    return activityData.filter(item => selectedActivityLevels.includes(String(item.level)));
-  }, [activityData, selectedActivityLevels]);
+    // If we have access to the chart's x-axis, use it for precise positioning
+    if (xAxis && xAxis.scale) {
+      // Get activity times, ensuring they're within the visible range
+      const chartStart = timeScale.start;
+      const chartEnd = timeScale.end;
 
-  // Set up the table
+      const activityStart = Math.max(payload.start, chartStart);
+      const activityEnd = Math.min(payload.end, chartEnd);
+
+      // Skip if activity is entirely outside the visible range
+      if (activityEnd <= chartStart || activityStart >= chartEnd) {
+        return null;
+      }
+
+      // Get precise pixel positions using the chart's own scale
+      const startX = xAxis.scale(activityStart);
+      const endX = xAxis.scale(activityEnd);
+
+      // Calculate width based on the pixel positions
+      const width = Math.max(endX - startX, 4); // Minimum width for visibility
+
+      // Calculate vertical position based on y-coordinate
+      const height = 20;
+      const yPos = cy - (height / 2);
+
+      return (
+        <Rectangle
+          x={startX}
+          y={yPos}
+          width={width}
+          height={height}
+          fill={payload.activityLevelColor}
+          stroke="#000"
+          strokeWidth={1}
+          rx={4}
+          ry={4}
+        />
+      );
+    }
+
+    // Fallback method if we don't have direct access to chart scales
+    // Calculate the time range of the visible chart area
+    const timeRangeStart = timeScale.start;
+    const timeRangeEnd = timeScale.end;
+    const totalTimeRange = timeRangeEnd - timeRangeStart;
+
+    // Get activity times, ensuring they're within the visible range
+    const activityStart = Math.max(payload.start, timeRangeStart);
+    const activityEnd = Math.min(payload.end, timeRangeEnd);
+
+    // Skip rendering if activity is outside visible range
+    if (activityEnd <= timeRangeStart || activityStart >= timeRangeEnd) {
+      return null;
+    }
+
+    // More precise margin calculation - use a constant for left margin
+    // Recharts typically uses a 60px left margin
+    const leftMargin = 60;
+    const rightMargin = 40;
+
+    // Available width for plotting
+    const plotWidth = chartDimensions.width - leftMargin - rightMargin;
+
+    // Calculate scale factor - pixels per millisecond
+    const scaleFactor = plotWidth / totalTimeRange;
+
+    // Calculate start position relative to left edge
+    const startPos = (activityStart - timeRangeStart) * scaleFactor;
+    const xPos = leftMargin + startPos;
+
+    // Calculate width based on the activity duration
+    const activityDuration = activityEnd - activityStart;
+    const width = Math.max(activityDuration * scaleFactor, 4); // Ensure minimum width
+
+    // Use a fixed height for better visualization
+    const height = 20;
+    const yPos = cy - (height / 2);
+
+    return (
+      <Rectangle
+        x={xPos}
+        y={yPos}
+        width={width}
+        height={height}
+        fill={payload.activityLevelColor}
+        stroke="#000"
+        strokeWidth={1}
+        rx={4}
+        ry={4}
+      />
+    );
+  };
+
+  const CustomTooltip = ({ active, payload }) => {
+    if (active && payload && payload.length) {
+      const item = payload[0].payload;
+      return (
+        <div className="custom-tooltip">
+          <h4>{item.activityLevelLabel}</h4>
+          <p><strong>Start:</strong> {item.formattedStart}</p>
+          <p><strong>End:</strong> {item.formattedEnd}</p>
+          <p><strong>Duration:</strong> {item.formattedDuration}</p>
+          {item.type && <p><strong>Type:</strong> {item.type.charAt(0).toUpperCase() + item.type.slice(1)}</p>}
+          {item.impact && item.impact !== 1 && (
+            <p>
+              <strong>Impact on insulin:</strong>{' '}
+              {((item.impact - 1) * 100).toFixed(1)}%
+              {item.impact > 1 ? ' increase' : ' decrease'}
+            </p>
+          )}
+          {item.notes && <p><strong>Notes:</strong> {item.notes}</p>}
+        </div>
+      );
+    }
+    return null;
+  };
+
+  // Table-specific columns
+  const columns = React.useMemo(
+    () => [
+      {
+        Header: 'Recorded',
+        accessor: 'formattedRecordingTime',
+      },
+      {
+        Header: 'Type',
+        accessor: 'type',
+        Cell: ({ value }) => value ? value.charAt(0).toUpperCase() + value.slice(1) : 'N/A'
+      },
+      {
+        Header: 'Activity Level',
+        accessor: 'activityLevelLabel',
+        Cell: ({ value, row }) => (
+          <div className="status-indicator">
+            <div
+              className="status-dot"
+              style={{ backgroundColor: row.original.activityLevelColor }}
+            ></div>
+            <span>{value}</span>
+          </div>
+        ),
+      },
+      {
+        Header: 'Duration',
+        accessor: 'formattedDuration',
+      },
+      {
+        Header: 'Start Time',
+        accessor: 'formattedStart',
+      },
+      {
+        Header: 'End Time',
+        accessor: 'formattedEnd',
+      },
+      {
+        Header: 'Impact',
+        accessor: 'impact',
+        Cell: ({ value }) => {
+          if (!value || value === 1) return '0% (None)';
+          const percentage = ((value - 1) * 100).toFixed(1);
+          return `${percentage}% ${value > 1 ? 'increase' : 'decrease'}`;
+        }
+      },
+    ],
+    []
+  );
+
   const tableInstance = useTable(
     {
       columns,
-      data: filteredActivityData,
-      initialState: { pageIndex: 0, pageSize: 10 }
+      data,
+      initialState: { pageIndex: 0, pageSize: 10 },
     },
     useSortBy,
     usePagination
@@ -421,109 +472,33 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
     prepareRow,
     canPreviousPage,
     canNextPage,
+    pageOptions,
     pageCount,
     gotoPage,
     nextPage,
     previousPage,
     setPageSize,
-    state: { pageIndex, pageSize }
+    state: { pageIndex, pageSize },
   } = tableInstance;
 
-  // Event handlers
-  const handleDateChange = (e) => {
-    const { name, value } = e.target;
-    setDateRange(prev => ({ ...prev, [name]: value }));
-  };
+  // Generate custom ticks based on time scale
+  const ticks = generateTicks();
 
-  const applyDatePreset = (days) => {
-    setDateRange({
-      start: moment().subtract(days, 'days').format('YYYY-MM-DD'),
-      end: moment().format('YYYY-MM-DD')
-    });
-  };
+  // Format times for display in local time zone
+  const formattedCurrentTime = moment().format('YYYY-MM-DD HH:mm:ss');
+  const formattedCurrentTimeUTC = moment().utc().format('YYYY-MM-DD HH:mm:ss');
 
-  const handleActivityLevelToggle = (level) => {
-    setSelectedActivityLevels(prev => {
-      if (prev.includes(level)) {
-        return prev.filter(l => l !== level);
-      } else {
-        return [...prev, level];
-      }
-    });
-  };
+  // Get current user login
+  const userLogin = localStorage.getItem('userLogin') || 'user';
 
-  // Format X-axis labels
-  const formatXAxis = useCallback((tickItem) => {
-    return moment(tickItem).format('MM/DD HH:mm');
-  }, []);
-
-  // Custom tooltip for the chart
-  const CustomTooltip = useCallback(({ active, payload }) => {
-    if (active && payload && payload.length) {
-      const data = payload[0].payload;
-
-      return (
-        <div className="activity-tooltip">
-          <p className="tooltip-time">{data.formattedTime}</p>
-
-          {/* Display active activities */}
-          {Object.entries(data.activeActivities).length > 0 && (
-            <div className="tooltip-section">
-              <p className="tooltip-header">Active Activities:</p>
-              {Object.entries(data.activeActivities).map(([level, count], idx) => (
-                <p key={idx} className="tooltip-activity">
-                  {activityLevelLabels[level]}: {count} {count > 1 ? 'activities' : 'activity'}
-                </p>
-              ))}
-            </div>
-          )}
-
-          {/* Display activity effect on blood sugar */}
-          {data.totalActivityEffect !== 0 && (
-            <div className="tooltip-section">
-              <p className="tooltip-header">Blood Sugar Effect:</p>
-              <p className="tooltip-effect">
-                Total: {data.totalActivityEffect > 0 ? '+' : ''}{data.totalActivityEffect.toFixed(1)} mg/dL
-              </p>
-              {Object.entries(data.activityEffects).map(([level, effect], idx) => (
-                effect !== 0 && (
-                  <p key={idx} className="tooltip-effect-detail">
-                    {activityLevelLabels[level]}: {effect > 0 ? '+' : ''}{effect.toFixed(1)} mg/dL
-                  </p>
-                )
-              ))}
-            </div>
-          )}
-
-          {/* Display blood sugar readings */}
-          {data.bloodSugar && (
-            <div className="tooltip-section">
-              <p className="tooltip-header">Blood Sugar:</p>
-              <p className="tooltip-blood-sugar">
-                Actual: {data.bloodSugar} mg/dL
-                {data.bloodSugarStatus && ` (${data.bloodSugarStatus})`}
-              </p>
-              {data.expectedBloodSugar && (
-                <p className="tooltip-blood-sugar">
-                  Expected: {data.expectedBloodSugar.toFixed(0)} mg/dL
-                </p>
-              )}
-            </div>
-          )}
-        </div>
-      );
-    }
-    return null;
-  }, []);
-
-  // Current date for calendar inputs
-  const currentDate = new Date();
-  const maxDate = currentDate.toISOString().split('T')[0]; // Today as max date
+  // Determine if current time is within chart range
+  const currentTimeInRange = currentTime >= timeScale.start && currentTime <= timeScale.end;
 
   return (
-    <div className="activity-visualization">
-      <h2 className="title">Activity Impact Analysis</h2>
+    <div className="blood-sugar-visualization">
+      <h2 className="title">Activity Timeline</h2>
 
+      {/* Add timezone info display */}
       <div className="timezone-info">
         Your timezone: {userTimeZone}
         <span className="timezone-note"> (all times displayed in your local timezone)</span>
@@ -534,7 +509,7 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
           className={`toggle-btn ${activeView === 'chart' ? 'active' : ''}`}
           onClick={() => setActiveView('chart')}
         >
-          Chart View
+          Timeline View
         </button>
         <button
           className={`toggle-btn ${activeView === 'table' ? 'active' : ''}`}
@@ -543,29 +518,6 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
           Table View
         </button>
       </div>
-
-      {activeView === 'chart' && (
-        <div className="view-mode-toggle">
-          <button
-            className={`toggle-btn ${viewMode === 'combined' ? 'active' : ''}`}
-            onClick={() => setViewMode('combined')}
-          >
-            Combined View
-          </button>
-          <button
-            className={`toggle-btn ${viewMode === 'activities' ? 'active' : ''}`}
-            onClick={() => setViewMode('activities')}
-          >
-            Activities
-          </button>
-          <button
-            className={`toggle-btn ${viewMode === 'effect' ? 'active' : ''}`}
-            onClick={() => setViewMode('effect')}
-          >
-            Blood Sugar Effect
-          </button>
-        </div>
-      )}
 
       <div className="controls">
         <div className="date-controls">
@@ -577,7 +529,6 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
               name="start"
               value={dateRange.start}
               onChange={handleDateChange}
-              max={maxDate}
             />
           </div>
           <div className="date-input-group">
@@ -588,224 +539,120 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
               name="end"
               value={dateRange.end}
               onChange={handleDateChange}
-              max={maxDate}
             />
           </div>
         </div>
 
         <div className="quick-ranges">
           <button onClick={() => applyDatePreset(1)}>Last 24h</button>
-          <button onClick={() => applyDatePreset(3)}>Last 3 Days</button>
           <button onClick={() => applyDatePreset(7)}>Last Week</button>
+          <button onClick={() => applyDatePreset(30)}>Last Month</button>
         </div>
 
-        <div className="activity-level-filters">
-          <div className="filter-header">Activity Levels:</div>
-          <div className="filter-options">
-            {Object.entries(activityLevelLabels).map(([level, label]) => (
-              <label
-                key={`level-${level}`}
-                className="filter-option"
-                style={{ borderLeft: `4px solid ${activityColors[level] || '#ccc'}`}}
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedActivityLevels.includes(level)}
-                  onChange={() => handleActivityLevelToggle(level)}
-                />
-                {label}
-              </label>
-            ))}
-          </div>
-        </div>
+        <button className="update-btn" onClick={fetchData}>Update Data</button>
+      </div>
 
-        <div className="display-options">
-          <label className="display-option">
-            <input
-              type="checkbox"
-              checked={showActualBloodSugar}
-              onChange={() => setShowActualBloodSugar(!showActualBloodSugar)}
-            />
-            Show Blood Sugar
-          </label>
-          <label className="display-option">
-            <input
-              type="checkbox"
-              checked={showExpectedEffect}
-              onChange={() => setShowExpectedEffect(!showExpectedEffect)}
-            />
-            Show Expected Effect
-          </label>
+      <div className="current-time-display">
+        <div className="time-info">
+          <span className="time-label">Current Time (Local):</span>
+          <span className="time-value">{formattedCurrentTime}</span>
+        </div>
+        <div className="time-info">
+          <span className="time-label">Current Time (UTC):</span>
+          <span className="time-value">{formattedCurrentTimeUTC}</span>
+        </div>
+        <div className="user-info">
+          <span className="user-label">Current User:</span>
+          <span className="user-value">{userLogin}</span>
         </div>
       </div>
 
       {error && <div className="error-message">{error}</div>}
 
-      {loading || constantsLoading ? (
+      {loading ? (
         <div className="loading">Loading activity data...</div>
-      ) : combinedData.length === 0 ? (
-        <div className="no-data">No activity data found for the selected date range.</div>
       ) : (
         <div className="content-container">
           {activeView === 'chart' && (
-            <div className="chart-container">
-              <ResponsiveContainer width="100%" height={500}>
-                <ComposedChart
-                  data={combinedData}
-                  margin={{ top: 5, right: 30, left: 20, bottom: 25 }}
+            <div className="chart-container" ref={chartRef}>
+              <ResponsiveContainer width="100%" height={400}>
+                <ScatterChart
+                  margin={{ top: 20, right: 40, bottom: 30, left: 60 }}
+                  ref={chartInstance}
                 >
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis
-                    dataKey="timestamp"
                     type="number"
-                    scale="time"
-                    domain={['dataMin', 'dataMax']}
+                    dataKey="start"
+                    name="Time"
+                    domain={[timeScale.start, timeScale.end]} // Use fixed domain from timeScale
+                    ticks={ticks} // Use our generated ticks
                     tickFormatter={formatXAxis}
                     angle={-45}
                     textAnchor="end"
                     height={70}
+                    allowDuplicatedCategory={false}
+                    scale="time"
+                    interval={0} // Show all ticks
                   />
-
-                  {/* Y-axis for blood sugar */}
-                  {showActualBloodSugar && (
-                    <YAxis
-                      yAxisId="bloodSugar"
-                      orientation="left"
-                      domain={['dataMin - 10', 'dataMax + 10']}
-                      label={{ value: 'Blood Sugar (mg/dL)', angle: -90, position: 'insideLeft' }}
-                    />
-                  )}
-
-                  {/* Y-axis for activity counts */}
-                  {(viewMode === 'combined' || viewMode === 'activities') && (
-                    <YAxis
-                      yAxisId="activityCount"
-                      orientation="right"
-                      allowDecimals={false}
-                      domain={[0, 'auto']}
-                      label={{
-                        value: 'Active Activities',
-                        angle: -90,
-                        position: 'insideRight'
-                      }}
-                    />
-                  )}
-
+                  <YAxis
+                    type="number"
+                    dataKey="y"
+                    domain={[-2.5, 2.5]}
+                    ticks={[-2, -1, 0, 1, 2]}
+                    tickFormatter={(value) => {
+                      const level = activityLevels.find(l => Math.round(value) === l.value);
+                      return level ? level.label : '';
+                    }}
+                  />
+                  <ZAxis range={[50, 50]} />
                   <Tooltip content={<CustomTooltip />} />
                   <Legend />
 
-                  {/* Reference line for normal blood sugar range */}
-                  {showActualBloodSugar && patientConstants?.target_glucose && (
+                  {/* Reference lines for activity levels */}
+                  {activityLevels.map(level => (
                     <ReferenceLine
-                      yAxisId="bloodSugar"
-                      y={patientConstants.target_glucose}
-                      stroke="#666"
+                      key={level.value}
+                      y={level.value}
+                      stroke={level.color}
                       strokeDasharray="3 3"
+                      strokeOpacity={0.5}
+                    />
+                  ))}
+
+                  {/* Current time reference line */}
+                  {currentTimeInRange && (
+                    <ReferenceLine
+                      x={currentTime}
+                      stroke="#ff0000"
+                      strokeWidth={2}
                       label={{
-                        position: 'insideBottomRight',
-                        value: 'Target',
-                        fill: '#666',
+                        value: 'Now',
+                        position: 'top',
+                        fill: '#ff0000',
                         fontSize: 12
                       }}
                     />
                   )}
 
-                  {/* Blood Sugar Line - Actual */}
-                  {showActualBloodSugar && (
-                    <Line
-                      yAxisId="bloodSugar"
-                      type="monotone"
-                      dataKey="bloodSugar"
-                      name="Actual Blood Sugar"
-                      stroke="#8884d8"
-                      dot={{ r: 4 }}
-                      activeDot={{ r: 8 }}
-                      connectNulls
-                    />
-                  )}
-
-                  {/* Blood Sugar Line - Expected with activity effect */}
-                  {showActualBloodSugar && showExpectedEffect && (
-                    <Line
-                      yAxisId="bloodSugar"
-                      type="monotone"
-                      dataKey="expectedBloodSugar"
-                      name="Expected Blood Sugar"
-                      stroke="#82ca9d"
-                      strokeDasharray="5 5"
-                      dot={false}
-                      activeDot={{ r: 6 }}
-                      connectNulls
-                    />
-                  )}
-
-                  {/* Activity Bars */}
-                  {(viewMode === 'combined' || viewMode === 'activities') && selectedActivityLevels.map((level) => (
-                    <Bar
-                      key={`activity-${level}`}
-                      yAxisId="activityCount"
-                      dataKey={`activeActivities.${level}`}
-                      name={activityLevelLabels[level]}
-                      fill={activityColors[level] || '#ccc'}
-                      barSize={20}
-                      stackId="activities"
-                    />
-                  ))}
-
-                  {/* Activity Effect Area */}
-                  {(viewMode === 'combined' || viewMode === 'effect') && showExpectedEffect && (
-                    <Area
-                      yAxisId="bloodSugar"
-                      type="monotone"
-                      dataKey="totalActivityEffect"
-                      name="Activity Impact on Blood Sugar"
-                      fill="rgba(130, 202, 157, 0.5)"
-                      stroke="none"
-                      fillOpacity={0.3}
-                      connectNulls
-                      baseLine={0}
-                    />
-                  )}
-                </ComposedChart>
+                  <Scatter
+                    name="Activities"
+                    data={data}
+                    shape={renderActivitySegment}
+                  />
+                </ScatterChart>
               </ResponsiveContainer>
 
               <div className="chart-legend">
-                <h4>Activity Level Impact on Blood Sugar</h4>
-                <div className="activity-levels-grid">
-                  {Object.entries(activityLevelLabels).map(([level, label]) => {
-                    if (!patientConstants?.activity_coefficients?.[level]) return null;
-
-                    // Calculate effect for this activity level
-                    const coefficient = patientConstants.activity_coefficients[level];
-                    const percentChange = ((1 - coefficient) * 100).toFixed(0);
-                    const effect = coefficient < 1 ? "Decreases" : coefficient > 1 ? "Increases" : "No effect on";
-
-                    return (
-                      <div key={`legend-${level}`} className="activity-level-details">
-                        <div className="activity-level-header">
-                          <span
-                            className="activity-color-box"
-                            style={{ backgroundColor: activityColors[level] || '#ccc' }}
-                          ></span>
-                          <span className="activity-level-name">{label}</span>
-                        </div>
-                        <div className="activity-impact">
-                          <span>{effect} blood sugar by {Math.abs(percentChange)}%</span>
-                          <span>Coefficient: {coefficient}</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <div className="impact-explanation">
-                  <h5>How Activity Affects Blood Sugar</h5>
-                  <ul>
-                    <li><strong>During activity:</strong> Blood sugar decreases as muscles use glucose for energy</li>
-                    <li><strong>After activity:</strong> Enhanced insulin sensitivity can continue to lower blood sugar for hours</li>
-                    <li><strong>Effect intensity:</strong> Higher activity levels cause greater blood sugar reduction</li>
-                    <li><strong>Duration impact:</strong> Longer activities have more pronounced and lasting effects</li>
-                  </ul>
+                {activityLevels.map(level => (
+                  <div key={level.value} className="legend-item">
+                    <span className="legend-color" style={{ backgroundColor: level.color }}></span>
+                    <span>{level.label}</span>
+                  </div>
+                ))}
+                <div className="legend-item">
+                  <span className="legend-color" style={{ backgroundColor: '#ff0000' }}></span>
+                  <span>Current Time</span>
                 </div>
               </div>
             </div>
@@ -813,44 +660,59 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
 
           {activeView === 'table' && (
             <div className="table-container">
-              <table {...getTableProps()} className="activity-table">
+              <table {...getTableProps()} className="blood-sugar-table">
                 <thead>
-                  {headerGroups.map((headerGroup, i) => (
-                    <tr key={`header-group-${i}`} {...headerGroup.getHeaderGroupProps()}>
-                      {headerGroup.headers.map((column, j) => (
-                        <th key={`header-${i}-${j}`} {...column.getHeaderProps(column.getSortByToggleProps())}>
-                          {column.render('Header')}
-                          <span>
-                            {column.isSorted
-                              ? column.isSortedDesc
-                                ? ' 🔽'
-                                : ' 🔼'
-                              : ''}
-                          </span>
-                        </th>
-                      ))}
-                    </tr>
-                  ))}
-                </thead>
-                <tbody {...getTableBodyProps()}>
-                  {page.map((row, i) => {
-                    prepareRow(row);
+                  {headerGroups.map(headerGroup => {
+                    const { key, ...headerGroupProps } = headerGroup.getHeaderGroupProps();
                     return (
-                      <tr
-                        key={`row-${i}`}
-                        {...row.getRowProps()}
-                        style={{
-                          borderLeft: `4px solid ${activityColors[row.original.level] || '#ccc'}`
-                        }}
-                      >
-                        {row.cells.map((cell, j) => (
-                          <td key={`cell-${i}-${j}`} {...cell.getCellProps()}>
-                            {cell.render('Cell')}
-                          </td>
-                        ))}
+                      <tr key={key} {...headerGroupProps}>
+                        {headerGroup.headers.map(column => {
+                          const { key, ...columnProps } = column.getHeaderProps(column.getSortByToggleProps());
+                          return (
+                            <th key={key} {...columnProps}>
+                              {column.render('Header')}
+                              <span>
+                                {column.isSorted
+                                  ? column.isSortedDesc
+                                    ? ' 🔽'
+                                    : ' 🔼'
+                                  : ''}
+                              </span>
+                            </th>
+                          );
+                        })}
                       </tr>
                     );
                   })}
+                </thead>
+                <tbody {...getTableBodyProps()}>
+                  {page.length > 0 ? (
+                    page.map(row => {
+                      prepareRow(row);
+                      const { key, ...rowProps } = row.getRowProps();
+                      return (
+                        <tr
+                          key={key}
+                          {...rowProps}
+                        >
+                          {row.cells.map(cell => {
+                            const { key, ...cellProps } = cell.getCellProps();
+                            return (
+                              <td key={key} {...cellProps}>
+                                {cell.render('Cell')}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={columns.length} className="no-data">
+                        No activity records found for the selected date range.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
 
@@ -861,9 +723,9 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
                 <button onClick={() => nextPage()} disabled={!canNextPage}>{'>'}</button>
                 <button onClick={() => gotoPage(pageCount - 1)} disabled={!canNextPage}>{'>>'}</button>
                 <span>
-                  Page{' '}
+                  Page {' '}
                   <strong>
-                    {pageIndex + 1} of {Math.max(1, pageCount)}
+                    {pageIndex + 1} of {pageOptions.length || 1}
                   </strong>
                 </span>
                 <span>
@@ -883,9 +745,9 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
                     setPageSize(Number(e.target.value));
                   }}
                 >
-                  {[10, 20, 30, 40, 50].map(size => (
-                    <option key={size} value={size}>
-                      Show {size}
+                  {[10, 20, 30, 40, 50].map(pageSize => (
+                    <option key={pageSize} value={pageSize}>
+                      Show {pageSize}
                     </option>
                   ))}
                 </select>
@@ -894,6 +756,47 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
           )}
         </div>
       )}
+
+      {/* Add CSS for the current time display */}
+      <style jsx="true">{`
+        .current-time-display {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          background-color: #f9f9f9;
+          padding: 10px 15px;
+          border-radius: 4px;
+          margin: 10px 0;
+          border-left: 4px solid #1890ff;
+          flex-wrap: wrap;
+        }
+        
+        .time-info, .user-info {
+          display: flex;
+          align-items: center;
+          margin-right: 20px;
+          margin-bottom: 5px;
+        }
+        
+        .time-label, .user-label {
+          font-weight: bold;
+          margin-right: 8px;
+        }
+        
+        .time-value, .user-value {
+          font-family: monospace;
+        }
+        
+        .timezone-info {
+          font-size: 0.9rem;
+          color: #666;
+          margin-bottom: 15px;
+        }
+        
+        .timezone-note {
+          font-style: italic;
+        }
+      `}</style>
     </div>
   );
 };
