@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from bson.objectid import ObjectId
-from datetime import datetime
+from datetime import datetime, timedelta  # Make sure timedelta is imported
 from config import mongo
 from utils.auth import token_required
 from utils.error_handler import api_error_handler
@@ -28,19 +28,27 @@ def get_activity_impact(level):
 
 
 def parse_duration(duration):
-    if isinstance(duration, str):
-        hours, minutes = map(int, duration.split(':'))
-        return hours + minutes / 60
-    elif isinstance(duration, (int, float)):
-        return duration
-    else:
-        raise ValueError("Invalid duration format")
+    try:
+        if isinstance(duration, str):
+            hours, minutes = map(int, duration.split(':'))
+            return hours + minutes / 60
+        elif isinstance(duration, (int, float)):
+            return duration
+        else:
+            return 1.0  # Default to 1 hour
+    except Exception as e:
+        logger.warning(f"Error parsing duration {duration}: {e}")
+        return 1.0  # Default to 1 hour
 
 
 def format_duration(duration):
-    hours = int(duration)
-    minutes = int((duration - hours) * 60)
-    return f"{hours:02d}:{minutes:02d}"
+    try:
+        hours = int(duration)
+        minutes = int((duration - hours) * 60)
+        return f"{hours:02d}:{minutes:02d}"
+    except Exception as e:
+        logger.warning(f"Error formatting duration {duration}: {e}")
+        return "01:00"  # Default to 1 hour
 
 
 @activity_bp.route('/api/record-activities', methods=['POST'])
@@ -55,74 +63,87 @@ def record_activities(current_user):
 
     # Initialize Constants for this user
     user_constants = Constants(user_id)
-    activities = mongo.db.activities
+    activities_collection = mongo.db.activities
 
     def process_activity(activity, activity_type):
-        # Validate activity level
-        is_valid, error_message = validate_activity_level(activity['level'])
-        if not is_valid:
-            raise ValueError(error_message)
+        try:
+            # Validate activity level
+            is_valid, error_message = validate_activity_level(activity['level'])
+            if not is_valid:
+                raise ValueError(error_message)
 
-        activity_record = {
-            'user_id': user_id,
-            'timestamp': timestamp,
-            'type': activity_type,
-            'level': activity['level'],
-            'impact': get_activity_impact(activity['level']),
-        }
+            activity_record = {
+                'user_id': user_id,
+                'timestamp': timestamp,
+                'type': activity_type,
+                'level': activity['level'],
+                'impact': get_activity_impact(activity['level']),
+            }
 
-        # Ensure startTime and endTime are included
-        if 'startTime' in activity:
-            activity_record['startTime'] = activity['startTime']
-        if 'endTime' in activity:
-            activity_record['endTime'] = activity['endTime']
+            # Ensure startTime and endTime are included
+            if 'startTime' in activity:
+                activity_record['startTime'] = activity['startTime']
+            if 'endTime' in activity:
+                activity_record['endTime'] = activity['endTime']
 
-        # Handle duration formats
-        if 'duration' in activity:
-            activity_record['duration'] = activity['duration']
-        elif 'startTime' in activity and 'endTime' in activity:
-            # Calculate and add duration if possible
-            try:
-                activity_record['duration'] = format_duration(
-                    parse_duration(activity.get('duration', '01:00'))
-                )
-            except Exception as e:
-                logger.warning(f"Failed to format duration: {e}")
-        else:
-            # Default duration if no format provided
-            activity_record['duration'] = '01:00'
+            # Handle duration formats
+            if 'duration' in activity:
+                activity_record['duration'] = activity['duration']
+            elif 'startTime' in activity and 'endTime' in activity:
+                # Calculate and add duration if possible
+                try:
+                    activity_record['duration'] = format_duration(
+                        parse_duration(activity.get('duration', '01:00'))
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to format duration: {e}")
+                    activity_record['duration'] = '01:00'
+            else:
+                # Default duration if no format provided
+                activity_record['duration'] = '01:00'
 
-        # Handle time fields based on activity type
-        if activity_type == 'expected':
-            expected_time = activity.get('expectedTime', activity.get('startTime'))
-            if expected_time:
-                activity_record['expectedTime'] = expected_time
-        else:
-            completed_time = activity.get('completedTime', activity.get('startTime'))
-            if completed_time:
-                activity_record['completedTime'] = completed_time
+            # Handle time fields based on activity type
+            if activity_type == 'expected':
+                expected_time = activity.get('expectedTime', activity.get('startTime'))
+                if expected_time:
+                    activity_record['expectedTime'] = expected_time
+            else:
+                completed_time = activity.get('completedTime', activity.get('startTime'))
+                if completed_time:
+                    activity_record['completedTime'] = completed_time
 
-        return activity_record
+            # Add notes field if present
+            if 'notes' in activity:
+                activity_record['notes'] = activity['notes']
+
+            return activity_record
+        except Exception as e:
+            logger.error(f"Error processing activity: {str(e)}")
+            raise
 
     try:
         # Process expected activities
         expected_ids = []
         for activity in expected_activities:
             record = process_activity(activity, 'expected')
-            result = activities.insert_one(record)
+            result = activities_collection.insert_one(record)
             expected_ids.append(str(result.inserted_id))
 
         # Process completed activities
         completed_ids = []
         for activity in completed_activities:
             record = process_activity(activity, 'completed')
-            result = activities.insert_one(record)
+            result = activities_collection.insert_one(record)
             completed_ids.append(str(result.inserted_id))
+
+        # Combine all activity IDs
+        all_activity_ids = expected_ids + completed_ids
 
         return jsonify({
             "message": "Activities recorded successfully",
             "expected_activity_ids": expected_ids,
-            "completed_activity_ids": completed_ids
+            "completed_activity_ids": completed_ids,
+            "activity_ids": all_activity_ids  # Add this to return all IDs
         }), 201
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
@@ -136,10 +157,12 @@ def record_activities(current_user):
 def get_activity_history(current_user):
     try:
         user_id = str(current_user['_id'])
+        logger.info(f"Fetching activity history for user {user_id}")
 
         # Parse query parameters for date filtering
         start_date_str = request.args.get('start_date')
         end_date_str = request.args.get('end_date')
+        logger.debug(f"Date range: {start_date_str} to {end_date_str}")
 
         # Build the query
         query = {"user_id": user_id}
@@ -148,43 +171,77 @@ def get_activity_history(current_user):
         if start_date_str or end_date_str:
             query['timestamp'] = {}
             if start_date_str:
-                start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
-                query['timestamp']['$gte'] = start_date
+                try:
+                    start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
+                    query['timestamp']['$gte'] = start_date
+                    logger.debug(f"Start date: {start_date}")
+                except Exception as e:
+                    logger.error(f"Error parsing start date '{start_date_str}': {e}")
+                    return jsonify({"error": f"Invalid start date format: {start_date_str}"}), 400
+
             if end_date_str:
-                end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
-                # Add one day to include the entire end date
-                end_date = end_date + timedelta(days=1)
-                query['timestamp']['$lt'] = end_date
+                try:
+                    end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
+                    # Add one day to include the entire end date
+                    end_date = end_date + timedelta(days=1)
+                    query['timestamp']['$lt'] = end_date
+                    logger.debug(f"End date: {end_date}")
+                except Exception as e:
+                    logger.error(f"Error parsing end date '{end_date_str}': {e}")
+                    return jsonify({"error": f"Invalid end date format: {end_date_str}"}), 400
+
+        logger.debug(f"Final query: {query}")
 
         # Execute the query
         user_activities = list(mongo.db.activities.find(query).sort("timestamp", -1))
+        logger.debug(f"Found {len(user_activities)} activities")
 
         # Initialize Constants for activity level labels
         activity_level_map = {level['value']: level['label'] for level in Constants.ACTIVITY_LEVELS}
 
         def format_time(time_value):
-            if isinstance(time_value, str):
-                return time_value
-            elif isinstance(time_value, datetime):
-                return time_value.isoformat()
-            else:
+            try:
+                if isinstance(time_value, str):
+                    return time_value
+                elif isinstance(time_value, datetime):
+                    return time_value.isoformat()
+                else:
+                    return None
+            except Exception as e:
+                logger.warning(f"Error formatting time value: {time_value}, {e}")
                 return None
 
-        formatted_activities = [{
-            "id": str(activity['_id']),
-            "type": activity['type'],
-            "level": activity['level'],
-            "levelLabel": activity_level_map.get(activity['level'], "Unknown"),
-            "impact": activity.get('impact', get_activity_impact(activity['level'])),
-            "duration": activity.get('duration', ''),
-            "startTime": format_time(activity.get('startTime')),
-            "endTime": format_time(activity.get('endTime')),
-            "expectedTime": format_time(activity.get('expectedTime')),
-            "completedTime": format_time(activity.get('completedTime')),
-            "timestamp": format_time(activity['timestamp']),
-            "meal_id": activity.get('meal_id'),
-            "notes": activity.get('notes', '')
-        } for activity in user_activities]
+        formatted_activities = []
+        for activity in user_activities:
+            try:
+                formatted_activity = {
+                    "id": str(activity['_id']),
+                    "type": activity.get('type', 'unknown'),
+                    "level": activity.get('level', 0),
+                    "levelLabel": activity_level_map.get(activity.get('level', 0), "Unknown"),
+                    "impact": activity.get('impact', get_activity_impact(activity.get('level', 0))),
+                    "duration": activity.get('duration', '01:00'),
+                    "timestamp": format_time(activity.get('timestamp', datetime.utcnow())),
+                }
+
+                # Add optional fields if present
+                if 'startTime' in activity:
+                    formatted_activity["startTime"] = format_time(activity['startTime'])
+                if 'endTime' in activity:
+                    formatted_activity["endTime"] = format_time(activity['endTime'])
+                if 'expectedTime' in activity:
+                    formatted_activity["expectedTime"] = format_time(activity['expectedTime'])
+                if 'completedTime' in activity:
+                    formatted_activity["completedTime"] = format_time(activity['completedTime'])
+                if 'meal_id' in activity:
+                    formatted_activity["meal_id"] = activity['meal_id']
+                if 'notes' in activity:
+                    formatted_activity["notes"] = activity['notes']
+
+                formatted_activities.append(formatted_activity)
+            except Exception as e:
+                logger.error(f"Error formatting activity {activity.get('_id', 'unknown')}: {e}")
+                # Continue processing other activities even if one fails
 
         return jsonify(formatted_activities), 200
     except Exception as e:
@@ -199,6 +256,8 @@ def get_patient_activity_history(current_user, patient_id):
         return jsonify({"error": "Unauthorized access"}), 403
 
     try:
+        logger.info(f"Doctor {str(current_user['_id'])} fetching activity history for patient {patient_id}")
+
         # Parse query parameters for date filtering
         start_date_str = request.args.get('start_date')
         end_date_str = request.args.get('end_date')
@@ -210,42 +269,71 @@ def get_patient_activity_history(current_user, patient_id):
         if start_date_str or end_date_str:
             query['timestamp'] = {}
             if start_date_str:
-                start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
-                query['timestamp']['$gte'] = start_date
+                try:
+                    start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
+                    query['timestamp']['$gte'] = start_date
+                except Exception as e:
+                    logger.error(f"Error parsing start date '{start_date_str}': {e}")
+                    return jsonify({"error": f"Invalid start date format: {start_date_str}"}), 400
+
             if end_date_str:
-                end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
-                # Add one day to include the entire end date
-                end_date = end_date + timedelta(days=1)
-                query['timestamp']['$lt'] = end_date
+                try:
+                    end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
+                    # Add one day to include the entire end date
+                    end_date = end_date + timedelta(days=1)
+                    query['timestamp']['$lt'] = end_date
+                except Exception as e:
+                    logger.error(f"Error parsing end date '{end_date_str}': {e}")
+                    return jsonify({"error": f"Invalid end date format: {end_date_str}"}), 400
 
         # Execute the query
         patient_activities = list(mongo.db.activities.find(query).sort("timestamp", -1))
+        logger.debug(f"Found {len(patient_activities)} activities for patient {patient_id}")
 
         activity_level_map = {level['value']: level['label'] for level in Constants.ACTIVITY_LEVELS}
 
         def format_time(time_value):
-            if isinstance(time_value, str):
-                return time_value
-            elif isinstance(time_value, datetime):
-                return time_value.isoformat()
-            else:
+            try:
+                if isinstance(time_value, str):
+                    return time_value
+                elif isinstance(time_value, datetime):
+                    return time_value.isoformat()
+                else:
+                    return None
+            except Exception as e:
+                logger.warning(f"Error formatting time value: {time_value}, {e}")
                 return None
 
-        formatted_activities = [{
-            "id": str(activity['_id']),
-            "type": activity['type'],
-            "level": activity['level'],
-            "levelLabel": activity_level_map.get(activity['level'], "Unknown"),
-            "impact": activity.get('impact', get_activity_impact(activity['level'])),
-            "duration": activity.get('duration', ''),
-            "startTime": format_time(activity.get('startTime')),
-            "endTime": format_time(activity.get('endTime')),
-            "expectedTime": format_time(activity.get('expectedTime')),
-            "completedTime": format_time(activity.get('completedTime')),
-            "timestamp": format_time(activity['timestamp']),
-            "meal_id": activity.get('meal_id'),
-            "notes": activity.get('notes', '')
-        } for activity in patient_activities]
+        formatted_activities = []
+        for activity in patient_activities:
+            try:
+                formatted_activity = {
+                    "id": str(activity['_id']),
+                    "type": activity.get('type', 'unknown'),
+                    "level": activity.get('level', 0),
+                    "levelLabel": activity_level_map.get(activity.get('level', 0), "Unknown"),
+                    "impact": activity.get('impact', get_activity_impact(activity.get('level', 0))),
+                    "duration": activity.get('duration', '01:00'),
+                    "timestamp": format_time(activity.get('timestamp', datetime.utcnow())),
+                }
+
+                # Add optional fields if present
+                if 'startTime' in activity:
+                    formatted_activity["startTime"] = format_time(activity['startTime'])
+                if 'endTime' in activity:
+                    formatted_activity["endTime"] = format_time(activity['endTime'])
+                if 'expectedTime' in activity:
+                    formatted_activity["expectedTime"] = format_time(activity['expectedTime'])
+                if 'completedTime' in activity:
+                    formatted_activity["completedTime"] = format_time(activity['completedTime'])
+                if 'meal_id' in activity:
+                    formatted_activity["meal_id"] = activity['meal_id']
+                if 'notes' in activity:
+                    formatted_activity["notes"] = activity.get('notes', '')
+
+                formatted_activities.append(formatted_activity)
+            except Exception as e:
+                logger.error(f"Error formatting patient activity {activity.get('_id', 'unknown')}: {e}")
 
         return jsonify(formatted_activities), 200
     except Exception as e:

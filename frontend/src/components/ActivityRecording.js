@@ -6,6 +6,7 @@ import { ACTIVITY_LEVELS } from '../constants';
 import { useConstants } from '../contexts/ConstantsContext';
 import TimeInput from './TimeInput';
 import TimeManager from '../utils/TimeManager';
+import moment from 'moment';
 
 // ActivityItem component - memoized for better performance
 const ActivityItem = React.memo(({ item, updateItem, removeItem, activityCoefficients }) => {
@@ -66,6 +67,12 @@ const ActivityRecording = ({
   const [notes, setNotes] = useState('');
   const [status, setStatus] = useState({ type: '', message: '' });
   const [isLoading, setIsLoading] = useState(false);
+  const [userTimeZone, setUserTimeZone] = useState('');
+
+  // Get user's time zone on component mount
+  useEffect(() => {
+    setUserTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
+  }, []);
 
   // Calculate duration in hours using TimeManager
   const calculateDurationInHours = useCallback((startTime, endTime) => {
@@ -138,103 +145,133 @@ const ActivityRecording = ({
     setActivities(prev => prev.filter(a => a !== activity));
   }, []);
 
-  const handleSubmit = useCallback(async (e) => {
-    e.preventDefault();
-    if (!standalone) return;
+  // Convert local time to UTC for API calls
+  const convertToUTCIsoString = useCallback((localTime) => {
+    if (!localTime) return null;
+    return moment(localTime).utc().toISOString();
+  }, []);
 
-    setIsLoading(true);
-    try {
-      const token = localStorage.getItem('token');
-      const headers = {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
+const handleSubmit = useCallback(async (e) => {
+  e.preventDefault();
+  if (!standalone) return;
+
+  setIsLoading(true);
+  try {
+    const token = localStorage.getItem('token');
+    const headers = {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    };
+
+    // Process activities for both endpoints to ensure proper format and convert times to UTC
+    const processedActivitiesData = activities.map(activity => {
+      const durationData = TimeManager.calculateDuration(activity.startTime, activity.endTime);
+
+      // Convert local time to UTC for API
+      const startTimeUTC = convertToUTCIsoString(activity.startTime);
+      const endTimeUTC = convertToUTCIsoString(activity.endTime);
+
+      return {
+        level: activity.level,
+        type: activity.type,
+        startTime: startTimeUTC,   // Send UTC time
+        endTime: endTimeUTC,       // Send UTC time
+        duration: TimeManager.hoursToTimeString(durationData.totalHours),
+        impact: patientConstants.activity_coefficients[activity.level] || 1.0
       };
+    });
 
-      // Process activities for both endpoints to ensure proper format
-      const processedActivitiesData = activities.map(activity => {
-        const durationData = TimeManager.calculateDuration(activity.startTime, activity.endTime);
-        return {
-          level: activity.level,
-          type: activity.type,
-          startTime: activity.startTime,  // Make sure startTime is included
-          endTime: activity.endTime,      // Make sure endTime is included
-          duration: TimeManager.hoursToTimeString(durationData.totalHours),
-          impact: patientConstants.activity_coefficients[activity.level] || 1.0
-        };
-      });
+    // Option 1: If you want to keep meals integration, use this code
+    // and update the backend to avoid duplicate entries in activities collection
+    const mealData = {
+      timestamp: new Date().toISOString(),  // Current UTC time
+      mealType: 'activity_only',
+      foodItems: [],
+      activities: processedActivitiesData,  // Use processed activities with all fields
+      notes: notes,
+      recordingType: 'standalone_activity_recording',
+      calculationFactors: {
+        activityImpact: totalImpact,
+        healthMultiplier: 0.0
+      },
+      skipActivityDuplication: true // Added flag to tell backend not to create duplicate records
+    };
 
-      // 1. First, submit to the meal endpoint with the existing format
-      const mealData = {
-        timestamp: new Date().toISOString(),
-        mealType: 'activity_only',
-        foodItems: [],
-        activities: processedActivitiesData, // Use processed activities with all fields
-        notes: notes,
-        recordingType: 'standalone_activity_recording',
-        calculationFactors: {
-          activityImpact: totalImpact,
-          healthMultiplier: 0.0
-        }
-      };
+    console.log('Submitting activities to meal endpoint:', mealData);
 
-      // Submit to meal endpoint
-      await axios.post('http://localhost:5000/api/meal', mealData, { headers });
+    // Submit to activity recording endpoint first - this will be the source of truth
+    const activitiesData = {
+      expectedActivities: activities
+        .filter(activity => activity.type === 'expected')
+        .map(activity => {
+          const durationData = TimeManager.calculateDuration(activity.startTime, activity.endTime);
 
-      // 2. Also submit to the dedicated activities endpoint with the format it expects
-      const activitiesData = {
-        expectedActivities: activities
-          .filter(activity => activity.type === 'expected')
-          .map(activity => {
-            const durationData = TimeManager.calculateDuration(activity.startTime, activity.endTime);
-            return {
-              level: activity.level,
-              duration: TimeManager.hoursToTimeString(durationData.totalHours),
-              expectedTime: activity.startTime,
-              startTime: activity.startTime,  // Ensure startTime is included
-              endTime: activity.endTime,      // Ensure endTime is included
-              impact: patientConstants.activity_coefficients[activity.level] || 1.0
-            };
-          }),
-        completedActivities: activities
-          .filter(activity => activity.type === 'completed')
-          .map(activity => {
-            const durationData = TimeManager.calculateDuration(activity.startTime, activity.endTime);
-            return {
-              level: activity.level,
-              duration: TimeManager.hoursToTimeString(durationData.totalHours),
-              completedTime: activity.startTime,
-              startTime: activity.startTime,  // Ensure startTime is included
-              endTime: activity.endTime,      // Ensure endTime is included
-              impact: patientConstants.activity_coefficients[activity.level] || 1.0
-            };
-          }),
-        notes: notes
-      };
+          // Convert local time to UTC for API
+          const startTimeUTC = convertToUTCIsoString(activity.startTime);
+          const endTimeUTC = convertToUTCIsoString(activity.endTime);
 
-      // Submit to activities endpoint
-      await axios.post(
-        'http://localhost:5000/api/record-activities',
-        activitiesData,
-        { headers }
-      );
+          return {
+            level: activity.level,
+            duration: TimeManager.hoursToTimeString(durationData.totalHours),
+            expectedTime: startTimeUTC,  // Send UTC time
+            startTime: startTimeUTC,     // Send UTC time
+            endTime: endTimeUTC,         // Send UTC time
+            impact: patientConstants.activity_coefficients[activity.level] || 1.0
+          };
+        }),
+      completedActivities: activities
+        .filter(activity => activity.type === 'completed')
+        .map(activity => {
+          const durationData = TimeManager.calculateDuration(activity.startTime, activity.endTime);
 
-      setStatus({
-        type: 'success',
-        message: 'Activities recorded successfully!'
-      });
-      setActivities([]);
-      setNotes('');
+          // Convert local time to UTC for API
+          const startTimeUTC = convertToUTCIsoString(activity.startTime);
+          const endTimeUTC = convertToUTCIsoString(activity.endTime);
 
-    } catch (error) {
-      console.error('Error submitting activities:', error);
-      setStatus({
-        type: 'error',
-        message: error.response?.data?.message || 'Error recording activities'
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  }, [standalone, activities, notes, totalImpact, patientConstants]);
+          return {
+            level: activity.level,
+            duration: TimeManager.hoursToTimeString(durationData.totalHours),
+            completedTime: startTimeUTC, // Send UTC time
+            startTime: startTimeUTC,     // Send UTC time
+            endTime: endTimeUTC,         // Send UTC time
+            impact: patientConstants.activity_coefficients[activity.level] || 1.0
+          };
+        }),
+      notes: notes
+    };
+
+    console.log('Submitting activities to dedicated endpoint:', activitiesData);
+
+    // First, record the activities in the activities collection
+    const activityResponse = await axios.post(
+      'http://localhost:5000/api/record-activities',
+      activitiesData,
+      { headers }
+    );
+
+    // Then, send references to these activities to the meal endpoint
+    mealData.activityIds = activityResponse.data.activity_ids || [];
+
+    // Now submit to meal endpoint with references to the already created activities
+    await axios.post('http://localhost:5000/api/meal', mealData, { headers });
+
+    setStatus({
+      type: 'success',
+      message: 'Activities recorded successfully!'
+    });
+    setActivities([]);
+    setNotes('');
+
+  } catch (error) {
+    console.error('Error submitting activities:', error);
+    setStatus({
+      type: 'error',
+      message: error.response?.data?.message || 'Error recording activities'
+    });
+  } finally {
+    setIsLoading(false);
+  }
+}, [standalone, activities, notes, totalImpact, patientConstants, convertToUTCIsoString]);
 
   if (loading) {
     return <div className={styles.loading}>Loading activity settings...</div>;
@@ -251,6 +288,14 @@ const ActivityRecording = ({
   return (
     <div className={standalone ? styles.standaloneContainer : styles.inlineContainer}>
       {standalone && <h2 className={styles.title}>Record Activities</h2>}
+
+      {/* Add timezone info display */}
+      {standalone && (
+        <div className="timezone-info">
+          Your timezone: {userTimeZone}
+          <span className="timezone-note"> (all times stored in UTC but displayed in your local timezone)</span>
+        </div>
+      )}
 
       {/* Conditionally render form only in standalone mode */}
       {standalone ? (
@@ -270,6 +315,18 @@ const ActivityRecording = ({
           {status.message}
         </div>
       )}
+
+      <style jsx="true">{`
+        .timezone-info {
+          font-size: 0.9rem;
+          color: #666;
+          margin-bottom: 15px;
+        }
+        
+        .timezone-note {
+          font-style: italic;
+        }
+      `}</style>
     </div>
   );
 

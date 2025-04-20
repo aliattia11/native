@@ -21,10 +21,43 @@ class TimeManager {
   }
 
   /**
-   * Convert a duration in hours:minutes format to decimal hours
-   * @param {string|number} duration - Duration as "HH:MM" or decimal hours
-   * @returns {number} Duration in decimal hours
+   * Convert local datetime to UTC ISO string for API communication
+   * @param {string} localDateTimeString - Local datetime string (YYYY-MM-DDTHH:MM)
+   * @returns {string} - Full UTC ISO string for sending to backend
    */
+  static localToUTCISOString(localDateTimeString) {
+    if (!localDateTimeString) return new Date().toISOString();
+
+    // Create Date object from the local datetime string
+    const localDate = new Date(localDateTimeString);
+    // Convert to UTC ISO string
+    return localDate.toISOString();
+  }
+
+  /**
+   * Convert UTC ISO string from API to local datetime format for inputs
+   * @param {string} utcIsoString - UTC ISO string from backend
+   * @returns {string} - Local datetime string (YYYY-MM-DDTHH:MM)
+   */
+  static utcToLocalString(utcIsoString) {
+    if (!utcIsoString) return '';
+
+    try {
+      const date = new Date(utcIsoString);
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+
+      return `${year}-${month}-${day}T${hours}:${minutes}`;
+    } catch (error) {
+      console.error('Error converting UTC to local time:', error);
+      return '';
+    }
+  }
+
+  // Existing methods are preserved below this point
   static durationToHours(duration) {
     if (typeof duration === 'number') return duration;
 
@@ -36,11 +69,6 @@ class TimeManager {
     return parseFloat(duration) || 0;
   }
 
-  /**
-   * Convert decimal hours to HH:MM format
-   * @param {number} hours - Duration in decimal hours
-   * @returns {string} Duration as "HH:MM"
-   */
   static hoursToTimeString(hours) {
     if (hours === undefined || hours === null) return "00:00";
 
@@ -50,12 +78,6 @@ class TimeManager {
     return `${wholeHours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
   }
 
-  /**
-   * Calculate duration between two datetime strings
-   * @param {string} startTime - ISO datetime string for start time
-   * @param {string} endTime - ISO datetime string for end time
-   * @returns {object} Duration data (hours, minutes, totalHours, formatted)
-   */
   static calculateDuration(startTime, endTime) {
     if (!startTime || !endTime) {
       return { hours: 0, minutes: 0, totalHours: 0, formatted: "0h 0m" };
@@ -82,11 +104,6 @@ class TimeManager {
     }
   }
 
-  /**
-   * Format an ISO datetime string to a human-readable format
-   * @param {string} isoString - ISO datetime string
-   * @returns {string} - Formatted datetime string
-   */
   static formatDateTime(isoString) {
     if (!isoString) return '';
 
@@ -99,11 +116,6 @@ class TimeManager {
     }
   }
 
-  /**
-   * Create a timepoint in the past by subtracting hours from current time
-   * @param {number} hoursAgo - Number of hours to subtract
-   * @returns {string} - ISO datetime string for the past time in local timezone
-   */
   static getTimePointHoursAgo(hoursAgo) {
     const date = new Date();
     date.setHours(date.getHours() - hoursAgo);
@@ -117,27 +129,9 @@ class TimeManager {
     return `${year}-${month}-${day}T${hours}:${minutes}`;
   }
 
-  /**
-   * Convert UTC ISO string to local timezone ISO string format for datetime-local input
-   * @param {string} utcIsoString - ISO string in UTC timezone
-   * @returns {string} - ISO datetime string in local timezone
-   */
+  // This method is now redundant with utcToLocalString but kept for compatibility
   static utcToLocalIsoString(utcIsoString) {
-    if (!utcIsoString) return '';
-
-    try {
-      const date = new Date(utcIsoString);
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      const hours = String(date.getHours()).padStart(2, '0');
-      const minutes = String(date.getMinutes()).padStart(2, '0');
-
-      return `${year}-${month}-${day}T${hours}:${minutes}`;
-    } catch (error) {
-      console.error('Error converting UTC to local time:', error);
-      return '';
-    }
+    return this.utcToLocalString(utcIsoString);
   }
 }
 

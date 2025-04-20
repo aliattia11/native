@@ -15,6 +15,7 @@ import TimeManager from '../utils/TimeManager';
 import { MEAL_TYPES } from '../constants';
 import { recommendInsulinType } from '../utils/insulinUtils';
 import styles from './MealInput.module.css';
+import moment from 'moment';
 
 const MealInput = () => {
   const { patientConstants, loading, error, refreshConstants } = useConstants();
@@ -24,7 +25,8 @@ const MealInput = () => {
   const [activityImpactFromRecording, setActivityImpactFromRecording] = useState(1.0);
   const [activityImpact, setActivityImpact] = useState(1.0);
   const [bloodSugar, setBloodSugar] = useState('');
-  const [bloodSugarTimestamp, setBloodSugarTimestamp] = useState('');  const [suggestedInsulin, setSuggestedInsulin] = useState('');
+  const [bloodSugarTimestamp, setBloodSugarTimestamp] = useState('');
+  const [suggestedInsulin, setSuggestedInsulin] = useState('');
   const [suggestedInsulinType, setSuggestedInsulinType] = useState('');
   const [insulinBreakdown, setInsulinBreakdown] = useState(null);
   const [insulinData, setInsulinData] = useState({
@@ -38,6 +40,12 @@ const MealInput = () => {
   const [backendCalculation, setBackendCalculation] = useState(null);
   const [expandedCard, setExpandedCard] = useState(null);
   const [bloodSugarSource, setBloodSugarSource] = useState('direct');
+  const [userTimeZone, setUserTimeZone] = useState('');
+
+  // Get user's time zone on component mount
+  useEffect(() => {
+    setUserTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
+  }, []);
 
   // Handler for InsulinInput changes
   const handleInsulinChange = (data) => {
@@ -171,6 +179,14 @@ const MealInput = () => {
     setExpandedCard(expandedCard === cardName ? null : cardName);
   };
 
+  // Convert local time to UTC ISO string for the backend
+  const convertToUTCIsoString = (localDateTime) => {
+    if (!localDateTime) return new Date().toISOString();
+
+    // Use Moment.js to ensure proper UTC conversion
+    return moment(localDateTime).utc().toISOString();
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!patientConstants) {
@@ -196,6 +212,10 @@ const MealInput = () => {
       if (!token) {
         throw new Error('Authentication token not found');
       }
+
+      // Make sure we have a properly formatted UTC timestamp for blood sugar reading
+      const utcBloodSugarTimestamp = convertToUTCIsoString(bloodSugarTimestamp);
+      console.log('Submitting blood sugar timestamp (UTC):', utcBloodSugarTimestamp);
 
       // Create meal data object
       const mealData = {
@@ -236,12 +256,12 @@ const MealInput = () => {
           duration: activity.duration,
           type: activity.type,
           impact: activity.impact,
-          startTime: activity.startTime,
-          endTime: activity.endTime,
+          startTime: activity.startTime ? convertToUTCIsoString(activity.startTime) : undefined,
+          endTime: activity.endTime ? convertToUTCIsoString(activity.endTime) : undefined,
         })),
-       bloodSugar: bloodSugar ? parseFloat(bloodSugar) : null,
-  bloodSugarTimestamp: bloodSugarTimestamp || new Date().toISOString(),
-         bloodSugarSource,
+        bloodSugar: bloodSugar ? parseFloat(bloodSugar) : null,
+        bloodSugarTimestamp: utcBloodSugarTimestamp,
+        bloodSugarSource,
         intendedInsulin: insulinData.dose ? parseFloat(insulinData.dose) : null,
         intendedInsulinType: insulinData.type,
         suggestedInsulinType,
@@ -267,18 +287,22 @@ const MealInput = () => {
 
       // Add medication scheduling information if insulin is being logged
       if (insulinData.dose && insulinData.type) {
+        const administrationTime = insulinData.administrationTime ?
+          convertToUTCIsoString(insulinData.administrationTime) :
+          new Date().toISOString();
+
         mealData.medicationLog = {
-  is_insulin: true,
-  dose: parseFloat(insulinData.dose),
-  medication: insulinData.type,
-  scheduled_time: insulinData.administrationTime || new Date().toISOString(), // Use the stored administration time
-  notes: insulinData.notes,
-  meal_context: {
-    meal_type: mealType,
-    blood_sugar: bloodSugar ? parseFloat(bloodSugar) : null,
-    suggested_dose: suggestedInsulin ? parseFloat(suggestedInsulin) : null,
-  }
-};
+          is_insulin: true,
+          dose: parseFloat(insulinData.dose),
+          medication: insulinData.type,
+          scheduled_time: administrationTime, // Make sure this is in UTC
+          notes: insulinData.notes,
+          meal_context: {
+            meal_type: mealType,
+            blood_sugar: bloodSugar ? parseFloat(bloodSugar) : null,
+            suggested_dose: suggestedInsulin ? parseFloat(suggestedInsulin) : null,
+          }
+        };
       }
 
       const response = await axios.post(
@@ -335,6 +359,12 @@ const MealInput = () => {
     <div className={styles.container}>
       <h2 className={styles.title}>Log Your Meal</h2>
 
+      {/* Add timezone info display */}
+      <div className="timezone-info">
+        Your timezone: {userTimeZone}
+        <span className="timezone-note"> (all times stored in UTC but displayed in your local timezone)</span>
+      </div>
+
       <form className={styles.form} onSubmit={handleSubmit} onKeyDown={preventFormSubmission}>
         <div className={styles.formField}>
           <label htmlFor="mealType">Meal Type</label>
@@ -373,17 +403,26 @@ const MealInput = () => {
         <div className={styles.measurementSection}>
           <div className={styles.formField}>
             <label htmlFor="bloodSugar">Blood Sugar Level</label>
-           <BloodSugarInput
-  initialValue={bloodSugar}
-  onBloodSugarChange={(value, timestamp) => {
-    setBloodSugar(value);
-    setBloodSugarTimestamp(timestamp || new Date().toISOString());
-    setBloodSugarSource('direct');
-  }}
-  disabled={isSubmitting}
-  standalone={false}
-  className={styles.mealInputBloodSugar}
-/>
+            <BloodSugarInput
+              initialValue={bloodSugar}
+              onBloodSugarChange={(value, timestamp) => {
+                setBloodSugar(value);
+                // Store the timestamp as provided - will be converted to UTC when submitting
+                setBloodSugarTimestamp(timestamp || new Date().toISOString());
+                setBloodSugarSource('direct');
+
+                // Log for debugging
+                console.log('Blood sugar timestamp set:', timestamp);
+              }}
+              disabled={isSubmitting}
+              standalone={false}
+              className={styles.mealInputBloodSugar}
+            />
+            {bloodSugarTimestamp && (
+              <div className="timestamp-display">
+                Reading time: {moment(bloodSugarTimestamp).local().format('MM/DD/YYYY, HH:mm:ss')}
+              </div>
+            )}
           </div>
         </div>
 
@@ -413,6 +452,7 @@ const MealInput = () => {
                 </div>
               </h3>
             </div>
+
 
             <div className={styles.breakdownGrid}>
               {/* Base Insulin Card */}
@@ -753,7 +793,7 @@ const MealInput = () => {
           </div>
         )}
 
-        <button
+            <button
           className={styles.submitButton}
           type="submit"
           disabled={loading || !patientConstants || isSubmitting}
@@ -767,6 +807,26 @@ const MealInput = () => {
           {message}
         </div>
       )}
+
+      <style jsx="true">{`
+        .timestamp-display {
+          font-size: 0.85em;
+          color: #666;
+          margin-top: 5px;
+          margin-bottom: 10px;
+          font-style: italic;
+        }
+        
+        .timezone-info {
+          font-size: 0.9rem;
+          color: #666;
+          margin-bottom: 15px;
+        }
+        
+        .timezone-note {
+          font-style: italic;
+        }
+      `}</style>
     </div>
   );
 };

@@ -426,9 +426,15 @@ def submit_meal(current_user):
         blood_sugar_timestamp = None
         if data.get('bloodSugarTimestamp'):
             try:
-                # Convert ISO string to datetime object for proper storage
-                bs_time_str = data['bloodSugarTimestamp'].replace('Z', '+00:00')
-                blood_sugar_timestamp = bs_time_str
+                # Use the timestamp directly - frontend now sends proper UTC ISO strings
+                blood_sugar_timestamp = data['bloodSugarTimestamp']
+
+                # Ensure it has proper timezone information
+                if blood_sugar_timestamp.endswith('Z'):
+                    blood_sugar_timestamp = blood_sugar_timestamp[:-1] + '+00:00'
+                elif not ('+' in blood_sugar_timestamp or '-' in blood_sugar_timestamp[-6:]):
+                    blood_sugar_timestamp = blood_sugar_timestamp + '+00:00'
+
                 logger.debug(f"Using provided blood sugar reading time: {blood_sugar_timestamp}")
             except (ValueError, TypeError) as e:
                 logger.warning(f"Error parsing blood sugar timestamp: {e}. Using current time instead.")

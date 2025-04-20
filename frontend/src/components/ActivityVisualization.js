@@ -25,6 +25,7 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
     tickFormat: 'DD/MM HH:mm'
   });
   const [currentTime, setCurrentTime] = useState(moment().valueOf());
+  const [userTimeZone, setUserTimeZone] = useState('');
 
   // Reference for chart container dimensions
   const chartRef = useRef(null);
@@ -38,6 +39,11 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
     { value: 1, label: 'High Activity', color: '#ff8c00' },
     { value: 2, label: 'Vigorous Activity', color: '#dc143c' }
   ];
+
+  // Get user's time zone on component mount
+  useEffect(() => {
+    setUserTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
+  }, []);
 
   // Update current time every minute
   useEffect(() => {
@@ -128,14 +134,14 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
 
       // Process and format the activity data for time segments
       const formattedData = response.data.map(item => {
-        // Get the actual start time
+        // Get the actual start time and convert from UTC to local
         const startTime = item.startTime || item.expectedTime || item.completedTime || item.timestamp;
-        const startMoment = moment(startTime);
+        const startMoment = moment.utc(startTime).local();
 
         // Calculate end time
         let endMoment;
         if (item.endTime) {
-          endMoment = moment(item.endTime);
+          endMoment = moment.utc(item.endTime).local();
         } else if (item.duration) {
           // Calculate end time based on duration
           const [hours, minutes] = item.duration.split(':').map(Number);
@@ -155,11 +161,11 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
         return {
           ...item,
           id: item.id || String(Math.random()),
-          start: startMoment.valueOf(), // Start time in milliseconds
-          end: endMoment.valueOf(),     // End time in milliseconds
+          start: startMoment.valueOf(), // Start time in milliseconds (local time)
+          end: endMoment.valueOf(),     // End time in milliseconds (local time)
           formattedStart: startMoment.format('MM/DD/YYYY, HH:mm'),
           formattedEnd: endMoment.format('MM/DD/YYYY, HH:mm'),
-          formattedRecordingTime: moment(item.timestamp).format('MM/DD/YYYY, HH:mm'),
+          formattedRecordingTime: moment.utc(item.timestamp).local().format('MM/DD/YYYY, HH:mm'),
           durationHours,
           formattedDuration: item.duration || `${Math.floor(durationHours)}:${Math.round((durationHours % 1) * 60).toString().padStart(2, '0')}`,
           level: item.level,
@@ -395,8 +401,9 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
   // Generate custom ticks based on time scale
   const ticks = generateTicks();
 
-  // Format current time for display
-  const formattedCurrentTime = moment(currentTime).format('YYYY-MM-DD HH:mm:ss');
+  // Format times for display in local time zone
+  const formattedCurrentTime = moment().format('YYYY-MM-DD HH:mm:ss');
+  const formattedCurrentTimeUTC = moment().utc().format('YYYY-MM-DD HH:mm:ss');
 
   // Get current user login
   const userLogin = localStorage.getItem('userLogin') || 'user';
@@ -407,6 +414,12 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
   return (
     <div className="blood-sugar-visualization">
       <h2 className="title">Activity Timeline</h2>
+
+      {/* Add timezone info display */}
+      <div className="timezone-info">
+        Your timezone: {userTimeZone}
+        <span className="timezone-note"> (all times displayed in your local timezone)</span>
+      </div>
 
       <div className="view-toggle">
         <button
@@ -458,11 +471,15 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
 
       <div className="current-time-display">
         <div className="time-info">
-          <span className="time-label">Current Date and Time (UTC):</span>
+          <span className="time-label">Current Time (Local):</span>
           <span className="time-value">{formattedCurrentTime}</span>
         </div>
+        <div className="time-info">
+          <span className="time-label">Current Time (UTC):</span>
+          <span className="time-value">{formattedCurrentTimeUTC}</span>
+        </div>
         <div className="user-info">
-          <span className="user-label">Current User's Login:</span>
+          <span className="user-label">Current User:</span>
           <span className="user-value">{userLogin}</span>
         </div>
       </div>
@@ -667,11 +684,14 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
           border-radius: 4px;
           margin: 10px 0;
           border-left: 4px solid #1890ff;
+          flex-wrap: wrap;
         }
         
         .time-info, .user-info {
           display: flex;
           align-items: center;
+          margin-right: 20px;
+          margin-bottom: 5px;
         }
         
         .time-label, .user-label {
@@ -681,6 +701,16 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
         
         .time-value, .user-value {
           font-family: monospace;
+        }
+        
+        .timezone-info {
+          font-size: 0.9rem;
+          color: #666;
+          margin-bottom: 15px;
+        }
+        
+        .timezone-note {
+          font-style: italic;
         }
       `}</style>
     </div>

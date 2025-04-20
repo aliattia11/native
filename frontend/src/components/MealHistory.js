@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useTable, useSortBy, usePagination } from 'react-table';
 import axios from 'axios';
+import moment from 'moment';
 import './MealHistory.css';
-
 
 const formatDateTime = (timestamp) => {
   if (!timestamp) return 'Invalid date';
   try {
-    return new Date(timestamp).toLocaleString();
+    // Parse timestamp as UTC, then format in local timezone
+    return moment.utc(timestamp).local().format('MM/DD/YYYY, HH:mm:ss');
   } catch (error) {
     return 'Invalid date';
   }
@@ -32,6 +33,12 @@ const MealHistory = ({ isDoctor = false, patientId = null }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedMeal, setSelectedMeal] = useState(null);
+  const [userTimeZone, setUserTimeZone] = useState('');
+
+  // Get user's time zone on component mount
+  useEffect(() => {
+    setUserTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
+  }, []);
 
   const fetchMealHistory = async () => {
     try {
@@ -55,7 +62,17 @@ const MealHistory = ({ isDoctor = false, patientId = null }) => {
 
       // Ensure we're handling the response data correctly
       const meals = Array.isArray(response.data) ? response.data : response.data.meals || [];
-      setData(meals);
+
+      // Process data to enhance with additional formatting
+      const processedMeals = meals.map(meal => {
+        return {
+          ...meal,
+          formattedTimestamp: formatDateTime(meal.timestamp),
+          formattedBloodSugarTimestamp: formatDateTime(meal.bloodSugarTimestamp)
+        };
+      });
+
+      setData(processedMeals);
       setLoading(false);
     } catch (err) {
       console.error('Error fetching meal history:', err);
@@ -72,7 +89,7 @@ const MealHistory = ({ isDoctor = false, patientId = null }) => {
     () => [
       {
         Header: 'Date/Time',
-        accessor: (row) => formatDateTime(row.timestamp),
+        accessor: 'formattedTimestamp',
       },
       {
         Header: 'Meal Type',
@@ -85,7 +102,17 @@ const MealHistory = ({ isDoctor = false, patientId = null }) => {
       },
       {
         Header: 'Blood Sugar',
-        accessor: (row) => `${row.bloodSugar || 'N/A'} mg/dL`
+        accessor: (row) => row.bloodSugar ? `${row.bloodSugar} mg/dL` : 'N/A',
+        Cell: ({ row }) => {
+          const value = row.original.bloodSugar;
+          if (!value) return <span>N/A</span>;
+
+          return (
+            <span title={row.original.formattedBloodSugarTimestamp || 'No timestamp'}>
+              {value} mg/dL
+            </span>
+          );
+        }
       },
       {
         Header: 'Insulin (S/I)',
@@ -128,21 +155,32 @@ const MealHistory = ({ isDoctor = false, patientId = null }) => {
       <div className="modal-overlay" onClick={onClose}>
         <div className="modal-content" onClick={e => e.stopPropagation()}>
           <div className="modal-header">
-            <h3>{meal.mealType} - {formatDateTime(meal.timestamp)}</h3>
+            <h3>{meal.mealType} - {meal.formattedTimestamp}</h3>
             <button onClick={onClose}>&times;</button>
           </div>
           <div className="modal-body">
             <div className="meal-metrics">
-              <div>Blood Sugar: {meal.bloodSugar || 'N/A'} mg/dL</div>
+              <div>
+                Blood Sugar: {meal.bloodSugar || 'N/A'} mg/dL
+                {meal.bloodSugarTimestamp && (
+                  <div className="timestamp-info">
+                    Reading time: {formatDateTime(meal.bloodSugarTimestamp)}
+                  </div>
+                )}
+              </div>
               <div>Suggested Insulin: {meal.suggestedInsulin || 'N/A'} units</div>
               <div>Intended Insulin: {meal.intendedInsulin || 'N/A'} units</div>
             </div>
             <h4>Food Items</h4>
-            <ul>
-              {meal.foodItems?.map((item, idx) => (
-                <li key={idx}>{item.portion?.amount} {item.portion?.unit} {item.name}</li>
-              ))}
-            </ul>
+            {meal.foodItems && meal.foodItems.length > 0 ? (
+              <ul>
+                {meal.foodItems.map((item, idx) => (
+                  <li key={idx}>{item.portion?.amount} {item.portion?.unit} {item.name}</li>
+                ))}
+              </ul>
+            ) : (
+              <p>No food items recorded</p>
+            )}
             {meal.notes && (
               <>
                 <h4>Notes</h4>
@@ -161,6 +199,13 @@ const MealHistory = ({ isDoctor = false, patientId = null }) => {
   return (
     <div>
       <h2>Meal History</h2>
+
+      {/* Add timezone info display */}
+      <div className="timezone-info">
+        Your timezone: {userTimeZone}
+        <span className="timezone-note"> (all times displayed in your local timezone)</span>
+      </div>
+
       <div>
         <table {...getTableProps()} style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
@@ -264,6 +309,25 @@ const MealHistory = ({ isDoctor = false, patientId = null }) => {
           onClose={() => setSelectedMeal(null)}
         />
       )}
+
+      <style jsx="true">{`
+        .timestamp-info {
+          font-size: 0.85em;
+          color: #666;
+          margin-top: 3px;
+          font-style: italic;
+        }
+        
+        .timezone-info {
+          font-size: 0.9rem;
+          color: #666;
+          margin-bottom: 15px;
+        }
+        
+        .timezone-note {
+          font-style: italic;
+        }
+      `}</style>
     </div>
   );
 };

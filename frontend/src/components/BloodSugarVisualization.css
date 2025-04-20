@@ -347,3 +347,12 @@
     width: 100%;
   }
 }
+.timezone-info {
+  font-size: 0.9rem;
+  color: #666;
+  margin-bottom: 15px;
+}
+
+.timezone-note {
+  font-style: italic;
+}

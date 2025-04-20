@@ -30,6 +30,8 @@ def get_blood_sugar_status(blood_sugar, target_glucose):
     return "normal"
 
 
+# Modify the add_blood_sugar function in blood_sugar.py
+
 @blood_sugar_bp.route('/api/blood-sugar', methods=['POST'])
 @token_required
 def add_blood_sugar(current_user):
@@ -53,11 +55,24 @@ def add_blood_sugar(current_user):
         target_glucose = user_constants.get_constant('target_glucose')
         status = get_blood_sugar_status(blood_sugar, target_glucose)
 
-        # Current server time
+        # Current server time in UTC
         current_time = datetime.utcnow()
 
-        # Use provided timestamp or default to current time
+        # Use provided timestamp or default to current UTC time
         if not blood_sugar_timestamp:
+            blood_sugar_timestamp = current_time.isoformat()
+
+        # Parse the timestamp - the frontend should be sending UTC ISO strings
+        try:
+            # Remove 'Z' and add UTC timezone if missing
+            if blood_sugar_timestamp.endswith('Z'):
+                blood_sugar_timestamp = blood_sugar_timestamp[:-1] + '+00:00'
+            elif not ('+' in blood_sugar_timestamp or '-' in blood_sugar_timestamp[-6:]):
+                blood_sugar_timestamp = blood_sugar_timestamp + '+00:00'
+
+            # Store the timestamp as is - it's already in ISO format from frontend
+        except Exception as e:
+            logger.error(f"Error parsing blood sugar timestamp: {e}")
             blood_sugar_timestamp = current_time.isoformat()
 
         logger.info(f"Recording blood sugar: {blood_sugar} mg/dL, timestamp: {blood_sugar_timestamp}")
@@ -68,8 +83,8 @@ def add_blood_sugar(current_user):
             'bloodSugar': blood_sugar,
             'status': status,
             'target': target_glucose,
-            'timestamp': current_time,  # When the reading was recorded
-            'bloodSugarTimestamp': blood_sugar_timestamp,  # When the reading was actually taken
+            'timestamp': current_time,  # When the reading was recorded (server UTC time)
+            'bloodSugarTimestamp': blood_sugar_timestamp,  # When the reading was taken (from frontend)
             'notes': notes,
             'source': source
         }

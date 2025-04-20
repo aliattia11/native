@@ -60,8 +60,9 @@ const BloodSugarInput = ({
         : parseFloat(localValue);
 
       if (onBloodSugarChange) {
-        // Always ensure we pass both the blood sugar value and the reading time
-        onBloodSugarChange(bloodSugarMgdl, readingTime);
+        // Convert local time to UTC ISO string for the backend
+        const utcTimestamp = TimeManager.localToUTCISOString(readingTime);
+        onBloodSugarChange(bloodSugarMgdl, utcTimestamp);
       }
     }
   };
@@ -76,69 +77,74 @@ const BloodSugarInput = ({
         : parseFloat(localValue);
 
       if (onBloodSugarChange) {
-        onBloodSugarChange(bloodSugarMgdl, timeValue);
+        // Convert local time to UTC ISO string for the backend
+        const utcTimestamp = TimeManager.localToUTCISOString(timeValue);
+        onBloodSugarChange(bloodSugarMgdl, utcTimestamp);
       }
     }
   };
 
   const handleSubmit = async (e) => {
-  e.preventDefault();
-  if (!standalone) return;
+    e.preventDefault();
+    if (!standalone) return;
 
-  const error = validateBloodSugar(localValue, unit);
-  if (error) {
-    setStatus({ type: 'error', message: error });
-    return;
-  }
-
-  setIsLoading(true);
-  try {
-    const token = localStorage.getItem('token');
-    const bloodSugarMgdl = unit === 'mmol/L'
-      ? mmolToMgdl(parseFloat(localValue))
-      : parseFloat(localValue);
-
-    const response = await fetch('http://localhost:5000/api/meal', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        mealType: 'blood_sugar_only',
-        foodItems: [],
-        activities: [],
-        bloodSugar: bloodSugarMgdl,
-        bloodSugarSource: 'standalone',
-        bloodSugarTimestamp: readingTime, // This timestamp will be stored in both collections
-        notes: notes,
-        recordingType: 'standalone_blood_sugar',
-        timestamp: new Date().toISOString() // This is when the record is created
-      }),
-    });
-
-    if (!response.ok) {
-      const data = await response.json();
-      throw new Error(data.error || 'Failed to record blood sugar');
+    const error = validateBloodSugar(localValue, unit);
+    if (error) {
+      setStatus({ type: 'error', message: error });
+      return;
     }
 
-    const result = await response.json();
+    setIsLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const bloodSugarMgdl = unit === 'mmol/L'
+        ? mmolToMgdl(parseFloat(localValue))
+        : parseFloat(localValue);
 
-    setStatus({ type: 'success', message: 'Blood sugar level recorded successfully' });
-    setLocalValue('');
-    setNotes('');
-    // Reset reading time to current time after successful submission
-    setReadingTime(TimeManager.getCurrentTimeISOString());
+      // Convert local time to UTC ISO string for the backend
+      const utcTimestamp = TimeManager.localToUTCISOString(readingTime);
 
-    if (onBloodSugarChange) onBloodSugarChange('');
-    if (onSubmitSuccess) onSubmitSuccess(result);
+      const response = await fetch('http://localhost:5000/api/meal', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          mealType: 'blood_sugar_only',
+          foodItems: [],
+          activities: [],
+          bloodSugar: bloodSugarMgdl,
+          bloodSugarSource: 'standalone',
+          bloodSugarTimestamp: utcTimestamp, // Send UTC timestamp to backend
+          notes: notes,
+          recordingType: 'standalone_blood_sugar',
+          timestamp: new Date().toISOString() // This is when the record is created
+        }),
+      });
 
-  } catch (error) {
-    setStatus({ type: 'error', message: error.message || 'Error recording blood sugar level' });
-  } finally {
-    setIsLoading(false);
-  }
-};
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to record blood sugar');
+      }
+
+      const result = await response.json();
+
+      setStatus({ type: 'success', message: 'Blood sugar level recorded successfully' });
+      setLocalValue('');
+      setNotes('');
+      // Reset reading time to current time after successful submission
+      setReadingTime(TimeManager.getCurrentTimeISOString());
+
+      if (onBloodSugarChange) onBloodSugarChange('');
+      if (onSubmitSuccess) onSubmitSuccess(result);
+
+    } catch (error) {
+      setStatus({ type: 'error', message: error.message || 'Error recording blood sugar level' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className={`blood-sugar-input ${className}`}>
@@ -166,11 +172,17 @@ const BloodSugarInput = ({
                   if (newUnit === 'mg/dL' && unit === 'mmol/L') {
                     const converted = mmolToMgdl(parseFloat(localValue)).toString();
                     setLocalValue(converted);
-                    if (onBloodSugarChange) onBloodSugarChange(parseFloat(converted), readingTime);
+                    if (onBloodSugarChange) {
+                      const utcTimestamp = TimeManager.localToUTCISOString(readingTime);
+                      onBloodSugarChange(parseFloat(converted), utcTimestamp);
+                    }
                   } else if (newUnit === 'mmol/L' && unit === 'mg/dL') {
                     const mmolValue = mgdlToMmol(parseFloat(localValue));
                     setLocalValue(mmolValue);
-                    if (onBloodSugarChange) onBloodSugarChange(mmolToMgdl(parseFloat(mmolValue)), readingTime);
+                    if (onBloodSugarChange) {
+                      const utcTimestamp = TimeManager.localToUTCISOString(readingTime);
+                      onBloodSugarChange(mmolToMgdl(parseFloat(mmolValue)), utcTimestamp);
+                    }
                   }
                 }
                 setUnit(newUnit);

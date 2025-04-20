@@ -17,61 +17,71 @@ const BloodSugarVisualization = ({ isDoctor = false, patientId = null }) => {
   const [loading, setLoading] = useState(true);
   const [unit, setUnit] = useState('mg/dL');
   const [activeView, setActiveView] = useState('chart'); // 'chart' or 'table'
+  const [userTimeZone, setUserTimeZone] = useState('');
+
+  // Get user's time zone info on component mount
+  useEffect(() => {
+    setUserTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
+  }, []);
 
   const fetchData = useCallback(async () => {
-  try {
-    setLoading(true);
-    const token = localStorage.getItem('token');
-    const startDate = moment(dateRange.start).format('YYYY-MM-DD');
-    const endDate = moment(dateRange.end).format('YYYY-MM-DD');
+    try {
+      setLoading(true);
+      const token = localStorage.getItem('token');
+      const startDate = moment(dateRange.start).format('YYYY-MM-DD');
+      const endDate = moment(dateRange.end).format('YYYY-MM-DD');
 
-    let url = `http://localhost:5000/api/blood-sugar?start_date=${startDate}&end_date=${endDate}&unit=${unit}`;
-    if (isDoctor && patientId) {
-      url = `http://localhost:5000/doctor/patient/${patientId}/blood-sugar?start_date=${startDate}&end_date=${endDate}&unit=${unit}`;
+      let url = `http://localhost:5000/api/blood-sugar?start_date=${startDate}&end_date=${endDate}&unit=${unit}`;
+      if (isDoctor && patientId) {
+        url = `http://localhost:5000/doctor/patient/${patientId}/blood-sugar?start_date=${startDate}&end_date=${endDate}&unit=${unit}`;
+      }
+
+      const response = await axios.get(url, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      // Process the data to use bloodSugarTimestamp instead of timestamp
+      const formattedData = response.data.map(item => {
+        // Use reading time (bloodSugarTimestamp) if available, otherwise use recording time (timestamp)
+        const readingTime = item.bloodSugarTimestamp || item.timestamp;
+
+        // Parse the UTC timestamps explicitly to ensure correct timezone handling
+        const localReadingTime = moment.utc(readingTime).local();
+        const localRecordingTime = moment.utc(item.timestamp).local();
+
+        return {
+          ...item,
+          // Convert to timestamp for chart (in local time)
+          readingTime: localReadingTime.valueOf(),
+          // Format for display in local time
+          formattedReadingTime: localReadingTime.format('MM/DD/YYYY, HH:mm'),
+          formattedRecordingTime: localRecordingTime.format('MM/DD/YYYY, HH:mm'),
+          // Status based on target glucose
+          status: getBloodSugarStatus(item.bloodSugar, item.target || targetGlucose)
+        };
+      });
+
+      // Sort by reading time
+      formattedData.sort((a, b) => a.readingTime - b.readingTime);
+      setData(formattedData);
+
+      // Update target glucose if available from the first reading
+      if (formattedData.length > 0 && formattedData[0].target) {
+        setTargetGlucose(formattedData[0].target);
+      }
+
+      setError('');
+      setLoading(false);
+    } catch (error) {
+      console.error('Error fetching blood sugar data:', error);
+      setError('Failed to fetch blood sugar data. Please try again.');
+      setLoading(false);
     }
+  }, [dateRange, isDoctor, patientId, unit, targetGlucose]);
 
-    const response = await axios.get(url, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-
-    // Process the data to use bloodSugarTimestamp instead of timestamp
-    const formattedData = response.data.map(item => {
-      // Use reading time (bloodSugarTimestamp) if available, otherwise use recording time (timestamp)
-      const readingTime = item.bloodSugarTimestamp || item.timestamp;
-
-      return {
-        ...item,
-        // Convert to timestamp for chart
-        readingTime: new Date(readingTime).getTime(),
-        // Format for display
-        formattedReadingTime: moment(readingTime).format('MM/DD/YYYY, HH:mm'),
-        formattedRecordingTime: moment(item.timestamp).format('MM/DD/YYYY, HH:mm'),
-        // Status based on target glucose
-        status: getBloodSugarStatus(item.bloodSugar, item.target || targetGlucose)
-      };
-    });
-
-    // Sort by reading time
-    formattedData.sort((a, b) => a.readingTime - b.readingTime);
-    setData(formattedData);
-
-    // Update target glucose if available from the first reading
-    if (formattedData.length > 0 && formattedData[0].target) {
-      setTargetGlucose(formattedData[0].target);
-    }
-
-    setError('');
-    setLoading(false);
-  } catch (error) {
-    console.error('Error fetching blood sugar data:', error);
-    setError('Failed to fetch blood sugar data. Please try again.');
-    setLoading(false);
-  }
-}, [dateRange, isDoctor, patientId, unit, targetGlucose]);
-
-useEffect(() => {
-  fetchData();
-}, [fetchData]);
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const getBloodSugarStatus = (bloodSugar, target) => {
     const statusMap = {
@@ -104,6 +114,7 @@ useEffect(() => {
 
   // Chart-specific functions
   const formatXAxis = (tickItem) => {
+    // Format the timestamp using the user's local timezone
     return moment(tickItem).format('DD/MM HH:mm');
   };
 
@@ -208,6 +219,12 @@ useEffect(() => {
   return (
     <div className="blood-sugar-visualization">
       <h2 className="title">Blood Sugar Data</h2>
+
+      {/* Add timezone info display */}
+      <div className="timezone-info">
+        Your timezone: {userTimeZone}
+        <span className="timezone-note"> (all times displayed in your local timezone)</span>
+      </div>
 
       <div className="view-toggle">
         <button
