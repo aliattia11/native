@@ -300,10 +300,10 @@ export const calculateTotalNutrients = (selectedFoods) => {
   }, { carbs: 0, protein: 0, fat: 0, absorptionType: 'medium' });
 };
 
-export const get_time_of_day_factor = (patientConstants, currentTime = new Date()) => {
-  // Use TimeEffect for consistent time of day calculations
-  return TimeEffect.getTimeOfDayFactor(patientConstants?.time_of_day_factors, currentTime);
-};
+// Remove this function as we're no longer using time of day factors
+// export const get_time_of_day_factor = (patientConstants, currentTime = new Date()) => {
+//   return TimeEffect.getTimeOfDayFactor(patientConstants?.time_of_day_factors, currentTime);
+// };
 
 export const calculateInsulinDose = ({
   carbs,
@@ -329,11 +329,11 @@ export const calculateInsulinDose = ({
   // Calculate adjustment factors
   const absorptionFactor = patientConstants.absorption_modifiers[absorptionType] || 1.0;
   const mealTimingFactor = (mealType && patientConstants.meal_timing_factors?.[mealType]) || 1.0;
-  const timeOfDayFactor = TimeEffect.getTimeOfDayFactor(patientConstants.time_of_day_factors, currentTime);
+  // Remove timeOfDayFactor from the calculation - Using only meal timing factor
   const activityImpact = calculateActivityImpact(activities, patientConstants);
 
-  // Calculate timing adjusted insulin
-  const adjustedInsulin = baseInsulin * absorptionFactor * mealTimingFactor * timeOfDayFactor * activityImpact;
+  // Calculate timing adjusted insulin (removed timeOfDayFactor)
+  const adjustedInsulin = baseInsulin * absorptionFactor * mealTimingFactor * activityImpact;
 
   // Calculate correction insulin if needed
   let correctionInsulin = 0;
@@ -357,7 +357,7 @@ export const calculateInsulinDose = ({
       healthMultiplier: Math.round(healthMultiplier * 100) / 100,
       absorptionFactor,
       mealTimingFactor,
-      timeOfDayFactor,
+      // Removed timeOfDayFactor from breakdown
       activityImpact: Math.round(activityImpact * 100) / 100
     }
   };

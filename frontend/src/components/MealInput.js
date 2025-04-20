@@ -187,103 +187,99 @@ const MealInput = () => {
     return moment(localDateTime).utc().toISOString();
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!patientConstants) {
-      setMessage('Error: Patient constants not loaded');
-      return;
+
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  if (!patientConstants) {
+    setMessage('Error: Patient constants not loaded');
+    return;
+  }
+
+  if (!mealType) {
+    setMessage('Please select a meal type');
+    return;
+  }
+
+  if (selectedFoods.length === 0) {
+    setMessage('Please add at least one food item');
+    return;
+  }
+
+  setIsSubmitting(true);
+  setMessage('Submitting meal...');
+
+  try {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      throw new Error('Authentication token not found');
     }
 
-    if (!mealType) {
-      setMessage('Please select a meal type');
-      return;
-    }
+    // Make sure we have a properly formatted UTC timestamp for blood sugar reading
+    const utcBloodSugarTimestamp = convertToUTCIsoString(bloodSugarTimestamp);
+    console.log('Submitting blood sugar timestamp (UTC):', utcBloodSugarTimestamp);
 
-    if (selectedFoods.length === 0) {
-      setMessage('Please add at least one food item');
-      return;
-    }
+    // Create meal data object
+    const mealData = {
+      mealType,
+      recordingType: 'meal',
+      foodItems: selectedFoods.map(food => {
+        const isWeightMeasurement = food.portion.activeMeasurement === 'weight';
+        const amount = isWeightMeasurement ? food.portion.w_amount : food.portion.amount;
+        const unit = isWeightMeasurement ? food.portion.w_unit : food.portion.unit;
 
-    setIsSubmitting(true);
-    setMessage('Submitting meal...');
-
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        throw new Error('Authentication token not found');
-      }
-
-      // Make sure we have a properly formatted UTC timestamp for blood sugar reading
-      const utcBloodSugarTimestamp = convertToUTCIsoString(bloodSugarTimestamp);
-      console.log('Submitting blood sugar timestamp (UTC):', utcBloodSugarTimestamp);
-
-      // Create meal data object
-      const mealData = {
-        mealType,
-        recordingType: 'meal',
-        foodItems: selectedFoods.map(food => {
-          const isWeightMeasurement = food.portion.activeMeasurement === 'weight';
-          const amount = isWeightMeasurement ? food.portion.w_amount : food.portion.amount;
-          const unit = isWeightMeasurement ? food.portion.w_unit : food.portion.unit;
-
-          if (!amount || !unit) {
-            throw new Error(`Invalid measurement for food item: ${food.name}`);
-          }
-
-          return {
-            name: food.name,
-            portion: {
-              amount: parseFloat(amount) || 1,
-              unit: unit || (isWeightMeasurement ? 'g' : 'ml'),
-              measurement_type: food.portion.activeMeasurement || 'weight'
-            },
-            details: {
-              carbs: parseFloat(food.details.carbs) || 0,
-              protein: parseFloat(food.details.protein) || 0,
-              fat: parseFloat(food.details.fat) || 0,
-              absorption_type: food.details.absorption_type || 'medium',
-              serving_size: {
-                amount: food.details.serving_size?.amount || 1,
-                unit: food.details.serving_size?.unit || 'serving',
-                w_amount: food.details.serving_size?.w_amount,
-                w_unit: food.details.serving_size?.w_unit
-              }
-            }
-          };
-        }),
-        activities: activitiesFromRecording.map(activity => ({
-          level: activity.level,
-          duration: activity.duration,
-          type: activity.type,
-          impact: activity.impact,
-          startTime: activity.startTime ? convertToUTCIsoString(activity.startTime) : undefined,
-          endTime: activity.endTime ? convertToUTCIsoString(activity.endTime) : undefined,
-        })),
-        bloodSugar: bloodSugar ? parseFloat(bloodSugar) : null,
-        bloodSugarTimestamp: utcBloodSugarTimestamp,
-        bloodSugarSource,
-        intendedInsulin: insulinData.dose ? parseFloat(insulinData.dose) : null,
-        intendedInsulinType: insulinData.type,
-        suggestedInsulinType,
-        notes: insulinData.notes,
-        calculationFactors: {
-          absorptionFactor: insulinBreakdown?.absorptionFactor,
-          timeOfDayFactor: insulinBreakdown?.timeOfDayFactor,
-          mealTimingFactor: insulinBreakdown?.mealTimingFactor,
-          activityImpact: activityImpactFromRecording,
-          healthMultiplier: healthFactors?.healthMultiplier,
-          medications: healthFactors?.medications?.map(med => ({
-            name: med.name,
-            factor: med.factor,
-            status: med.status,
-            hoursSinceLastDose: med.hoursSinceLastDose
-          })) || [],
-          conditions: healthFactors?.conditions?.map(condition => ({
-            name: condition.name,
-            factor: condition.factor
-          })) || []
+        if (!amount || !unit) {
+          throw new Error(`Invalid measurement for food item: ${food.name}`);
         }
-      };
+
+        return {
+          name: food.name,
+          portion: {
+            amount: parseFloat(amount) || 1,
+            unit: unit || (isWeightMeasurement ? 'g' : 'ml'),
+            measurement_type: food.portion.activeMeasurement || 'weight'
+          },
+          details: {
+            carbs: parseFloat(food.details.carbs) || 0,
+            protein: parseFloat(food.details.protein) || 0,
+            fat: parseFloat(food.details.fat) || 0,
+            absorption_type: food.details.absorption_type || 'medium'
+            // Removed serving_size details as they're not needed for each submission
+          }
+        };
+      }),
+      activities: activitiesFromRecording.map(activity => ({
+        level: activity.level,
+        duration: activity.duration,
+        type: activity.type,
+        impact: activity.impact,
+        startTime: activity.startTime ? convertToUTCIsoString(activity.startTime) : undefined,
+        endTime: activity.endTime ? convertToUTCIsoString(activity.endTime) : undefined,
+      })),
+      bloodSugar: bloodSugar ? parseFloat(bloodSugar) : null,
+      bloodSugarTimestamp: utcBloodSugarTimestamp,
+      bloodSugarSource,
+      intendedInsulin: insulinData.dose ? parseFloat(insulinData.dose) : null,
+      intendedInsulinType: insulinData.type,
+      suggestedInsulinType,
+      notes: insulinData.notes,
+      calculationFactors: {
+        absorptionFactor: insulinBreakdown?.absorptionFactor,
+        mealTimingFactor: insulinBreakdown?.mealTimingFactor,
+        // Removed timeOfDayFactor since we're not using it anymore
+        activityImpact: activityImpactFromRecording,
+        healthMultiplier: healthFactors?.healthMultiplier,
+        medications: healthFactors?.medications?.map(med => ({
+          name: med.name,
+          factor: med.factor,
+          status: med.status,
+          hoursSinceLastDose: med.hoursSinceLastDose
+        })) || [],
+        conditions: healthFactors?.conditions?.map(condition => ({
+          name: condition.name,
+          factor: condition.factor
+        })) || []
+      }
+    };
 
       // Add medication scheduling information if insulin is being logged
       if (insulinData.dose && insulinData.type) {
@@ -541,88 +537,81 @@ const MealInput = () => {
                 </div>
 
                 {expandedCard === 'adjustment' && (
-                  <div className={styles.expandedContent}>
-                    <ul>
-                      <li>Absorption rate: <span className={styles.valueHighlight}>
-                        {((insulinBreakdown.absorptionFactor - 1) * 100).toFixed(1)}%
-                        {insulinBreakdown.absorptionFactor > 1
-                          ? ` (+${((insulinBreakdown.absorptionFactor - 1) * 100).toFixed(1)}% increase)`
-                          : insulinBreakdown.absorptionFactor < 1
-                            ? ` (${((insulinBreakdown.absorptionFactor - 1) * 100).toFixed(1)}% decrease)`
-                            : ' (no adjustment)'}
-                      </span></li>
-                      <li>Meal timing: <span className={styles.valueHighlight}>
-                        {((insulinBreakdown.mealTimingFactor - 1) * 100).toFixed(1)}%
-                        {insulinBreakdown.mealTimingFactor > 1
-                          ? ` (+${((insulinBreakdown.mealTimingFactor - 1) * 100).toFixed(1)}% increase)`
-                          : insulinBreakdown.mealTimingFactor < 1
-                            ? ` (${((insulinBreakdown.mealTimingFactor - 1) * 100).toFixed(1)}% decrease)`
-                            : ' (no adjustment)'}
-                      </span></li>
-                      <li>Time of day: <span className={styles.valueHighlight}>
-                        {((insulinBreakdown.timeOfDayFactor - 1) * 100).toFixed(1)}%
-                        {insulinBreakdown.timeOfDayFactor > 1
-                          ? ` (+${((insulinBreakdown.timeOfDayFactor - 1) * 100).toFixed(1)}% increase)`
-                          : insulinBreakdown.timeOfDayFactor < 1
-                            ? ` (${((insulinBreakdown.timeOfDayFactor - 1) * 100).toFixed(1)}% decrease)`
-                            : ' (no adjustment)'}
-                      </span></li>
-                      <li>Activity impact: <span className={styles.valueHighlight}>
-                        {((insulinBreakdown.activityImpact - 1) * 100).toFixed(1)}%
-                        {insulinBreakdown.activityImpact > 1
-                          ? ` (+${((insulinBreakdown.activityImpact - 1) * 100).toFixed(1)}% increase)`
-                          : insulinBreakdown.activityImpact < 1
-                            ? ` (${((insulinBreakdown.activityImpact - 1) * 100).toFixed(1)}% decrease)`
-                            : ' (no adjustment)'}
-                      </span></li>
-                      <li className={styles.summaryLine}>
-                        Adjusted Insulin: <span className={styles.valueHighlight}>
-                          {insulinBreakdown.adjustedInsulin.toFixed(1)}
-                        </span> units
-                        <div className={styles.formulaExplanation}>
-                          <small>
-                            (Base insulin × Absorption × Meal timing × Time of day × Activity
-                            factor)
-                          </small>
-                        </div>
-                      </li>
-                    </ul>
-                  </div>
+                    <div className={styles.expandedContent}>
+                      <ul>
+                        <li>Absorption rate: <span className={styles.valueHighlight}>
+      {((insulinBreakdown.absorptionFactor - 1) * 100).toFixed(1)}%
+                          {insulinBreakdown.absorptionFactor > 1
+                              ? ` (+${((insulinBreakdown.absorptionFactor - 1) * 100).toFixed(1)}% increase)`
+                              : insulinBreakdown.absorptionFactor < 1
+                                  ? ` (${((insulinBreakdown.absorptionFactor - 1) * 100).toFixed(1)}% decrease)`
+                                  : ' (no adjustment)'}
+    </span></li>
+                        <li>Meal timing: <span className={styles.valueHighlight}>
+      {((insulinBreakdown.mealTimingFactor - 1) * 100).toFixed(1)}%
+                          {insulinBreakdown.mealTimingFactor > 1
+                              ? ` (+${((insulinBreakdown.mealTimingFactor - 1) * 100).toFixed(1)}% increase)`
+                              : insulinBreakdown.mealTimingFactor < 1
+                                  ? ` (${((insulinBreakdown.mealTimingFactor - 1) * 100).toFixed(1)}% decrease)`
+                                  : ' (no adjustment)'}
+    </span></li>
+                        {/* Removed the Time of day factor */}
+                        <li>Activity impact: <span className={styles.valueHighlight}>
+      {((insulinBreakdown.activityImpact - 1) * 100).toFixed(1)}%
+                          {insulinBreakdown.activityImpact > 1
+                              ? ` (+${((insulinBreakdown.activityImpact - 1) * 100).toFixed(1)}% increase)`
+                              : insulinBreakdown.activityImpact < 1
+                                  ? ` (${((insulinBreakdown.activityImpact - 1) * 100).toFixed(1)}% decrease)`
+                                  : ' (no adjustment)'}
+    </span></li>
+                        <li className={styles.summaryLine}>
+                          Adjusted Insulin: <span className={styles.valueHighlight}>
+        {insulinBreakdown.adjustedInsulin.toFixed(1)}
+      </span> units
+                          <div className={styles.formulaExplanation}>
+                            <small>
+                              (Base insulin × Absorption × Meal timing × Activity factor)
+                              {/* Removed Time of day from the formula explanation */}
+                            </small>
+                          </div>
+                        </li>
+                      </ul>
+                    </div>
                 )}
               </div>
 
               {/* Pharmacokinetics Adjustments Card */}
               {healthFactors && healthFactors.healthMultiplier !== 1 && (
-                <div
-                  className={`${styles.breakdownCard} ${expandedCard === 'health' ? styles.expanded : ''}`}
-                  onClick={() => handleCardClick('health')}
-                >
-                  <div className={styles.breakdownHeader}>
-                    <div className={styles.headerContent}>
-                      <span>Pharmacokinetics Adjustments</span>
-                      {expandedCard === 'health' ? <FaChevronUp/> : <FaChevronDown/>}
+                  <div
+                      className={`${styles.breakdownCard} ${expandedCard === 'health' ? styles.expanded : ''}`}
+                      onClick={() => handleCardClick('health')}
+                  >
+                    <div className={styles.breakdownHeader}>
+                      <div className={styles.headerContent}>
+                        <span>Pharmacokinetics Adjustments</span>
+                        {expandedCard === 'health' ? <FaChevronUp/> : <FaChevronDown/>}
+                      </div>
+                      <div className={`${styles.breakdownValue} ${
+                          healthFactors.healthMultiplier < 1 ? styles.impactNegative : styles.impactPositive
+                      }`}>
+                        {((healthFactors.healthMultiplier - 1) * 100).toFixed(1)}%
+                        {healthFactors.healthMultiplier > 1 ? ' Increase' : ' Decrease'}
+                      </div>
                     </div>
-                    <div className={`${styles.breakdownValue} ${
-                      healthFactors.healthMultiplier < 1 ? styles.impactNegative : styles.impactPositive
-                    }`}>
-                      {((healthFactors.healthMultiplier - 1) * 100).toFixed(1)}%
-                      {healthFactors.healthMultiplier > 1 ? ' Increase' : ' Decrease'}
-                    </div>
-                  </div>
 
-                  {expandedCard === 'health' && (
-                    <div className={styles.expandedContent}>
-                      {healthFactors.conditions.length > 0 && (
-                        <div className={styles.healthSection}>
-                          <h4>Active Conditions:</h4>
-                          <ul>
-                            {healthFactors.conditions.map(condition => (
-                              <li key={condition.name}>
-                                {condition.name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}:
-                                {condition.percentage}%
-                                {condition.factor > 1
-                                  ? ` (+${condition.percentage}% increase)`
-                                  : ` (${condition.percentage}% decrease)`}
+                    {expandedCard === 'health' && (
+                        <div className={styles.expandedContent}>
+                          {healthFactors.conditions.length > 0 && (
+                              <div className={styles.healthSection}>
+                                <h4>Active Conditions:</h4>
+                                <ul>
+                                  {healthFactors.conditions.map(condition => (
+                                      <li key={condition.name}>
+                                        {condition.name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}:
+                                        {condition.percentage}%
+                                        {condition.factor > 1
+                                            ? ` (+${condition.percentage}% increase)`
+                                            : ` (${condition.percentage}% decrease)`}
                               </li>
                             ))}
                           </ul>
@@ -765,8 +754,6 @@ const MealInput = () => {
                   </li>
                   <li>Meal
                     timing: {((backendCalculation.breakdown.meal_timing_factor - 1) * 100).toFixed(1)}%
-                  </li>
-                  <li>Time of day: {((backendCalculation.breakdown.time_factor - 1) * 100).toFixed(1)}%
                   </li>
                   <li>Activity
                     impact: {((backendCalculation.breakdown.activity_coefficient - 1) * 100).toFixed(1)}%

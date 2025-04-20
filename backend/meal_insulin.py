@@ -247,7 +247,7 @@ def calculate_meal_nutrition(food_items):
 
 
 def calculate_suggested_insulin(user_id, nutrition, activities, blood_glucose=None, meal_type='normal',
-                                calculation_factors=None):
+                               calculation_factors=None):
     try:
         constants = Constants(user_id)
         patient_constants = constants.get_patient_constants()
@@ -265,8 +265,8 @@ def calculate_suggested_insulin(user_id, nutrition, activities, blood_glucose=No
             try:
                 absorption_factor = float(
                     calculation_factors.get('absorptionFactor', nutrition.get('absorption_factor', 1.0)))
-                time_factor = float(calculation_factors.get('timeOfDayFactor', 1.0))
                 meal_timing_factor = float(calculation_factors.get('mealTimingFactor', 1.0))
+                # Removed time_factor
                 activity_coefficient = float(calculation_factors.get('activityImpact', 1.0))
 
                 # Use the provided health multiplier instead of recalculating
@@ -292,12 +292,12 @@ def calculate_suggested_insulin(user_id, nutrition, activities, blood_glucose=No
             # Use default calculations if no factors provided
             absorption_factor = nutrition.get('absorption_factor', 1.0)
             meal_timing_factor = get_meal_timing_factor(meal_type)
-            time_factor = get_time_of_day_factor()
+            # Removed time_factor
             activity_coefficient = calculate_activity_impact(activities)
             health_multiplier = calculate_health_factors(user_id)
 
-        # Calculate adjusted insulin
-        adjusted_insulin = base_insulin * absorption_factor * meal_timing_factor * time_factor * activity_coefficient
+        # Calculate adjusted insulin (removed time_factor)
+        adjusted_insulin = base_insulin * absorption_factor * meal_timing_factor * activity_coefficient
 
         # Calculate correction insulin if needed
         correction_insulin = 0
@@ -321,7 +321,7 @@ def calculate_suggested_insulin(user_id, nutrition, activities, blood_glucose=No
                 'health_multiplier': round(health_multiplier, 2),
                 'absorption_factor': absorption_factor,
                 'meal_timing_factor': meal_timing_factor,
-                'time_factor': time_factor
+                # Removed time_factor from breakdown
             }
         }
 
@@ -449,6 +449,7 @@ def submit_meal(current_user):
             'timestamp': current_time,  # When the record was created
             'mealType': data['mealType'],
             'foodItems': data['foodItems'],
+            'nutrition': nutrition,
             'activities': [{
                 'level': activity.get('level'),
                 'duration': activity.get('duration'),
@@ -457,7 +458,6 @@ def submit_meal(current_user):
                 'startTime': activity.get('startTime'),
                 'endTime': activity.get('endTime')
             } for activity in data['activities']],
-            'nutrition': nutrition,
             'bloodSugar': data.get('bloodSugar'),
             'bloodSugarTimestamp': blood_sugar_timestamp,
             'bloodSugarSource': data.get('bloodSugarSource', 'direct'),
@@ -707,8 +707,8 @@ def get_meals(current_user):
                 "id": str(meal['_id']),
                 "mealType": meal['mealType'],
                 "foodItems": meal['foodItems'],
-                "activities": meal['activities'],
                 "nutrition": meal['nutrition'],
+                "activities": meal['activities'],
                 "bloodSugar": meal.get('bloodSugar'),
                 "bloodSugarTimestamp": meal.get('bloodSugarTimestamp'),  # Ensure this is included
                 "bloodSugarSource": meal.get('bloodSugarSource', 'direct'),  # Include source if available
