@@ -11,12 +11,17 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
-  Area
+  Area,
+  ReferenceLine
 } from 'recharts';
 import { useTable, useSortBy, usePagination } from 'react-table';
+import { useConstants } from '../contexts/ConstantsContext';
 import './InsulinVisualization.css';
 
 const InsulinVisualization = ({ isDoctor = false, patientId = null }) => {
+  // Use constants context for patient-specific insulin parameters
+  const { patientConstants } = useConstants();
+
   // State management
   const [insulinData, setInsulinData] = useState([]);
   const [bloodSugarData, setBloodSugarData] = useState([]);
@@ -35,34 +40,30 @@ const InsulinVisualization = ({ isDoctor = false, patientId = null }) => {
   const [viewMode, setViewMode] = useState('combined'); // 'combined', 'doses', or 'effect'
   const [userTimeZone, setUserTimeZone] = useState('');
   const [dataFetched, setDataFetched] = useState(false);
+  const [includeFutureEffect, setIncludeFutureEffect] = useState(true);
+  const [futureHours, setFutureHours] = useState(7); // Hours to project into future
 
   // Get user's time zone on component mount
   useEffect(() => {
     setUserTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
   }, []);
 
-  // Helper function to get insulin parameters (onset, peak, duration)
+  // Helper function to get insulin parameters from patient constants
   const getInsulinParameters = useCallback((insulinType) => {
-    // These should ideally come from your API/constants
+    // Default parameters as fallback
     const defaultParams = {
       onset_hours: 0.5,
       peak_hours: 2,
-      duration_hours: 5
+      duration_hours: 5,
+      type: 'short_acting'
     };
 
-    // Map for common insulin types
-    const insulinParams = {
-      'insulin_aspart': { onset_hours: 0.25, peak_hours: 1, duration_hours: 3 },
-      'insulin_lispro': { onset_hours: 0.25, peak_hours: 1, duration_hours: 3.5 },
-      'insulin_glulisine': { onset_hours: 0.25, peak_hours: 1, duration_hours: 3 },
-      'regular_insulin': { onset_hours: 0.5, peak_hours: 2, duration_hours: 5 },
-      'nph_insulin': { onset_hours: 1.5, peak_hours: 6, duration_hours: 12 },
-      'insulin_detemir': { onset_hours: 1, peak_hours: null, duration_hours: 24 },
-      'insulin_glargine': { onset_hours: 1, peak_hours: null, duration_hours: 24 }
-    };
+    // Get medication factors from patient constants
+    const medicationFactors = patientConstants.medication_factors || {};
 
-    return insulinParams[insulinType] || defaultParams;
-  }, []);
+    // Return patient-specific parameters if available, otherwise use defaults
+    return medicationFactors[insulinType] || defaultParams;
+  }, [patientConstants]);
 
   // Calculate insulin effect at a given time point
   const calculateInsulinEffect = useCallback((hoursSinceDose, dose, onsetHours, peakHours, durationHours) => {
@@ -100,11 +101,11 @@ const InsulinVisualization = ({ isDoctor = false, patientId = null }) => {
     return Math.max(0, effect);
   }, []);
 
-  // Generate combined data for timeline visualization - moved outside fetchData to avoid circular dependencies
+  // Generate combined data for timeline visualization
   const generateCombinedData = useCallback((insulinData, bloodGlucoseData) => {
     try {
-      // Find the earliest and latest timestamps
-      const allTimestamps = [
+      // Find the earliest and latest timestamps, including future projections if enabled
+      let allTimestamps = [
         ...insulinData.map(d => d.administrationTime),
         ...bloodGlucoseData.map(d => d.readingTime)
       ];
@@ -114,11 +115,18 @@ const InsulinVisualization = ({ isDoctor = false, patientId = null }) => {
       }
 
       const minTime = Math.min(...allTimestamps);
-      const maxTime = Math.max(...allTimestamps);
+      let maxTime = Math.max(...allTimestamps);
 
-      // Generate timeline with 30-minute intervals
+      // If including future effects, extend the timeline by the specified number of hours
+      if (includeFutureEffect) {
+        const futureTime = moment().add(futureHours, 'hours').valueOf();
+        maxTime = Math.max(maxTime, futureTime);
+      }
+
+      // Generate timeline with 15-minute intervals
       const timelineData = [];
       let currentTime = minTime;
+      const interval = 15 * 60 * 1000; // 15 minutes in milliseconds
 
       while (currentTime <= maxTime) {
         const timePoint = {
@@ -129,7 +137,7 @@ const InsulinVisualization = ({ isDoctor = false, patientId = null }) => {
           totalInsulinEffect: 0
         };
 
-        // Add blood sugar reading if available at this time (use local variable for safe capture)
+        // Add blood sugar reading if available at this time
         const searchTime = currentTime;
         const closestBloodSugar = bloodGlucoseData.find(bs =>
           Math.abs(bs.readingTime - searchTime) < 15 * 60 * 1000 // Within 15 minutes
@@ -142,7 +150,7 @@ const InsulinVisualization = ({ isDoctor = false, patientId = null }) => {
         }
 
         // Calculate insulin doses and effects at this time
-        const thisMoment = currentTime; // Create a stable reference for the calculations
+        const thisMoment = currentTime;
         insulinData.forEach(dose => {
           // Record doses given at this time
           if (Math.abs(dose.administrationTime - thisMoment) < 15 * 60 * 1000) { // Within 15 minutes
@@ -152,8 +160,8 @@ const InsulinVisualization = ({ isDoctor = false, patientId = null }) => {
           // Calculate expected effect from each previous dose at current time
           const hoursSinceDose = (thisMoment - dose.administrationTime) / (60 * 60 * 1000);
 
-          // Only calculate effect for doses in the past
-          if (hoursSinceDose >= 0) {
+          // Calculate effects for all doses (past and future projections)
+          if (hoursSinceDose >= 0 || includeFutureEffect) {
             // Fetch insulin parameters
             const insulinParams = getInsulinParameters(dose.medication);
 
@@ -166,14 +174,16 @@ const InsulinVisualization = ({ isDoctor = false, patientId = null }) => {
               insulinParams.duration_hours
             );
 
-            timePoint.insulinEffects[dose.medication] =
-              (timePoint.insulinEffects[dose.medication] || 0) + effect;
-            timePoint.totalInsulinEffect += effect;
+            if (effect > 0) {
+              timePoint.insulinEffects[dose.medication] =
+                (timePoint.insulinEffects[dose.medication] || 0) + effect;
+              timePoint.totalInsulinEffect += effect;
+            }
           }
         });
 
         timelineData.push(timePoint);
-        currentTime += 30 * 60 * 1000; // 30-minute intervals
+        currentTime += interval;
       }
 
       return timelineData;
@@ -181,9 +191,9 @@ const InsulinVisualization = ({ isDoctor = false, patientId = null }) => {
       console.error('Error generating combined data:', error);
       return [];
     }
-  }, [calculateInsulinEffect, getInsulinParameters]);
+  }, [calculateInsulinEffect, getInsulinParameters, includeFutureEffect, futureHours]);
 
-  // Fetch insulin and blood sugar data - ensure this has stable dependencies
+  // Fetch insulin and blood sugar data
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
@@ -192,20 +202,23 @@ const InsulinVisualization = ({ isDoctor = false, patientId = null }) => {
         throw new Error('Authentication token not found');
       }
 
-      // Fetch insulin data
+      // Calculate the date range including future hours
+      const endDate = moment(dateRange.end).add(includeFutureEffect ? futureHours : 0, 'hours').format('YYYY-MM-DD');
+
+      // Use the correct endpoint for comprehensive insulin data
       const insulinResponse = await axios.get(
-        `http://localhost:5000/api/medication-logs/recent?medication_type=insulin&days=7&limit=50`,
+        `http://localhost:5000/api/insulin-data?days=30&end_date=${endDate}${patientId ? `&patient_id=${patientId}` : ''}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
       // Fetch blood sugar data for the same period
       const bloodSugarResponse = await axios.get(
-        `http://localhost:5000/api/blood-sugar?start_date=${dateRange.start}&end_date=${dateRange.end}`,
+        `http://localhost:5000/api/blood-sugar?start_date=${dateRange.start}&end_date=${endDate}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
-      // Process insulin data
-      const insulinLogs = insulinResponse.data.logs || [];
+      // Process insulin data from the comprehensive endpoint
+      const insulinLogs = insulinResponse.data.insulin_logs || [];
 
       // Extract unique insulin types
       const types = [...new Set(insulinLogs.map(log => log.medication))];
@@ -216,10 +229,10 @@ const InsulinVisualization = ({ isDoctor = false, patientId = null }) => {
         setSelectedInsulinTypes(types);
       }
 
-      // Process and enhance insulin data with pharmacokinetic curves
+      // Process and enhance insulin data
       const processedInsulinData = insulinLogs.map(log => {
         // Parse administration time
-        const adminTime = moment.utc(log.taken_at || log.scheduled_time).local();
+        const adminTime = moment(log.taken_at);
 
         return {
           id: log.id || `insulin-${adminTime.valueOf()}`,
@@ -230,14 +243,16 @@ const InsulinVisualization = ({ isDoctor = false, patientId = null }) => {
           notes: log.notes || '',
           mealType: log.meal_type || 'N/A',
           bloodSugar: log.blood_sugar,
-          suggestedDose: log.suggested_dose
+          suggestedDose: log.suggested_dose,
+          // Include pharmacokinetics from the API
+          pharmacokinetics: log.pharmacokinetics || getInsulinParameters(log.medication)
         };
       });
 
       // Process blood sugar data
       const processedBloodSugarData = bloodSugarResponse.data.map(reading => {
         // Use reading time if available, otherwise use recording time
-        const readingTime = moment.utc(reading.bloodSugarTimestamp || reading.timestamp).local();
+        const readingTime = moment(reading.blood_sugar_timestamp || reading.timestamp);
 
         return {
           id: reading._id,
@@ -249,12 +264,18 @@ const InsulinVisualization = ({ isDoctor = false, patientId = null }) => {
         };
       });
 
+      // Filter insulin data based on date range
+      const startDate = moment(dateRange.start).startOf('day').valueOf();
+      const filteredInsulinData = processedInsulinData.filter(insulin => {
+        return insulin.administrationTime >= startDate;
+      });
+
       // Save the processed data
-      setInsulinData(processedInsulinData);
+      setInsulinData(filteredInsulinData);
       setBloodSugarData(processedBloodSugarData);
 
-      // Generate combined data outside of state setter to avoid render loops
-      const combinedResult = generateCombinedData(processedInsulinData, processedBloodSugarData);
+      // Generate combined data
+      const combinedResult = generateCombinedData(filteredInsulinData, processedBloodSugarData);
       setCombinedData(combinedResult);
 
       setError('');
@@ -265,7 +286,7 @@ const InsulinVisualization = ({ isDoctor = false, patientId = null }) => {
     } finally {
       setLoading(false);
     }
-  }, [dateRange.start, dateRange.end, generateCombinedData, selectedInsulinTypes.length]); // Added selectedInsulinTypes.length per ESLint
+  }, [dateRange, generateCombinedData, patientId, selectedInsulinTypes.length, getInsulinParameters, includeFutureEffect, futureHours]);
 
   // Effect to fetch data once when component mounts and when necessary params change
   useEffect(() => {
@@ -458,10 +479,27 @@ const InsulinVisualization = ({ isDoctor = false, patientId = null }) => {
     return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
   }
 
+  // Toggle future effects projection
+  const toggleFutureEffect = useCallback(() => {
+    setIncludeFutureEffect(!includeFutureEffect);
+  }, [includeFutureEffect]);
+
   // Force update the data
   const handleForceUpdate = useCallback(() => {
     fetchData();
   }, [fetchData]);
+
+  // Get the target blood sugar from patient constants
+  const targetGlucose = useMemo(() => {
+    return patientConstants.target_glucose || 100;
+  }, [patientConstants]);
+
+  // Determine which Y-axis ID to use for the current time reference line
+  const currentTimeYAxisId = useMemo(() => {
+    if (showActualBloodSugar) return "bloodSugar";
+    if (viewMode === 'doses' || viewMode === 'combined') return "insulinDose";
+    return "insulinEffect";
+  }, [showActualBloodSugar, viewMode]);
 
   return (
     <div className="insulin-visualization">
@@ -573,6 +611,26 @@ const InsulinVisualization = ({ isDoctor = false, patientId = null }) => {
             />
             Show Insulin Effect
           </label>
+          <label className="display-option">
+            <input
+              type="checkbox"
+              checked={includeFutureEffect}
+              onChange={toggleFutureEffect}
+            />
+            Project Future Effect
+          </label>
+          {includeFutureEffect && (
+            <div className="future-hours">
+              <label>Future Hours:</label>
+              <input
+                type="number"
+                min="1"
+                max="24"
+                value={futureHours}
+                onChange={(e) => setFutureHours(parseInt(e.target.value) || 7)}
+              />
+            </div>
+          )}
         </div>
 
         <button className="update-btn" onClick={handleForceUpdate}>Update Data</button>
@@ -642,6 +700,17 @@ const InsulinVisualization = ({ isDoctor = false, patientId = null }) => {
                   <Tooltip content={<CustomTooltip />} />
                   <Legend />
 
+                  {/* Target glucose reference line */}
+                  {showActualBloodSugar && (
+                    <ReferenceLine
+                      y={targetGlucose}
+                      yAxisId="bloodSugar"
+                      label="Target"
+                      stroke="#FF7300"
+                      strokeDasharray="3 3"
+                    />
+                  )}
+
                   {/* Blood Sugar Line */}
                   {showActualBloodSugar && (
                     <Line
@@ -696,6 +765,15 @@ const InsulinVisualization = ({ isDoctor = false, patientId = null }) => {
                       dot={false}
                     />
                   ))}
+
+                  {/* Current time reference line - FIXED: added yAxisId */}
+                  <ReferenceLine
+                    x={Date.now()}
+                    yAxisId={currentTimeYAxisId}
+                    stroke="#ff0000"
+                    strokeWidth={2}
+                    label={{ value: 'Now', position: 'top', fill: '#ff0000' }}
+                  />
                 </ComposedChart>
               </ResponsiveContainer>
 
@@ -719,7 +797,13 @@ const InsulinVisualization = ({ isDoctor = false, patientId = null }) => {
                           <span>Onset: {params.onset_hours} hrs</span>
                           {params.peak_hours && <span>Peak: {params.peak_hours} hrs</span>}
                           <span>Duration: {params.duration_hours} hrs</span>
+                          <span>Type: {params.type.replace(/_/g, ' ')}</span>
                         </div>
+                        {params.brand_names && (
+                          <div className="insulin-brands">
+                            <small>Brands: {params.brand_names.join(', ')}</small>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
