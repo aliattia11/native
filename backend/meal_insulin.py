@@ -3,7 +3,6 @@ from bson.objectid import ObjectId
 from datetime import datetime
 import json  # Add this import
 from flask_cors import cross_origin
-# Updated imports
 from utils.auth import token_required
 from utils.error_handler import api_error_handler
 from constants import Constants
