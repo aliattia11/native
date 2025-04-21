@@ -166,7 +166,8 @@ useEffect(() => {
       const headers = { Authorization: `Bearer ${token}` };
 
       // Prepare API parameters for time-based filtering
-      let activityParams, bloodSugarParams;
+      let activityParams = {};
+      let bloodSugarParams = {};
 
       // If using exactHours (for 24h filter), pass precise timestamps
       if (dateRange.exactHours) {
@@ -174,7 +175,7 @@ useEffect(() => {
         activityParams = {
           include_details: true,
           patient_id: patientId || undefined,
-          filter_by: 'start_time',
+          filter_by: 'startTime',  // Ensure this matches your backend field name
           start_time: dateRange.startTime,
           end_time: dateRange.endTime
         };
@@ -182,18 +183,17 @@ useEffect(() => {
         // Blood sugar params - use the same time window
         bloodSugarParams = {
           patient_id: patientId || undefined,
-          filter_by: 'reading_time', // Use appropriate field for blood sugar
+          filter_by: 'reading_time',
           start_time: dateRange.startTime,
           end_time: dateRange.endTime
         };
 
         console.log(`Fetching data with exact time range from ${dateRange.startTime} to ${dateRange.endTime}`);
       } else {
-        // Activity params - filter by date with start time focus
+        // Activity params - filter by date
         activityParams = {
           include_details: true,
           patient_id: patientId || undefined,
-          filter_by: 'start_time',
           start_date: dateRange.start,
           end_date: dateRange.end
         };
@@ -209,52 +209,17 @@ useEffect(() => {
         console.log(`Fetching data from ${dateRange.start} to ${dateRange.end}`);
       }
 
-      // Fetch activity data
-     const activityResponse = await axios.get(
-  'http://localhost:5000/api/activity-history',
-  {
-    params: {
-      include_details: true,
-      patient_id: patientId || undefined,
-      // Use more specific parameters based on exactHours flag
-      ...(dateRange.exactHours
-        ? {
-            filter_by: 'start_time',
-            start_time: dateRange.startTime,
-            end_time: dateRange.endTime
-          }
-        : {
-            filter_by: 'start_time',
-            start_date: dateRange.start,
-            end_date: dateRange.end
-          }
-      )
-    },
-    headers
-  }
-);
+      // Fetch activity data with the properly constructed parameters
+      const activityResponse = await axios.get(
+        'http://localhost:5000/api/activity-history',
+        { params: activityParams, headers }
+      );
 
       // Fetch blood sugar data with the matching time window
-    const bloodSugarResponse = await axios.get(
-  'http://localhost:5000/api/blood-sugar',
-  {
-    params: {
-      patient_id: patientId || undefined,
-      filter_by: 'reading_time',
-      ...(dateRange.exactHours
-        ? {
-            start_time: dateRange.startTime,
-            end_time: dateRange.endTime
-          }
-        : {
-            start_date: dateRange.start,
-            end_date: dateRange.end
-          }
-      )
-    },
-    headers
-  }
-);
+      const bloodSugarResponse = await axios.get(
+        'http://localhost:5000/api/blood-sugar',
+        { params: bloodSugarParams, headers }
+      );
 
       const activityLogs = activityResponse.data || [];
       const bloodSugarReadings = bloodSugarResponse.data || [];
