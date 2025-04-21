@@ -143,118 +143,113 @@ def add_blood_sugar(current_user):
         logger.error(f"Error recording blood sugar: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+
 @blood_sugar_bp.route('/api/blood-sugar', methods=['GET'])
 @token_required
-def get_blood_sugar(current_user):
+@api_error_handler
+def get_blood_sugar_data(current_user):
     try:
-        user_constants = Constants(str(current_user['_id']))
-        start_date = request.args.get('start_date')
-        end_date = request.args.get('end_date')
-        unit = request.args.get('unit', 'mg/dL')
+        # Get query parameters
+        start_date_str = request.args.get('start_date')
+        end_date_str = request.args.get('end_date')
+        # Precise time parameters
+        start_time = request.args.get('start_time')
+        end_time = request.args.get('end_time')
+        # Check if we should filter by reading time instead of record timestamp
+        filter_by = request.args.get('filter_by', 'timestamp')
 
-        # Convert dates to datetime objects with better error handling
-        try:
-            if start_date:
-                start = datetime.strptime(start_date, '%Y-%m-%d')
-            else:
-                start = datetime.utcnow() - timedelta(days=30)  # Default to last 30 days
+        # Determine user ID (allow doctors to view patient data)
+        patient_id = request.args.get('patient_id')
+        if patient_id and current_user.get('user_type') != 'doctor':
+            return jsonify({"error": "Unauthorized to view patient data"}), 403
 
-            if end_date:
-                end = datetime.strptime(end_date, '%Y-%m-%d')
-            else:
-                end = datetime.utcnow()
-        except ValueError as e:
-            logger.error(f"Date parsing error: {str(e)}")
-            return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
+        user_id = patient_id if patient_id else str(current_user['_id'])
 
-        # Build query
-        query = {'user_id': str(current_user['_id'])}
-        query['timestamp'] = {
-            '$gte': start,
-            '$lte': end + timedelta(days=1)  # Include the full end date
-        }
+        # Base query - always filter by user
+        query = {"user_id": user_id}
 
-        readings = list(mongo.db.blood_sugar.find(query).sort('timestamp', -1))
-        target_glucose = user_constants.get_constant('target_glucose')
+        # Handle filtering based on time parameters
+        if start_time or end_time or start_date_str or end_date_str:
+            # Parse the provided time parameters
+            start_datetime = None
+            end_datetime = None
 
-        # Process readings
-        for reading in readings:
-            reading['_id'] = str(reading['_id'])
-            if isinstance(reading.get('timestamp'), datetime):
-                reading['timestamp'] = reading['timestamp'].isoformat()
+            # Process exact timestamps if provided
+            if start_time:
+                try:
+                    start_datetime = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
+                    logger.debug(f"Using exact start time: {start_datetime}")
+                except ValueError:
+                    return jsonify({"error": "Invalid start_time format"}), 400
 
-            # Add status if not present
-            if 'status' not in reading:
-                reading['status'] = get_blood_sugar_status(reading['bloodSugar'], target_glucose)
+            if end_time:
+                try:
+                    end_datetime = datetime.fromisoformat(end_time.replace('Z', '+00:00'))
+                    logger.debug(f"Using exact end time: {end_datetime}")
+                except ValueError:
+                    return jsonify({"error": "Invalid end_time format"}), 400
 
-            # Convert to mmol/L if requested
-            if unit == 'mmol/L':
-                reading['bloodSugar'] = round(reading['bloodSugar'] / 18, 1)
-                if 'target' in reading:
-                    reading['target'] = round(reading['target'] / 18, 1)
+            # Fall back to date strings if no exact times
+            if not start_datetime and start_date_str:
+                try:
+                    start_datetime = datetime.strptime(start_date_str, '%Y-%m-%d')
+                    logger.debug(f"Using start date: {start_datetime}")
+                except ValueError:
+                    return jsonify({"error": "Invalid start_date format"}), 400
 
-        return jsonify(readings)
+            if not end_datetime and end_date_str:
+                try:
+                    # Add one day to include full end date
+                    end_datetime = datetime.strptime(end_date_str, '%Y-%m-%d') + timedelta(days=1)
+                    logger.debug(f"Using end date: {end_datetime}")
+                except ValueError:
+                    return jsonify({"error": "Invalid end_date format"}), 400
+
+            # Build time filter based on the specified field
+            time_filter = {}
+            if start_datetime:
+                time_filter["$gte"] = start_datetime
+            if end_datetime:
+                time_filter["$lt"] = end_datetime
+
+            if time_filter:
+                if filter_by == 'reading_time':
+                    # Filter by when blood sugar was measured (bloodSugarTimestamp)
+                    query["bloodSugarTimestamp"] = time_filter
+                else:
+                    # Default filter by record creation time
+                    query["timestamp"] = time_filter
+
+        logger.debug(f"Blood sugar query: {query}")
+
+        # Execute the query
+        blood_sugar_readings = list(mongo.db.blood_sugar.find(query).sort("timestamp", -1))
+        logger.debug(f"Found {len(blood_sugar_readings)} blood sugar readings")
+
+        # Format the response data
+        formatted_readings = []
+        for reading in blood_sugar_readings:
+            formatted_reading = {
+                "_id": str(reading["_id"]),
+                "bloodSugar": reading["bloodSugar"],
+                "timestamp": reading["timestamp"].isoformat() + "Z",
+                "status": reading.get("status", "unknown"),
+                "notes": reading.get("notes", "")
+            }
+
+            # Include reading time if available (when blood sugar was actually measured)
+            if "bloodSugarTimestamp" in reading:
+                formatted_reading["bloodSugarTimestamp"] = reading[
+                                                               "bloodSugarTimestamp"].isoformat() + "Z" if isinstance(
+                    reading["bloodSugarTimestamp"], datetime) else reading["bloodSugarTimestamp"]
+
+            formatted_readings.append(formatted_reading)
+
+        return jsonify(formatted_readings), 200
+
     except Exception as e:
-        logger.error(f"Error fetching blood sugar data: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-
-@blood_sugar_bp.route('/doctor/patient/<patient_id>/blood-sugar', methods=['GET'])
-@token_required
-def get_patient_blood_sugar(current_user, patient_id):
-    try:
-        if current_user.get('user_type') != 'doctor':
-            return jsonify({'message': 'Unauthorized access'}), 403
-
-        patient_constants = Constants(patient_id)
-        start_date = request.args.get('start_date')
-        end_date = request.args.get('end_date')
-        unit = request.args.get('unit', 'mg/dL')
-
-        # Convert dates to datetime objects with better error handling
-        try:
-            if start_date:
-                start = datetime.strptime(start_date, '%Y-%m-%d')
-            else:
-                start = datetime.utcnow() - timedelta(days=30)  # Default to last 30 days
-
-            if end_date:
-                end = datetime.strptime(end_date, '%Y-%m-%d')
-            else:
-                end = datetime.utcnow()
-        except ValueError as e:
-            logger.error(f"Date parsing error: {str(e)}")
-            return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
-
-        # Build query
-        query = {'user_id': patient_id}
-        query['timestamp'] = {
-            '$gte': start,
-            '$lte': end + timedelta(days=1)  # Include the full end date
-        }
-
-        readings = list(mongo.db.blood_sugar.find(query).sort('timestamp', -1))
-        target_glucose = patient_constants.get_constant('target_glucose')
-
-        # Process readings
-        for reading in readings:
-            reading['_id'] = str(reading['_id'])
-            if isinstance(reading.get('timestamp'), datetime):
-                reading['timestamp'] = reading['timestamp'].isoformat()
-
-            # Add status if not present
-            if 'status' not in reading:
-                reading['status'] = get_blood_sugar_status(reading['bloodSugar'], target_glucose)
-
-            # Convert to mmol/L if requested
-            if unit == 'mmol/L':
-                reading['bloodSugar'] = round(reading['bloodSugar'] / 18, 1)
-                if 'target' in reading:
-                    reading['target'] = round(reading['target'] / 18, 1)
-
-        return jsonify(readings)
-    except Exception as e:
-        logger.error(f"Error fetching patient blood sugar data: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error retrieving blood sugar data: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 
 @blood_sugar_bp.route('/api/blood-sugar/<patient_id>')
