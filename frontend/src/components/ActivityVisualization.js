@@ -211,9 +211,16 @@ useEffect(() => {
 
       // Fetch activity data
       const activityResponse = await axios.get(
-        'http://localhost:5000/api/activity',
-        { params: activityParams, headers }
-      );
+  'http://localhost:5000/api/activity-history',
+  {
+    params: {
+      start_date: dateRange.start,
+      end_date: dateRange.end,
+      include_details: true
+    },
+    headers
+  }
+);
 
       // Fetch blood sugar data with the matching time window
       const bloodSugarResponse = await axios.get(
