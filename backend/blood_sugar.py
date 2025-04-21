@@ -253,7 +253,7 @@ def get_blood_sugar_data(current_user):
 
 
 @blood_sugar_bp.route('/api/blood-sugar/<patient_id>')
-def get_blood_sugar_data(patient_id):
+def get_patient_blood_sugar_data(patient_id):  # RENAMED THIS FUNCTION
     range_param = request.args.get('range', 'week')
     # Calculate date range based on parameter
     if range_param == 'day':
