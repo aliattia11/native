@@ -162,13 +162,12 @@ def get_activity_history(current_user):
         # Parse query parameters for date filtering
         start_date_str = request.args.get('start_date')
         end_date_str = request.args.get('end_date')
-        filter_by = request.args.get('filter_by', 'timestamp')  # Default to timestamp if not specified
-        logger.debug(f"Date range: {start_date_str} to {end_date_str}, filter by: {filter_by}")
+        logger.debug(f"Date range: {start_date_str} to {end_date_str}")
 
         # Build the query
         query = {"user_id": user_id}
 
-        # Add date range if provided - using the specified filter field
+        # Add date range if provided - using $or to include activities that overlap the range
         if start_date_str or end_date_str:
             start_date = None
             end_date = None
@@ -191,51 +190,69 @@ def get_activity_history(current_user):
                     logger.error(f"Error parsing end date '{end_date_str}': {e}")
                     return jsonify({"error": f"Invalid end date format: {end_date_str}"}), 400
 
-            # Determine which field to filter on
-            filter_field = filter_by
-            if filter_by == 'start_time':
-                filter_field = 'startTime'
-            elif filter_by == 'end_time':
-                filter_field = 'endTime'
-            elif filter_by == 'expected_time':
-                filter_field = 'expectedTime'
-            elif filter_by == 'completed_time':
-                filter_field = 'completedTime'
+            # Create time range filter conditions using $or to capture all relevant activities
+            # An activity is relevant if:
+            # 1. Its timestamp is within range (traditional filter)
+            # 2. OR its startTime/expectedTime is within range
+            # 3. OR its endTime is within range
+            # 4. OR it spans the entire range (starts before and ends after)
+            time_conditions = []
 
-            # Apply the filter
-            time_filter = {}
+            # Condition 1: Traditional timestamp filter
+            timestamp_condition = {}
             if start_date:
-                time_filter["$gte"] = start_date
+                timestamp_condition["$gte"] = start_date
             if end_date:
-                time_filter["$lt"] = end_date
+                timestamp_condition["$lt"] = end_date
+            if timestamp_condition:
+                time_conditions.append({"timestamp": timestamp_condition})
 
-            if time_filter:
-                query[filter_field] = time_filter
+            # Condition 2: Start time within range
+            start_time_conditions = []
+            for time_field in ["startTime", "expectedTime", "completedTime"]:
+                if start_date and end_date:
+                    start_time_conditions.append({
+                        time_field: {"$gte": start_date, "$lt": end_date}
+                    })
+                elif start_date:
+                    start_time_conditions.append({
+                        time_field: {"$gte": start_date}
+                    })
+                elif end_date:
+                    start_time_conditions.append({
+                        time_field: {"$lt": end_date}
+                    })
 
-            # For activities that might not have the specific field we're filtering on,
-            # we'll also include a fallback query for timestamp
-            if filter_field != 'timestamp':
-                # Create a complex query with $or to also include activities filtered by timestamp
-                timestamp_condition = {}
-                if start_date:
-                    timestamp_condition["$gte"] = start_date
-                if end_date:
-                    timestamp_condition["$lt"] = end_date
+            # Condition 3: End time within range
+            end_time_conditions = []
+            if "endTime" in mongo.db.activities.find_one({}, {"_id": 0, "endTime": 1}):
+                if start_date and end_date:
+                    end_time_conditions.append({
+                        "endTime": {"$gte": start_date, "$lt": end_date}
+                    })
+                elif start_date:
+                    end_time_conditions.append({
+                        "endTime": {"$gte": start_date}
+                    })
+                elif end_date:
+                    end_time_conditions.append({
+                        "endTime": {"$lt": end_date}
+                    })
 
-                if timestamp_condition:
-                    query = {
-                        "$and": [
-                            {"user_id": user_id},
-                            {"$or": [
-                                {filter_field: time_filter},
-                                # Only include timestamp filter for activities missing the primary filter field
-                                {"$and": [
-                                    {"timestamp": timestamp_condition},
-                                    {filter_field: {"$exists": False}}
-                                ]}
-                            ]}
-                        ]
-                    }
+            # Condition 4: Activity spans the entire range
+            span_conditions = []
+            if start_date and end_date and "startTime" in mongo.db.activities.find_one({}, {"_id": 0,
+                                                                                            "startTime": 1}) and "endTime" in mongo.db.activities.find_one(
+                    {}, {"_id": 0, "endTime": 1}):
+                span_conditions.append({
+                    "startTime": {"$lte": start_date},
+                    "endTime": {"$gte": end_date}
+                })
+
+            # Combine all conditions with $or
+            all_time_conditions = time_conditions + start_time_conditions + end_time_conditions + span_conditions
+            if all_time_conditions:
+                query["$or"] = all_time_conditions
 
         logger.debug(f"Final query: {query}")
 
