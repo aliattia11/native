@@ -174,7 +174,7 @@ useEffect(() => {
         activityParams = {
           include_details: true,
           patient_id: patientId || undefined,
-          filter_by: 'start_time',
+          filter_by: 'start_time',  // Explicitly filter by start_time
           start_time: dateRange.startTime,
           end_time: dateRange.endTime
         };
@@ -193,7 +193,7 @@ useEffect(() => {
         activityParams = {
           include_details: true,
           patient_id: patientId || undefined,
-          filter_by: 'start_time',
+          filter_by: 'start_time',  // Explicitly filter by start_time
           start_date: dateRange.start,
           end_date: dateRange.end
         };
@@ -209,58 +209,27 @@ useEffect(() => {
         console.log(`Fetching data from ${dateRange.start} to ${dateRange.end}`);
       }
 
-      // Fetch activity data
-     const activityResponse = await axios.get(
-  'http://localhost:5000/api/activity-history',
-  {
-    params: {
-      include_details: true,
-      patient_id: patientId || undefined,
-      // Use more specific parameters based on exactHours flag
-      ...(dateRange.exactHours
-        ? {
-            filter_by: 'start_time',
-            start_time: dateRange.startTime,
-            end_time: dateRange.endTime
-          }
-        : {
-            filter_by: 'start_time',
-            start_date: dateRange.start,
-            end_date: dateRange.end
-          }
-      )
-    },
-    headers
-  }
-);
+      // Fetch activity data with updated params
+      const activityResponse = await axios.get(
+        'http://localhost:5000/api/activity-history',
+        {
+          params: activityParams,
+          headers
+        }
+      );
 
       // Fetch blood sugar data with the matching time window
-    const bloodSugarResponse = await axios.get(
-  'http://localhost:5000/api/blood-sugar',
-  {
-    params: {
-      patient_id: patientId || undefined,
-      filter_by: 'reading_time',
-      ...(dateRange.exactHours
-        ? {
-            start_time: dateRange.startTime,
-            end_time: dateRange.endTime
-          }
-        : {
-            start_date: dateRange.start,
-            end_date: dateRange.end
-          }
-      )
-    },
-    headers
-  }
-);
+      const bloodSugarResponse = await axios.get(
+        'http://localhost:5000/api/blood-sugar',
+        { params: bloodSugarParams, headers }
+      );
 
       const activityLogs = activityResponse.data || [];
       const bloodSugarReadings = bloodSugarResponse.data || [];
 
       console.log(`Received ${activityLogs.length} activity records`);
       console.log(`Received ${bloodSugarReadings.length} blood sugar records`);
+
 
       // Process activity data
       const processedActivityData = activityLogs.map(activity => {
