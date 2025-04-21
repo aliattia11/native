@@ -427,3 +427,53 @@
   gap: 10px;
   flex-wrap: wrap;
 }
+.impact-accumulation-explanation {
+  margin-top: 20px;
+  padding: 15px;
+  background-color: #f0f8ff;  /* Light blue background */
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.impact-accumulation-explanation h5 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  color: #2c3e50;
+}
+
+.impact-accumulation-explanation p {
+  margin-bottom: 10px;
+}
+
+.impact-accumulation-explanation ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.impact-accumulation-explanation li {
+  margin-bottom: 6px;
+  font-size: 0.9rem;
+}
+
+.baseline-info {
+  margin-top: 12px;
+  padding: 8px 12px;
+  background-color: #e8f4fd;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+/* Enhanced tooltip for activity impacts */
+.tooltip-effect {
+  color: #2e86c1;
+  display: flex;
+  align-items: center;
+}
+
+.tooltip-effect-icon {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  margin-right: 6px;
+  background-color: #2ca02c;
+}

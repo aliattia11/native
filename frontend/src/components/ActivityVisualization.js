@@ -210,23 +210,51 @@ useEffect(() => {
       }
 
       // Fetch activity data
-      const activityResponse = await axios.get(
+     const activityResponse = await axios.get(
   'http://localhost:5000/api/activity-history',
   {
     params: {
-      start_date: dateRange.start,
-      end_date: dateRange.end,
-      include_details: true
+      include_details: true,
+      patient_id: patientId || undefined,
+      // Use more specific parameters based on exactHours flag
+      ...(dateRange.exactHours
+        ? {
+            filter_by: 'start_time',
+            start_time: dateRange.startTime,
+            end_time: dateRange.endTime
+          }
+        : {
+            filter_by: 'start_time',
+            start_date: dateRange.start,
+            end_date: dateRange.end
+          }
+      )
     },
     headers
   }
 );
 
       // Fetch blood sugar data with the matching time window
-      const bloodSugarResponse = await axios.get(
-        'http://localhost:5000/api/blood-sugar',
-        { params: bloodSugarParams, headers }
-      );
+    const bloodSugarResponse = await axios.get(
+  'http://localhost:5000/api/blood-sugar',
+  {
+    params: {
+      patient_id: patientId || undefined,
+      filter_by: 'reading_time',
+      ...(dateRange.exactHours
+        ? {
+            start_time: dateRange.startTime,
+            end_time: dateRange.endTime
+          }
+        : {
+            start_date: dateRange.start,
+            end_date: dateRange.end
+          }
+      )
+    },
+    headers
+  }
+);
 
       const activityLogs = activityResponse.data || [];
       const bloodSugarReadings = bloodSugarResponse.data || [];
@@ -665,31 +693,39 @@ useEffect(() => {
           <div className="date-input-group">
             <label htmlFor="start-date">From:</label>
             <input
-              id="start-date"
-              type="date"
-              name="start"
-              value={dateRange.start}
-              onChange={handleDateChange}
-              max={maxDate}
+                id="start-date"
+                type="date"
+                name="start"
+                value={dateRange.start}
+                onChange={handleDateChange}
+                max={maxDate}
             />
           </div>
           <div className="date-input-group">
             <label htmlFor="end-date">To:</label>
             <input
-              id="end-date"
-              type="date"
-              name="end"
-              value={dateRange.end}
-              onChange={handleDateChange}
-              max={maxDate}
+                id="end-date"
+                type="date"
+                name="end"
+                value={dateRange.end}
+                onChange={handleDateChange}
+                max={maxDate}
             />
           </div>
+          <div className="date-filter-info">
+            <small>
+              Date filters apply to activity start times and blood sugar reading times.
+              {dateRange.exactHours
+                  ? " Using precise timestamps in your local time zone."
+                  : " Using full calendar days in your local time zone."}
+            </small>
+          </div>
           <button
-            className="refresh-btn"
-            onClick={handleRefresh}
-            disabled={isRefreshing}
+              className="refresh-btn"
+              onClick={handleRefresh}
+              disabled={isRefreshing}
           >
-            <FaSync className={isRefreshing ? "spin" : ""} /> {isRefreshing ? "Refreshing..." : "Refresh"}
+            <FaSync className={isRefreshing ? "spin" : ""}/> {isRefreshing ? "Refreshing..." : "Refresh"}
           </button>
         </div>
 
@@ -884,7 +920,33 @@ useEffect(() => {
                       baseLine={0}
                     />
                   )}
-
+{/* Activity Effect Peak Markers */}
+{(viewMode === 'combined' || viewMode === 'effect') && showExpectedEffect && (
+  <Line
+    yAxisId="bloodSugar"
+    type="monotone"
+    dataKey="totalActivityEffect"
+    name="Activity Effect Peak"
+    stroke="rgba(43, 150, 100, 0.9)"
+    strokeWidth={2}
+    dot={(props) => {
+      const { cx, cy, payload } = props;
+      // Only show dots for significant effects (>5 points)
+      return Math.abs(payload.totalActivityEffect) > 5 ? (
+        <circle
+          cx={cx}
+          cy={cy}
+          r={4}
+          fill="rgba(43, 150, 100, 0.9)"
+          stroke="#fff"
+          strokeWidth={1}
+        />
+      ) : null;
+    }}
+    activeDot={{ r: 8, fill: "rgba(43, 150, 100, 0.9)", stroke: "#fff", strokeWidth: 2 }}
+    isAnimationActive={false}
+  />
+)}
                   {/* Reference line for current time - FIXED with yAxisId */}
                   <ReferenceLine
                     x={Date.now()}
@@ -912,19 +974,19 @@ useEffect(() => {
                     const effect = coefficient < 1 ? "Decreases" : coefficient > 1 ? "Increases" : "No effect on";
 
                     return (
-                      <div key={`legend-${level}`} className="activity-level-details">
-                        <div className="activity-level-header">
+                        <div key={`legend-${level}`} className="activity-level-details">
+                          <div className="activity-level-header">
                           <span
-                            className="activity-color-box"
-                            style={{ backgroundColor: activityColors[level] || '#ccc' }}
+                              className="activity-color-box"
+                              style={{backgroundColor: activityColors[level] || '#ccc'}}
                           ></span>
-                          <span className="activity-level-name">{label}</span>
+                            <span className="activity-level-name">{label}</span>
+                          </div>
+                          <div className="activity-impact">
+                            <span>{effect} blood sugar by {Math.abs(percentChange)}%</span>
+                            <span>Coefficient: {coefficient}</span>
+                          </div>
                         </div>
-                        <div className="activity-impact">
-                          <span>{effect} blood sugar by {Math.abs(percentChange)}%</span>
-                          <span>Coefficient: {coefficient}</span>
-                        </div>
-                      </div>
                     );
                   })}
                 </div>
@@ -933,30 +995,57 @@ useEffect(() => {
                   <h5>How Activity Affects Blood Sugar</h5>
                   <ul>
                     <li><strong>During activity:</strong> Blood sugar decreases as muscles use glucose for energy</li>
-                    <li><strong>After activity:</strong> Enhanced insulin sensitivity can continue to lower blood sugar for hours</li>
-                    <li><strong>Effect intensity:</strong> Higher activity levels cause greater blood sugar reduction</li>
-                    <li><strong>Duration impact:</strong> Longer activities have more pronounced and lasting effects</li>
+                    <li><strong>After activity:</strong> Enhanced insulin sensitivity can continue to lower blood sugar
+                      for hours
+                    </li>
+                    <li><strong>Effect intensity:</strong> Higher activity levels cause greater blood sugar reduction
+                    </li>
+                    <li><strong>Duration impact:</strong> Longer activities have more pronounced and lasting effects
+                    </li>
                   </ul>
+                </div>
+                <div className="impact-accumulation-explanation">
+                  <h5>Activity Impact Accumulation</h5>
+                  <p>
+                    Multiple activities can have a compound effect on blood sugar levels. The system calculates:
+                  </p>
+                  <ul>
+                    <li><strong>Simultaneous activities:</strong> Effects stack with diminishing returns (prevents
+                      unrealistic predictions)
+                    </li>
+                    <li><strong>Sequential activities:</strong> Extended impact from earlier activities combines with
+                      new ones
+                    </li>
+                    <li><strong>Recovery periods:</strong> Blood sugar gradually returns to baseline after activities
+                    </li>
+                  </ul>
+                  {bloodSugarData.length > 0 && (
+                      <div className="baseline-info">
+                        <strong>Your baseline blood sugar:</strong> {
+                        (bloodSugarData.reduce((sum, r) => sum + r.bloodSugar, 0) / bloodSugarData.length).toFixed(0)
+                      } mg/dL (average during selected period)
+                      </div>
+                  )}
                 </div>
               </div>
             </div>
           )}
 
           {activeView === 'table' && (
-            <div className="table-container">
-              <table {...getTableProps()} className="activity-table">
-                <thead>
+              <div className="table-container">
+                <table {...getTableProps()} className="activity-table">
+                  <thead>
                   {headerGroups.map((headerGroup, i) => (
-                    <tr key={`header-group-${i}`} {...headerGroup.getHeaderGroupProps()}>
-                      {headerGroup.headers.map((column, j) => (
-                        <th key={`header-${i}-${j}`} {...column.getHeaderProps(column.getSortByToggleProps())}>
-                          {column.render('Header')}
-                          <span>
+                      <tr key={`header-group-${i}`} {...headerGroup.getHeaderGroupProps()}>
+                        {headerGroup.headers.map((column, j) => (
+                            <th key={`header-${i}-${j}`} {...column.getHeaderProps(column.getSortByToggleProps())}>
+                              {column.render('Header')}
+                              <span>
                             {column.isSorted
-                              ? column.isSortedDesc
-                                ? ' 🔽'
-                                : ' 🔼'
-                              : ''}
+                                ? column.isSortedDesc
+                                    ? ' 🔽'
+                                    : ' 🔼'
+                                : ''}
                           </span>
                         </th>
                       ))}
