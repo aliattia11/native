@@ -1,68 +1,70 @@
-/* BaseTimeSeriesVisualization.css */
-
-.base-visualization {
-  background-color: white;
+.time-series-visualization {
+  width: 100%;
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 15px;
+  background-color: #f9f9f9;
   border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  padding: 20px;
-  margin-bottom: 30px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-.title {
+.time-series-visualization.embedded {
+  padding: 5px;
+  box-shadow: none;
+  margin: 0;
+  background-color: transparent;
+}
+
+.time-series-visualization .title {
+  font-size: 1.5em;
   color: #333;
-  margin-bottom: 20px;
-  font-size: 1.5rem;
-}
-
-.timezone-info {
-  font-size: 0.9rem;
-  color: #666;
   margin-bottom: 15px;
+  text-align: center;
 }
 
-.timezone-note {
-  font-style: italic;
-  color: #888;
+.time-info {
+  display: flex;
+  justify-content: flex-end;
+  font-size: 0.85em;
+  color: #666;
+  margin-bottom: 10px;
+}
+
+.time-label, .timezone-label {
+  margin-left: 5px;
 }
 
 .view-toggle {
   display: flex;
-  margin-bottom: 20px;
-  border-radius: 4px;
-  overflow: hidden;
-  width: fit-content;
+  justify-content: center;
+  margin-bottom: 15px;
 }
 
 .toggle-btn {
-  padding: 8px 16px;
   background-color: #f0f0f0;
-  border: none;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 8px 15px;
+  margin: 0 5px;
   cursor: pointer;
-  font-weight: 500;
-  transition: all 0.2s;
-}
-
-.toggle-btn:first-child {
-  border-top-left-radius: 4px;
-  border-bottom-left-radius: 4px;
-}
-
-.toggle-btn:last-child {
-  border-top-right-radius: 4px;
-  border-bottom-right-radius: 4px;
+  transition: all 0.2s ease;
 }
 
 .toggle-btn.active {
-  background-color: #1890ff;
+  background-color: #4285f4;
   color: white;
+  border-color: #3367d6;
 }
 
 .controls {
   display: flex;
   flex-wrap: wrap;
-  gap: 15px;
-  margin-bottom: 20px;
+  gap: 10px;
   align-items: center;
+  margin-bottom: 20px;
+  padding: 10px;
+  background-color: #f0f0f0;
+  border-radius: 5px;
 }
 
 .date-controls {
@@ -73,99 +75,163 @@
 .date-input-group {
   display: flex;
   align-items: center;
-  gap: 5px;
 }
 
 .date-input-group label {
+  margin-right: 5px;
   font-weight: 500;
 }
 
 .date-input-group input {
-  padding: 6px 10px;
-  border: 1px solid #d9d9d9;
+  padding: 6px;
+  border: 1px solid #ccc;
   border-radius: 4px;
 }
 
 .quick-ranges {
   display: flex;
-  gap: 8px;
+  gap: 5px;
 }
 
 .quick-ranges button {
-  padding: 6px 10px;
-  background-color: #f5f5f5;
-  border: 1px solid #d9d9d9;
+  background-color: #e0e0e0;
+  border: 1px solid #ccc;
   border-radius: 4px;
+  padding: 6px 12px;
   cursor: pointer;
-  transition: all 0.2s;
-  font-size: 0.9rem;
+  transition: all 0.2s ease;
 }
 
 .quick-ranges button:hover {
-  border-color: #1890ff;
-  color: #1890ff;
+  background-color: #d0d0d0;
 }
 
 .update-btn {
-  padding: 6px 15px;
-  background-color: #1890ff;
+  background-color: #4caf50;
   color: white;
   border: none;
   border-radius: 4px;
+  padding: 8px 15px;
   cursor: pointer;
-  font-weight: 500;
-  transition: background-color 0.2s;
+  transition: all 0.2s ease;
+  margin-left: auto;
 }
 
 .update-btn:hover {
-  background-color: #40a9ff;
+  background-color: #45a049;
 }
 
 .error-message {
-  background-color: #fff2f0;
-  border: 1px solid #ffccc7;
-  color: #ff4d4f;
-  padding: 10px 15px;
+  color: #d32f2f;
+  text-align: center;
+  margin: 15px 0;
+  padding: 10px;
+  background-color: #ffebee;
   border-radius: 4px;
-  margin-bottom: 20px;
 }
 
 .loading {
   text-align: center;
-  padding: 40px;
-  color: #1890ff;
-  font-style: italic;
-  background-color: #f9f9f9;
-  border-radius: 4px;
+  margin: 20px 0;
+  color: #666;
 }
 
 .content-container {
-  margin-top: 20px;
+  position: relative;
 }
 
 .chart-container {
-  margin-bottom: 20px;
-  border: 1px solid #f0f0f0;
-  border-radius: 4px;
-  padding: 15px;
   position: relative;
+  width: 100%;
+  margin-bottom: 20px;
 }
 
 .no-data-overlay {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: rgba(255, 255, 255, 0.7);
-  border-radius: 4px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: rgba(255, 255, 255, 0.8);
+  padding: 15px;
+  border-radius: 5px;
+  font-weight: 500;
   color: #666;
-  font-style: italic;
 }
 
-.table-container {
-  overflow-x: auto;
+.custom-tooltip {
+  background-color: #fff;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  padding: 10px;
+  box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.tooltip-time {
+  margin: 0 0 5px;
+  font-weight: 500;
+}
+
+.tooltip-value {
+  margin: 0;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.data-table th, .data-table td {
+  padding: 10px;
+  border: 1px solid #ddd;
+  text-align: left;
+}
+
+.data-table th {
+  background-color: #f5f5f5;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.data-table tr:nth-child(even) {
+  background-color: #f9f9f9;
+}
+
+.data-table tr:hover {
+  background-color: #f0f0f0;
+}
+
+.pagination {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 15px;
+}
+
+.pagination button {
+  background-color: #f0f0f0;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+.pagination button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pagination input {
+  width: 50px;
+  padding: 5px;
+  margin: 0 5px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.pagination select {
+  padding: 5px;
+  margin-left: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
 }

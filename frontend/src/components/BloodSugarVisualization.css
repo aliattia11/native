@@ -243,3 +243,134 @@
 }
 
 
+.blood-sugar-visualization {
+  width: 100%;
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+.target-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  padding: 10px;
+  background-color: #f5f5f5;
+  border-radius: 6px;
+  border-left: 4px solid #4285f4;
+}
+
+.target-label {
+  font-weight: 500;
+  color: #333;
+}
+
+.target-value {
+  font-weight: 600;
+  color: #4285f4;
+}
+
+.system-info {
+  font-size: 0.85em;
+  color: #666;
+}
+
+.timezone-info {
+  font-size: 0.85em;
+  color: #666;
+  margin-bottom: 10px;
+  text-align: right;
+}
+
+.timezone-note {
+  font-style: italic;
+}
+
+/* Gap fill controls styling */
+.gap-fill-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-top: 10px;
+  padding: 10px;
+  background-color: #f8f8f8;
+  border-radius: 5px;
+  border-left: 3px solid #6a5acd;
+}
+
+.gap-fill-controls label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.9em;
+}
+
+.threshold-input {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.threshold-input input {
+  width: 60px;
+  padding: 4px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+.unit-selector {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.unit-selector select {
+  padding: 5px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+/* Status indicator in table */
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.status-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+/* Custom legend styling */
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 15px;
+  margin-top: 15px;
+  padding: 10px;
+  background-color: #f9f9f9;
+  border-radius: 5px;
+  font-size: 0.9em;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.legend-color {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.legend-dash {
+  width: 20px;
+  display: inline-block;
+}

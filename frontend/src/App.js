@@ -1,4 +1,3 @@
-// Replace entire App.js content with this:
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
 import SignIn from './components/SignIn';
@@ -6,6 +5,7 @@ import Register from './components/Register';
 import PatientDashboard from './components/PatientDashboard';
 import DoctorDashboard from './components/DoctorDashboard';
 import { ConstantsProvider } from './contexts/ConstantsContext';
+import { BloodSugarDataProvider } from './contexts/BloodSugarDataContext';
 import './App.css';
 
 function App() {
@@ -31,26 +31,28 @@ function App() {
   return (
     <Router>
       <ConstantsProvider>
-        <div className="App">
-          <Routes>
-            <Route path="/login" element={
-              loggedIn ? <Navigate to="/dashboard" /> : <SignIn setLoggedIn={setLoggedIn} setUserType={setUserType} />
-            } />
-            <Route path="/register" element={<Register />} />
-            <Route path="/dashboard" element={
-              loggedIn ? (
-                userType === 'patient' ? (
-                  <PatientDashboard handleLogout={handleLogout} />
+        <BloodSugarDataProvider>
+          <div className="App">
+            <Routes>
+              <Route path="/login" element={
+                loggedIn ? <Navigate to="/dashboard" /> : <SignIn setLoggedIn={setLoggedIn} setUserType={setUserType} />
+              } />
+              <Route path="/register" element={<Register />} />
+              <Route path="/dashboard" element={
+                loggedIn ? (
+                  userType === 'patient' ? (
+                    <PatientDashboard handleLogout={handleLogout} />
+                  ) : (
+                    <DoctorDashboard handleLogout={handleLogout} />
+                  )
                 ) : (
-                  <DoctorDashboard handleLogout={handleLogout} />
+                  <Navigate to="/login" />
                 )
-              ) : (
-                <Navigate to="/login" />
-              )
-            } />
-            <Route path="/" element={<Navigate to="/login" />} />
-          </Routes>
-        </div>
+              } />
+              <Route path="/" element={<Navigate to="/login" />} />
+            </Routes>
+          </div>
+        </BloodSugarDataProvider>
       </ConstantsProvider>
     </Router>
   );

@@ -69,8 +69,8 @@ const PatientDashboard = ({ handleLogout }) => {
         return <MealHistory key="meal-history" />;
       case 'BloodSugarVisualization':
         return <BloodSugarVisualization key="blood-sugar-visualization" />;
-      case 'BloodGlucoseAnalytics':
-        return <CombinedGlucoseInsulinChart key="combined-glucose-insulin-analytics" />;
+      case 'CombinedGlucoseInsulinChart':
+        return <CombinedGlucoseInsulinChart key="combined-glucose-insulin-chart" />;
       case 'InsulinVisualization':
         return <InsulinVisualization key="insulin-visualization" />;
       case 'activityRecording':

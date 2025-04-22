@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { useTable, useSortBy, usePagination } from 'react-table';
-import axios from 'axios';
 import moment from 'moment';
 import { useConstants } from '../contexts/ConstantsContext';
+import { useBloodSugarData } from '../contexts/BloodSugarDataContext';
 import './BloodSugarVisualization.css';
+
 /**
  * Enhanced Blood Sugar Visualization Component
  *
@@ -31,506 +32,204 @@ const BloodSugarVisualization = ({
   // Access patient constants from context
   const { patientConstants, loading: constantsLoading } = useConstants();
 
-  // Shared state
-  const [data, setData] = useState([]);
-  const [filteredData, setFilteredData] = useState([]);
-  const [actualReadingsData, setActualReadingsData] = useState([]);  // For actual readings line
-  const [estimatedData, setEstimatedData] = useState([]);  // For estimated values line
-  const [processedData, setProcessedData] = useState([]);
-  const [targetGlucose, setTargetGlucose] = useState(
-    patientConstants?.target_glucose || 120
-  );
-  const [dateRange, setDateRange] = useState(initialDateRange || {
-    start: moment().subtract(7, 'days').format('YYYY-MM-DD'),
-    end: moment().add(1, 'day').format('YYYY-MM-DD')
-  });
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [unit, setUnit] = useState('mg/dL');
+  // Use the shared blood sugar data context
+  const {
+    bloodSugarData,
+    filteredData,
+    estimatedBloodSugarData,
+    combinedData,
+    loading,
+    error,
+    targetGlucose,
+    dateRange,
+    timeScale,
+    unit,
+    estimationSettings,
+    fetchBloodSugarData,
+    filteredEstimatedReadings,
+    setDateRange,
+    setUnit,
+    setTargetGlucose,
+    setEstimationSettings,
+    getBloodSugarStatus,
+    currentDateTime,
+    currentUserLogin
+  } = useBloodSugarData();
+
+  // Local state for UI
   const [activeView, setActiveView] = useState(defaultView);
   const [userTimeZone, setUserTimeZone] = useState('');
-  const [timeScale, setTimeScale] = useState({
-    start: moment().subtract(7, 'days').valueOf(),
-    end: moment().valueOf(),
-    tickInterval: 12, // in hours
-    tickFormat: 'DD/MM HH:mm'
-  });
   const [currentTime, setCurrentTime] = useState(moment().valueOf());
-  const [currentDateTime, setCurrentDateTime] = useState("2025-04-22 12:14:28");
-  const [currentUserLogin, setCurrentUserLogin] = useState("aliattia02");
-  const [gapFillSettings, setGapFillSettings] = useState({
-    enabled: fillGaps,
-    thresholdHours: gapThresholdHours,
-    extendToCurrent: true,    // Extend to current time
-    fillFromStart: true,      // Fill from the start of the time range
-    fillEntireGraph: true,    // Fill the entire graph, including beyond now
-    maxConnectGapMinutes: 20, // Only connect actual readings if within 20 minutes
-    returnToTarget: true      // Always return to target glucose after readings
-  });
 
-  // Settings for blood glucose modeling
-  const [modelSettings, setModelSettings] = useState({
-    stabilizationHours: 2,    // Hours it takes for glucose to return to target after a reading
-    targetStability: true,    // Whether glucose should stay at target without meals
-  });
-
-  // Reference for chart container
+  // Reference for chart container and tracking fetch state
   const chartRef = useRef(null);
+  const didFetchRef = useRef(false);
+
+  // Process readings for connection logic based on maxConnectGapMinutes
+  const processedReadings = useMemo(() => {
+    if (!filteredData || filteredData.length === 0) return [];
+
+    return filteredData.map((reading, index, array) => {
+      // Check if this reading should connect to the previous one
+      const connectToPrevious = index > 0 &&
+        (array[index].readingTime - array[index-1].readingTime <= estimationSettings.maxConnectGapMinutes * 60 * 1000);
+
+      return {
+        ...reading,
+        connectToPrevious
+      };
+    });
+  }, [filteredData, estimationSettings.maxConnectGapMinutes]);
+
+  // Handle visibility of the individual dots representing actual readings
+  const dottedActualReadings = useMemo(() => {
+    return processedReadings.map(reading => ({
+      ...reading,
+      connectToPrevious: false // Override to ensure all dots are rendered
+    }));
+  }, [processedReadings]);
 
   // Update target glucose when patient constants change
   useEffect(() => {
     if (patientConstants && patientConstants.target_glucose) {
       setTargetGlucose(patientConstants.target_glucose);
     }
-  }, [patientConstants]);
+  }, [patientConstants, setTargetGlucose]);
 
   // Get user's time zone info on component mount
   useEffect(() => {
     setUserTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
   }, []);
 
-  // Filter data based on timeScale
-  useEffect(() => {
-    // Only keep data points that fall within the time scale
-    if (data.length > 0) {
-      const filtered = data.filter(item =>
-        item.readingTime >= timeScale.start &&
-        item.readingTime <= timeScale.end
-      );
-      console.log(`Filtered data from ${data.length} to ${filtered.length} points based on time range`);
-      setFilteredData(filtered);
-    } else {
-      setFilteredData([]);
-    }
-  }, [data, timeScale]);
-
-  /**
-   * Model blood glucose value without meal input - returns to target after stabilization
-   */
-  const modelBloodGlucose = (startReading, elapsedMinutes) => {
-    const baseValue = startReading.bloodSugar;
-    const stabilizationMinutes = modelSettings.stabilizationHours * 60;
-
-    // If we're still within the stabilization period, gradually return to target
-    if (elapsedMinutes < stabilizationMinutes) {
-      const stabilizationRatio = elapsedMinutes / stabilizationMinutes;
-      const exponentialReturn = 1 - Math.exp(-3 * stabilizationRatio); // Exponential curve for smoother approach
-      return targetGlucose + (baseValue - targetGlucose) * (1 - exponentialReturn);
-    }
-
-    // After stabilization period, maintain target glucose
-    return targetGlucose;
-  };
-
-  // Create estimated points between actual readings or across a time range
-  const generateEstimatedPoints = (startPoint, endTimeOrPoint, numPoints = 10) => {
-    const points = [];
-    const startTime = startPoint.readingTime;
-
-    // Handle both endPoint object and raw endTime value
-    let endTime;
-    if (typeof endTimeOrPoint === 'number') {
-      endTime = endTimeOrPoint; // It's a timestamp
-    } else if (endTimeOrPoint && endTimeOrPoint.readingTime) {
-      endTime = endTimeOrPoint.readingTime; // It's a point object
-    } else {
-      endTime = currentTime; // Default to current time
-    }
-
-    const totalGapMinutes = (endTime - startTime) / (60 * 1000);
-
-    // Skip if gap is too small
-    if (totalGapMinutes < 5) return points;
-
-    // Determine number of points to generate (one point every 30 minutes, or user-specified)
-    const pointsToGenerate = Math.max(2, Math.ceil(totalGapMinutes / 30));
-    const actualPoints = Math.min(pointsToGenerate, numPoints); // Limit by numPoints parameter
-    const timeStep = (endTime - startTime) / (actualPoints + 1);
-
-    for (let i = 1; i <= actualPoints; i++) {
-      const pointTime = startTime + (i * timeStep);
-      const elapsedMinutes = (pointTime - startTime) / (60 * 1000);
-
-      // Calculate blood glucose based on our model
-      let glucoseValue = modelBloodGlucose(startPoint, elapsedMinutes);
-
-      points.push({
-        readingTime: pointTime,
-        bloodSugar: glucoseValue,
-        formattedReadingTime: moment(pointTime).format('MM/DD/YYYY, HH:mm'),
-        isInterpolated: true,
-        isEstimated: true,
-        dataType: 'estimated',
-        status: getBloodSugarStatus(glucoseValue, targetGlucose)
-      });
-    }
-
-    return points;
-  };
-
-  // Process data to separate actual readings and create estimated line
-  useEffect(() => {
-    if (filteredData.length === 0) {
-      setProcessedData([]);
-      setActualReadingsData([]);
-      setEstimatedData([]);
-      return;
-    }
-
-    // Mark all actual readings
-    const taggedActualData = filteredData.map(item => ({
-      ...item,
-      dataType: 'actual',
-      isInterpolated: false,
-      isEstimated: false
-    }));
-
-    // Sort by reading time
-    taggedActualData.sort((a, b) => a.readingTime - b.readingTime);
-
-    // Prepare actual readings dataset - we'll tag the ones that should connect
-    let actualReadings = [];
-    let lastReading = null;
-
-    taggedActualData.forEach(reading => {
-      const shouldConnect = lastReading &&
-        ((reading.readingTime - lastReading.readingTime) <= (gapFillSettings.maxConnectGapMinutes * 60 * 1000));
-
-      actualReadings.push({
-        ...reading,
-        connectToPrevious: shouldConnect
-      });
-
-      lastReading = reading;
-    });
-
-    setActualReadingsData(actualReadings);
-
-    // Now generate estimated data if gap filling is enabled
-    if (!gapFillSettings.enabled) {
-      setEstimatedData([]);
-      setProcessedData(actualReadings);
-      return;
-    }
-
-    // Create estimated dataset
-    let estimatedPoints = [];
-
-    // Start with a target value at timeScale.start if needed
-    if (gapFillSettings.fillFromStart && actualReadings.length > 0 &&
-        actualReadings[0].readingTime > timeScale.start) {
-      const startPoint = {
-        readingTime: timeScale.start,
-        bloodSugar: targetGlucose,  // Always start from target at the beginning of the chart
-        formattedReadingTime: moment(timeScale.start).format('MM/DD/YYYY, HH:mm'),
-        isInterpolated: true,
-        isEstimated: true,
-        dataType: 'estimated',
-        status: getBloodSugarStatus(targetGlucose, targetGlucose)
-      };
-
-      estimatedPoints.push(startPoint);
-
-      // Generate estimated points from start to first reading
-      const pointsToFirstReading = generateEstimatedPoints(
-        startPoint,
-        actualReadings[0],
-        Math.max(5, Math.ceil((actualReadings[0].readingTime - startPoint.readingTime) / (30 * 60 * 1000)))
-      );
-      estimatedPoints = [...estimatedPoints, ...pointsToFirstReading];
-    }
-
-    // Add estimated points between actual readings
-    for (let i = 0; i < actualReadings.length; i++) {
-      // Add the actual reading to estimated line as an anchor point
-      estimatedPoints.push({
-        ...actualReadings[i],
-        isEstimatedLine: true  // Tag to indicate this is an anchor point for the estimated line
-      });
-
-      // Generate estimated points to next reading or continue the pattern
-      if (i < actualReadings.length - 1) {
-        const pointsBetweenReadings = generateEstimatedPoints(
-          actualReadings[i],
-          actualReadings[i+1],
-          Math.max(5, Math.ceil((actualReadings[i+1].readingTime - actualReadings[i].readingTime) / (30 * 60 * 1000)))
-        );
-        estimatedPoints = [...estimatedPoints, ...pointsBetweenReadings];
-      }
-      // If this is the last reading, extend to fill the graph
-      else {
-        // Decide where to extend to
-        let endTime;
-
-        if (gapFillSettings.fillEntireGraph) {
-          // Fill to the end of the time scale
-          endTime = timeScale.end;
-        } else if (gapFillSettings.extendToCurrent && currentTime > actualReadings[i].readingTime) {
-          // Fill only to current time
-          endTime = currentTime;
-        } else {
-          // No extension needed
-          continue;
-        }
-
-        // Skip if the last reading is already beyond our end point
-        if (actualReadings[i].readingTime >= endTime) continue;
-
-        // Generate estimated points from last reading to end time
-        const pointsToEndTime = generateEstimatedPoints(
-          actualReadings[i],
-          endTime,
-          Math.max(5, Math.ceil((endTime - actualReadings[i].readingTime) / (30 * 60 * 1000)))
-        );
-        estimatedPoints = [...estimatedPoints, ...pointsToEndTime];
-
-        // Add final point at the end time showing target glucose
-        const finalPoint = {
-          readingTime: endTime,
-          bloodSugar: targetGlucose,
-          formattedReadingTime: moment(endTime).format('MM/DD/YYYY, HH:mm'),
-          isInterpolated: true,
-          isEstimated: true,
-          dataType: 'estimated',
-          status: getBloodSugarStatus(targetGlucose, targetGlucose)
-        };
-
-        estimatedPoints.push(finalPoint);
-      }
-    }
-
-    setEstimatedData(estimatedPoints);
-
-    // Combine all data for the table view
-    const combined = [...actualReadings, ...estimatedPoints.filter(p => p.isInterpolated)];
-    combined.sort((a, b) => a.readingTime - b.readingTime);
-
-    setProcessedData(combined);
-
-  }, [filteredData, gapFillSettings, targetGlucose, currentTime, timeScale.start, timeScale.end, modelSettings]);
-
   // Update current time every minute
   useEffect(() => {
     const timer = setInterval(() => {
       const now = moment();
       setCurrentTime(now.valueOf());
-      setCurrentDateTime("2025-04-22 12:14:28"); // Keep using the provided datetime
     }, 60000); // Update every minute
 
     return () => clearInterval(timer);
   }, []);
 
-  // Update time scale when date range changes
-  const updateTimeScale = useCallback(() => {
-    const startMoment = moment(dateRange.start).startOf('day');
-    const endMoment = moment(dateRange.end).endOf('day');
-    const diffDays = endMoment.diff(startMoment, 'days');
+  // Fetch data when component mounts or when date range changes
+  useEffect(() => {
+    // Only run once on mount or when dependencies change meaningfully
+    const shouldFetch = !loading && (
+      !didFetchRef.current ||
+      (initialDateRange && initialDateRange !== dateRange)
+    );
 
-    let tickInterval, tickFormat;
+    if (shouldFetch) {
+      didFetchRef.current = true;
 
-    // Determine scaling based on the date range
-    if (diffDays <= 1) {
-      // Last 24 hours - 2 hour ticks
-      tickInterval = 2;
-      tickFormat = 'HH:mm';
-    } else if (diffDays <= 7) {
-      // Last week - 12 hour ticks
-      tickInterval = 12;
-      tickFormat = 'DD/MM HH:mm';
-    } else {
-      // Last month - 1 day ticks
-      tickInterval = 24;
-      tickFormat = 'MM/DD';
-    }
+      if (initialDateRange) {
+        setDateRange(initialDateRange);
+      }
 
-    setTimeScale({
-      start: startMoment.valueOf(),
-      end: endMoment.valueOf(),
-      tickInterval,
-      tickFormat
-    });
-  }, [dateRange]);
-
-  // Generate ticks for the x-axis based on time scale
-  const generateTicks = useCallback(() => {
-    const ticks = [];
-    let current = moment(timeScale.start).startOf('hour');
-    const end = moment(timeScale.end);
-
-    // Align ticks to exact hour boundaries for consistent grid alignment
-    while (current.isBefore(end)) {
-      ticks.push(current.valueOf());
-      current = current.add(timeScale.tickInterval, 'hours');
-    }
-
-    return ticks;
-  }, [timeScale]);
-
-  const fetchData = useCallback(async () => {
-    try {
-      setLoading(true);
-      const token = localStorage.getItem('token');
-      const startDate = moment(dateRange.start).format('YYYY-MM-DD');
-      const endDate = moment(dateRange.end).format('YYYY-MM-DD');
-
-      // Use custom endpoint if provided, otherwise use default endpoints
-      let url = customApiEndpoint;
-      if (!url) {
-        url = `http://localhost:5000/api/blood-sugar?start_date=${startDate}&end_date=${endDate}&unit=${unit}`;
-        if (isDoctor && patientId) {
-          url = `http://localhost:5000/doctor/patient/${patientId}/blood-sugar?start_date=${startDate}&end_date=${endDate}&unit=${unit}`;
+      // Don't fetch immediately if we just changed the date range
+      if (!initialDateRange || didFetchRef.current) {
+        // If custom endpoint is provided, we need a different approach
+        if (customApiEndpoint) {
+          // Custom endpoint handling would go here
+        } else {
+          fetchBloodSugarData(patientId);
         }
-      } else {
-        // Add query params to custom endpoint
-        const separator = url.includes('?') ? '&' : '?';
-        url = `${url}${separator}start_date=${startDate}&end_date=${endDate}&unit=${unit}`;
       }
-
-      const response = await axios.get(url, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-
-      // Process the data to use bloodSugarTimestamp instead of timestamp
-      const formattedData = response.data.map(item => {
-        // Use reading time (bloodSugarTimestamp) if available, otherwise use recording time (timestamp)
-        const readingTime = item.bloodSugarTimestamp || item.timestamp;
-
-        // Parse the UTC timestamps explicitly to ensure correct timezone handling
-        const localReadingTime = moment.utc(readingTime).local();
-        const localRecordingTime = moment.utc(item.timestamp).local();
-
-        // Use target from the data if available, otherwise use the one from patient constants
-        const itemTarget = item.target || targetGlucose;
-
-        return {
-          ...item,
-          // Convert to timestamp for chart (in local time)
-          readingTime: localReadingTime.valueOf(),
-          // Format for display in local time
-          formattedReadingTime: localReadingTime.format('MM/DD/YYYY, HH:mm'),
-          formattedRecordingTime: localRecordingTime.format('MM/DD/YYYY, HH:mm'),
-          // Status based on target glucose
-          status: getBloodSugarStatus(item.bloodSugar, itemTarget),
-          // Mark as actual reading
-          isInterpolated: false,
-          dataType: 'actual',
-          // Store target for this item
-          target: itemTarget
-        };
-      });
-
-      // Sort by reading time
-      formattedData.sort((a, b) => a.readingTime - b.readingTime);
-      setData(formattedData);
-
-      // Update time scale after fetching data
-      updateTimeScale();
-
-      if (onDataLoaded) {
-        onDataLoaded(formattedData);
-      }
-
-      setError('');
-      setLoading(false);
-    } catch (error) {
-      console.error('Error fetching blood sugar data:', error);
-      setError('Failed to fetch blood sugar data. Please try again.');
-      setLoading(false);
     }
-  }, [dateRange, isDoctor, patientId, unit, targetGlucose, updateTimeScale, customApiEndpoint, onDataLoaded]);
 
+    // Call the onDataLoaded callback if provided and we have data
+    if (onDataLoaded && combinedData.length > 0 && !loading) {
+      onDataLoaded(combinedData);
+    }
+  }, [fetchBloodSugarData, initialDateRange, patientId, customApiEndpoint,
+      setDateRange, onDataLoaded, combinedData, loading, dateRange]);
+
+  // Sync local gap fill settings with the context
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    setEstimationSettings(prev => ({
+      ...prev,
+      enabled: fillGaps,
+      thresholdHours: gapThresholdHours
+    }));
+  }, [fillGaps, gapThresholdHours, setEstimationSettings]);
 
-  useEffect(() => {
-    updateTimeScale();
-  }, [dateRange, updateTimeScale]);
-
-  const getBloodSugarStatus = (bloodSugar, target) => {
-    const statusMap = {
-      'low': { color: '#ff4444', label: 'Low' },
-      'normal': { color: '#00C851', label: 'Normal' },
-      'high': { color: '#ff8800', label: 'High' }
-    };
-
-    if (bloodSugar < target * 0.7) return statusMap.low;
-    if (bloodSugar > target * 1.3) return statusMap.high;
-    return statusMap.normal;
-  };
-
+  // Date range change handler
   const handleDateChange = (e) => {
     const { name, value } = e.target;
-    setDateRange(prev => ({ ...prev, [name]: value }));
+    // Update date range and trigger a refetch when date changes
+    setDateRange(prev => {
+      const newRange = { ...prev, [name]: value };
+      // Refetch data with the new date range after state is updated
+      setTimeout(() => fetchBloodSugarData(patientId), 0);
+      return newRange;
+    });
   };
 
+  // Unit change handler
   const handleUnitChange = (e) => {
     setUnit(e.target.value);
   };
 
+  // Gap fill toggle handler
   const handleGapFillToggle = () => {
-    setGapFillSettings(prev => ({
+    setEstimationSettings(prev => ({
       ...prev,
       enabled: !prev.enabled
     }));
   };
 
-  const handleExtendToCurrentToggle = () => {
-    setGapFillSettings(prev => ({
-      ...prev,
-      extendToCurrent: !prev.extendToCurrent
-    }));
-  };
-
-  const handleFillFromStartToggle = () => {
-    setGapFillSettings(prev => ({
-      ...prev,
-      fillFromStart: !prev.fillFromStart
-    }));
-  };
-
-  const handleFillEntireGraphToggle = () => {
-    setGapFillSettings(prev => ({
-      ...prev,
-      fillEntireGraph: !prev.fillEntireGraph
-    }));
-  };
-
-  const handleReturnToTargetToggle = () => {
-    setGapFillSettings(prev => ({
-      ...prev,
-      returnToTarget: !prev.returnToTarget
-    }));
-  };
-
-  const handleStabilizationHoursChange = (e) => {
-    const value = parseInt(e.target.value, 10);
-    if (!isNaN(value) && value >= 0) {
-      setModelSettings(prev => ({
-        ...prev,
-        stabilizationHours: value
-      }));
-    }
-  };
-
+  // Connection time gap handler
   const handleConnectMaxTimeChange = (e) => {
     const value = parseInt(e.target.value, 10);
     if (!isNaN(value) && value > 0) {
-      setGapFillSettings(prev => ({
+      setEstimationSettings(prev => ({
         ...prev,
         maxConnectGapMinutes: value
       }));
     }
   };
 
-  const handleGapThresholdChange = (e) => {
-    const value = parseInt(e.target.value, 10);
-    if (!isNaN(value) && value > 0) {
-      setGapFillSettings(prev => ({
+  // Stabilization hours handler
+  const handleStabilizationHoursChange = (e) => {
+    const value = parseFloat(e.target.value);
+    if (!isNaN(value) && value >= 0) {
+      setEstimationSettings(prev => ({
         ...prev,
-        thresholdHours: value
+        stabilizationHours: value
       }));
     }
+  };
+
+  // Fill from start toggle handler
+  const handleFillFromStartToggle = () => {
+    setEstimationSettings(prev => ({
+      ...prev,
+      fillFromStart: !prev.fillFromStart
+    }));
+  };
+
+  // Extend to current toggle handler
+  const handleExtendToCurrentToggle = () => {
+    setEstimationSettings(prev => ({
+      ...prev,
+      extendToCurrent: !prev.extendToCurrent
+    }));
+  };
+
+  // Fill entire graph toggle handler
+  const handleFillEntireGraphToggle = () => {
+    setEstimationSettings(prev => ({
+      ...prev,
+      fillEntireGraph: !prev.fillEntireGraph
+    }));
+  };
+
+  // Return to target toggle handler
+  const handleReturnToTargetToggle = () => {
+    setEstimationSettings(prev => ({
+      ...prev,
+      returnToTarget: !prev.returnToTarget
+    }));
   };
 
   // Quick date range presets
@@ -541,7 +240,7 @@ const BloodSugarVisualization = ({
     let end;
     if (days === 1) {
       // For "Last 24h": past day plus 12 hours
-      end = moment().add(12, 'hours').format('YYYY-MM-DD HH:mm');
+      end = moment().add(12, 'hours').format('YYYY-MM-DD');
     } else if (days === 7) {
       // For "Last Week": past 7 days plus one future day
       end = moment().add(1, 'day').format('YYYY-MM-DD');
@@ -553,33 +252,53 @@ const BloodSugarVisualization = ({
       end = moment().format('YYYY-MM-DD');
     }
 
+    // Set the new date range
     setDateRange({
       start: start,
       end: end
     });
+
+    // Fetch data with the new range
+    setTimeout(() => fetchBloodSugarData(patientId), 0);
   };
 
-  // Chart-specific functions
+  // Format X-axis labels
   const formatXAxis = (tickItem) => {
     // Format the timestamp using the user's local timezone
-    return moment(tickItem).format(timeScale.tickFormat);
+    return moment(tickItem).format(timeScale.tickFormat || 'MM/DD HH:mm');
   };
 
+  // Format Y-axis labels
   const formatYAxis = (value) => {
     return `${value} ${unit}`;
   };
 
-  // Generate custom ticks based on time scale
-  const ticks = generateTicks();
-
-  // Determine if current time is within chart range
+  // Check if current time is within chart range
   const currentTimeInRange = currentTime >= timeScale.start && currentTime <= timeScale.end;
 
+  // Generate ticks for the x-axis based on time scale
+  const ticks = useMemo(() => {
+    const ticksArray = [];
+    let current = moment(timeScale.start).startOf('hour');
+    const end = moment(timeScale.end);
+    const tickInterval = timeScale.tickInterval || 12; // Default to 12 hours if not specified
+
+    // Align ticks to exact hour boundaries for consistent grid alignment
+    while (current.isBefore(end)) {
+      ticksArray.push(current.valueOf());
+      current = current.add(tickInterval, 'hours');
+    }
+
+    return ticksArray;
+  }, [timeScale]);
+
   // Custom dot renderer that changes appearance based on data type
-  const CustomActualDot = (props) => {
-    const { cx, cy, stroke, payload, value } = props;
+  const CustomActualDot = useCallback((props) => {
+    const { cx, cy, stroke, payload } = props;
 
     // Only render visible dots for actual readings
+    if (!payload.isActualReading) return null;
+
     return (
       <circle
         cx={cx}
@@ -590,11 +309,11 @@ const BloodSugarVisualization = ({
         fill="#ffffff"
       />
     );
-  };
+  }, []);
 
   // Custom dot renderer for estimated line
-  const CustomEstimatedDot = (props) => {
-    const { cx, cy, stroke, payload, value } = props;
+  const CustomEstimatedDot = useCallback((props) => {
+    const { cx, cy, stroke, payload } = props;
 
     // Don't render dots for estimated points to reduce clutter
     if (payload.isInterpolated && !payload.isEstimatedLine) {
@@ -617,9 +336,9 @@ const BloodSugarVisualization = ({
     }
 
     return null;
-  };
+  }, []);
 
-  const CustomTooltip = ({ active, payload, label }) => {
+  const CustomTooltip = useCallback(({ active, payload, label }) => {
     if (active && payload && payload.length) {
       // Find the actual data point from the payload
       const dataItem = payload[0]?.payload;
@@ -645,18 +364,23 @@ const BloodSugarVisualization = ({
           {dataItem.isInterpolated && (
             <p className="tooltip-interpolated">
               {dataItem.dataType === 'estimated'
-                ? `Estimated value (returns to target in ${modelSettings.stabilizationHours}h)`
+                ? `Estimated value (returns to target in ${estimationSettings.stabilizationHours}h)`
                 : `Target glucose value (${targetGlucose} ${unit})`}
+            </p>
+          )}
+          {dataItem.predictedBloodSugar && (
+            <p className="tooltip-predicted" style={{ color: '#82ca9d' }}>
+              {`With Insulin: ${Math.round(dataItem.predictedBloodSugar * 10) / 10} ${unit}`}
             </p>
           )}
         </div>
       );
     }
     return null;
-  };
+  }, [estimationSettings.stabilizationHours, targetGlucose, unit]);
 
-  // Table-specific columns
-  const columns = React.useMemo(
+  // Table columns definition
+  const columns = useMemo(
     () => [
       {
         Header: 'Reading Time',
@@ -705,7 +429,7 @@ const BloodSugarVisualization = ({
       {
         Header: `Target (${unit})`,
         accessor: 'target',
-        Cell: ({ value, row }) => (
+        Cell: ({ value }) => (
           <span>
             {value !== undefined && value !== null ? value : targetGlucose} {unit}
           </span>
@@ -772,10 +496,11 @@ const BloodSugarVisualization = ({
     [unit, targetGlucose]
   );
 
+  // Set up React Table
   const tableInstance = useTable(
     {
       columns,
-      data: processedData,
+      data: combinedData,
       initialState: { pageIndex: 0, pageSize: 10 },
     },
     useSortBy,
@@ -805,12 +530,6 @@ const BloodSugarVisualization = ({
     height: embedded ? height : 400,
     ...chartConfig
   };
-
-  // Handle visibility of the individual dots representing actual readings
-  const dottedActualReadings = actualReadingsData.map(reading => ({
-    ...reading,
-    connectToPrevious: false // Override to ensure all dots are rendered
-  }));
 
   // Show loading if we're waiting for constants
   if (constantsLoading) return <div className="loading">Loading patient data...</div>;
@@ -898,7 +617,7 @@ const BloodSugarVisualization = ({
             <label>
               <input
                 type="checkbox"
-                checked={gapFillSettings.enabled}
+                checked={estimationSettings.enabled}
                 onChange={handleGapFillToggle}
               />
               Show estimated line
@@ -911,12 +630,12 @@ const BloodSugarVisualization = ({
                 type="number"
                 min="1"
                 max="60"
-                value={gapFillSettings.maxConnectGapMinutes}
+                value={estimationSettings.maxConnectGapMinutes}
                 onChange={handleConnectMaxTimeChange}
               />
             </div>
 
-            {gapFillSettings.enabled && (
+            {estimationSettings.enabled && (
               <>
                 <div className="threshold-input">
                   <label htmlFor="stabilization-hours">Return to target in (hours):</label>
@@ -926,7 +645,7 @@ const BloodSugarVisualization = ({
                     min="0.5"
                     max="24"
                     step="0.5"
-                    value={modelSettings.stabilizationHours}
+                    value={estimationSettings.stabilizationHours}
                     onChange={handleStabilizationHoursChange}
                   />
                 </div>
@@ -934,7 +653,7 @@ const BloodSugarVisualization = ({
                 <label>
                   <input
                     type="checkbox"
-                    checked={gapFillSettings.fillEntireGraph}
+                    checked={estimationSettings.fillEntireGraph}
                     onChange={handleFillEntireGraphToggle}
                   />
                   Fill entire graph
@@ -943,7 +662,7 @@ const BloodSugarVisualization = ({
                 <label>
                   <input
                     type="checkbox"
-                    checked={gapFillSettings.fillFromStart}
+                    checked={estimationSettings.fillFromStart}
                     onChange={handleFillFromStartToggle}
                   />
                   Fill from range start
@@ -952,7 +671,7 @@ const BloodSugarVisualization = ({
             )}
           </div>
 
-          <button className="update-btn" onClick={fetchData}>Update Data</button>
+          <button className="update-btn" onClick={() => fetchBloodSugarData(patientId)}>Update Data</button>
         </div>
       )}
 
@@ -1022,23 +741,23 @@ const BloodSugarVisualization = ({
                     />
                   )}
 
-                  {/* Generate a disconnected line with only dots for all actual readings (this ensures all dots are visible) */}
+                  {/* Generate a disconnected line with only dots for all actual readings */}
                   <Line
                     key="actual-dots"
                     dataKey="bloodSugar"
                     name={`Actual Readings (${unit})`}
-                    data={dottedActualReadings}
+                    data={processedReadings}
                     stroke="none"
                     isAnimationActive={false}
                     dot={CustomActualDot}
                   />
 
-                  {/* Connected line only for points within 20 minutes of each other */}
+                  {/* Connected line only for points within maxConnectGapMinutes of each other */}
                   <Line
                     key="actual-line"
                     dataKey="bloodSugar"
                     name={`Actual Readings (${unit})`}
-                    data={actualReadingsData.filter(r => r.connectToPrevious)}
+                    data={processedReadings.filter(r => r.connectToPrevious)}
                     stroke="#8884d8"
                     strokeWidth={2}
                     isAnimationActive={false}
@@ -1047,18 +766,35 @@ const BloodSugarVisualization = ({
                   />
 
                   {/* Estimated line showing target-returning pattern */}
-                  {gapFillSettings.enabled && (
+                  {estimationSettings.enabled && (
                     <Line
                       key="estimated-line"
                       dataKey="bloodSugar"
                       name={`Estimated Pattern (${unit})`}
-                      data={estimatedData}
+                      data={estimatedBloodSugarData}
                       stroke="#6a5acd"
                       strokeWidth={1.5}
                       strokeOpacity={0.8}
                       strokeDasharray="4 4"
                       isAnimationActive={false}
                       dot={CustomEstimatedDot}
+                      connectNulls={true}
+                    />
+                  )}
+
+                  {/* Show predicted blood sugar (if available from insulin effects) */}
+                  {combinedData.some(d => d.predictedBloodSugar) && (
+                    <Line
+                      key="predicted-line"
+                      dataKey="predictedBloodSugar"
+                      name={`Predicted with Insulin (${unit})`}
+                      data={combinedData.filter(d => d.isInterpolated && d.predictedBloodSugar)}
+                      stroke="#82ca9d"
+                      strokeWidth={1.5}
+                      strokeOpacity={0.8}
+                      strokeDasharray="3 3"
+                      isAnimationActive={false}
+                      dot={false}
                       connectNulls={true}
                     />
                   )}
@@ -1080,12 +816,18 @@ const BloodSugarVisualization = ({
                 </div>
                 <div className="legend-item">
                   <span className="legend-color" style={{ backgroundColor: '#8884d8' }}></span>
-                  <span>Actual Readings (connected when &lt;{gapFillSettings.maxConnectGapMinutes}min apart)</span>
+                  <span>Actual Readings (connected when &lt;{estimationSettings.maxConnectGapMinutes}min apart)</span>
                 </div>
-                {gapFillSettings.enabled && (
+                {estimationSettings.enabled && (
                   <div className="legend-item">
                     <span className="legend-dash" style={{ borderTop: '2px dashed #6a5acd' }}></span>
-                    <span>Estimated (returns to target in {modelSettings.stabilizationHours}h)</span>
+                    <span>Estimated (returns to target in {estimationSettings.stabilizationHours}h)</span>
+                  </div>
+                )}
+                {combinedData.some(d => d.predictedBloodSugar) && (
+                  <div className="legend-item">
+                    <span className="legend-dash" style={{ borderTop: '2px dashed #82ca9d' }}></span>
+                    <span>Predicted with Insulin Effects</span>
                   </div>
                 )}
                 <div className="legend-item">
@@ -1095,7 +837,7 @@ const BloodSugarVisualization = ({
               </div>
 
               {/* Display message if no data points are in the current range */}
-              {processedData.length === 0 && (
+              {combinedData.length === 0 && (
                 <div className="no-data-overlay">
                   No blood sugar readings found in the selected date range
                 </div>
@@ -1110,11 +852,11 @@ const BloodSugarVisualization = ({
                   {headerGroups.map(headerGroup => {
                     const { key, ...headerGroupProps } = headerGroup.getHeaderGroupProps();
                     return (
-                      <tr key={key} {...headerGroupProps}>
+                      <tr key={key || Math.random()} {...headerGroupProps}>
                         {headerGroup.headers.map(column => {
                           const { key, ...columnProps } = column.getHeaderProps(column.getSortByToggleProps());
                           return (
-                            <th key={key} {...columnProps}>
+                            <th key={key || Math.random()} {...columnProps}>
                               {column.render('Header')}
                               <span>
                                 {column.isSorted
@@ -1139,7 +881,7 @@ const BloodSugarVisualization = ({
                       // Define row class based on data type
                       let rowClass = '';
                       if (row.original.dataType === 'actual') {
-                        rowClass = `status-${row.original.status.label.toLowerCase()}`;
+                        rowClass = `status-${row.original.status?.label?.toLowerCase() || 'normal'}`;
                       } else if (row.original.dataType === 'estimated') {
                         rowClass = 'estimated';
                       } else {
@@ -1148,14 +890,14 @@ const BloodSugarVisualization = ({
 
                       return (
                         <tr
-                          key={key}
+                          key={key || Math.random()}
                           {...rowProps}
                           className={rowClass}
                         >
                           {row.cells.map(cell => {
                             const { key, ...cellProps } = cell.getCellProps();
                             return (
-                              <td key={key} {...cellProps}>
+                              <td key={key || Math.random()} {...cellProps}>
                                 {cell.render('Cell')}
                               </td>
                             );
