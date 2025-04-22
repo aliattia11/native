@@ -51,15 +51,11 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
   const [refreshKey, setRefreshKey] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [futureHours, setFutureHours] = useState(8); // Default to 8 hours future projection
-  const [dataFetched, setDataFetched] = useState(false); // Added to track if data has been fetched
 
   // UI state
   const [dateRange, setDateRange] = useState({
     start: moment().subtract(3, 'days').format('YYYY-MM-DD'),
-    end: moment().format('YYYY-MM-DD'),
-    exactHours: false, // Added to track if we're using exact hours
-    startTime: null,   // Added for precise timestamp filtering
-    endTime: null      // Added for precise timestamp filtering
+    end: moment().format('YYYY-MM-DD')
   });
   const [selectedActivityLevels, setSelectedActivityLevels] = useState([]);
   const [showActualBloodSugar, setShowActualBloodSugar] = useState(true);
@@ -150,174 +146,173 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
       setDateRange({
         start: moment().subtract(days, 'days').format('YYYY-MM-DD'),
         end: moment().format('YYYY-MM-DD'),
-        exactHours: false,
-        startTime: null,
-        endTime: null
+        exactHours: false
       });
     }
   }, []);
 
   // Fetch activity and blood glucose data
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        setError('');
+useEffect(() => {
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      setError('');
 
-        const token = localStorage.getItem('token');
-        if (!token) {
-          throw new Error('Authentication token not found');
-        }
-
-        const headers = { Authorization: `Bearer ${token}` };
-
-        // Prepare API parameters for time-based filtering
-        let activityParams = {};
-        let bloodSugarParams = {};
-
-        // If using exactHours (for 24h filter), pass precise timestamps
-        if (dateRange.exactHours && dateRange.startTime && dateRange.endTime) {
-          // Activity params - filter by start time
-          activityParams = {
-            include_details: true,
-            patient_id: patientId || undefined,
-            filter_by: 'startTime',  // Ensure this matches your backend field name
-            start_time: dateRange.startTime,
-            end_time: dateRange.endTime
-          };
-
-          // Blood sugar params - use the same time window
-          bloodSugarParams = {
-            patient_id: patientId || undefined,
-            filter_by: 'reading_time',
-            start_time: dateRange.startTime,
-            end_time: dateRange.endTime
-          };
-
-          console.log(`Fetching data with exact time range from ${dateRange.startTime} to ${dateRange.endTime}`);
-        } else {
-          // Activity params - filter by date
-          activityParams = {
-            include_details: true,
-            patient_id: patientId || undefined,
-            start_date: dateRange.start,
-            end_date: dateRange.end
-          };
-
-          // Blood sugar params - match the date range
-          bloodSugarParams = {
-            patient_id: patientId || undefined,
-            filter_by: 'reading_time',
-            start_date: dateRange.start,
-            end_date: dateRange.end
-          };
-
-          console.log(`Fetching data from ${dateRange.start} to ${dateRange.end}`);
-        }
-
-        // Fetch activity data with the properly constructed parameters
-        const activityResponse = await axios.get(
-          'http://localhost:5000/api/activity-history',
-          { params: activityParams, headers }
-        );
-
-        // Fetch blood sugar data with the matching time window
-        const bloodSugarResponse = await axios.get(
-          'http://localhost:5000/api/blood-sugar',
-          { params: bloodSugarParams, headers }
-        );
-
-        const activityLogs = activityResponse.data || [];
-        const bloodSugarReadings = bloodSugarResponse.data || [];
-
-        console.log(`Received ${activityLogs.length} activity records`);
-        console.log(`Received ${bloodSugarReadings.length} blood sugar records`);
-
-        // Process activity data
-        const processedActivityData = activityLogs.map(activity => {
-          let startTime, endTime;
-
-          // Try to get the most accurate times from the activity data
-          if (activity.startTime) {
-            startTime = moment.utc(activity.startTime).local();
-          } else if (activity.expectedTime) {
-            startTime = moment.utc(activity.expectedTime).local();
-          } else if (activity.completedTime) {
-            startTime = moment.utc(activity.completedTime).local();
-          } else {
-            startTime = moment.utc(activity.timestamp).local();
-          }
-
-          // Set end time based on duration or endTime field
-          if (activity.endTime) {
-            endTime = moment.utc(activity.endTime).local();
-          } else if (activity.duration) {
-            // Parse duration in format "HH:MM"
-            const [hours, minutes] = activity.duration.split(':').map(Number);
-            endTime = moment(startTime).add(hours, 'hours').add(minutes, 'minutes');
-          } else {
-            // Default 30 minute activity
-            endTime = moment(startTime).add(30, 'minutes');
-          }
-
-          return {
-            id: activity.id || activity._id || `activity-${startTime.valueOf()}`,
-            activityType: activity.type || 'unknown',
-            level: activity.level || 0,
-            startTime: startTime.valueOf(),
-            endTime: endTime.valueOf(),
-            duration: activity.duration || '00:30',
-            formattedStartTime: startTime.format('MM/DD/YYYY, HH:mm'),
-            formattedEndTime: endTime.format('MM/DD/YYYY, HH:mm'),
-            impact: activity.impact || 1.0,
-            notes: activity.notes || ''
-          };
-        });
-
-        console.log(`Processed ${processedActivityData.length} activities`);
-
-        // Process blood sugar data - Use bloodSugarTimestamp field when available
-        const processedBloodSugarData = bloodSugarReadings.map(reading => {
-          // Prefer the actual reading time over record creation time when available
-          const readingTime = moment.utc(reading.bloodSugarTimestamp || reading.timestamp).local();
-
-          return {
-            id: reading._id,
-            bloodSugar: reading.bloodSugar,
-            readingTime: readingTime.valueOf(),
-            formattedTime: readingTime.format('MM/DD/YYYY, HH:mm'),
-            status: reading.status,
-            notes: reading.notes || ''
-          };
-        });
-
-        console.log(`Processed ${processedBloodSugarData.length} blood sugar readings`);
-
-        // Get unique activity levels
-        const levels = [...new Set(processedActivityData.map(item => String(item.level)))];
-        console.log(`Found activity levels: ${levels.join(', ')}`);
-
-        setActivityData(processedActivityData);
-        setBloodSugarData(processedBloodSugarData);
-        setActivityLevels(levels);
-        setDataFetched(true);
-
-        // Initialize selected levels if needed
-        if (selectedActivityLevels.length === 0 && levels.length > 0) {
-          setSelectedActivityLevels(levels);
-        }
-
-      } catch (err) {
-        console.error('Error fetching activity data:', err);
-        setError('Failed to load activity data. Please try again.');
-      } finally {
-        setLoading(false);
-        setIsRefreshing(false);
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('Authentication token not found');
       }
-    };
 
-    fetchData();
-  }, [dateRange, refreshKey, patientId, selectedActivityLevels.length]);
+      const headers = { Authorization: `Bearer ${token}` };
+
+      // Prepare API parameters for time-based filtering
+      let activityParams = {};
+      let bloodSugarParams = {};
+
+      // If using exactHours (for 24h filter), pass precise timestamps
+      if (dateRange.exactHours) {
+        // Activity params - filter by start time
+        activityParams = {
+          include_details: true,
+          patient_id: patientId || undefined,
+          filter_by: 'startTime',  // Ensure this matches your backend field name
+          start_time: dateRange.startTime,
+          end_time: dateRange.endTime
+        };
+
+        // Blood sugar params - use the same time window
+        bloodSugarParams = {
+          patient_id: patientId || undefined,
+          filter_by: 'reading_time',
+          start_time: dateRange.startTime,
+          end_time: dateRange.endTime
+        };
+
+        console.log(`Fetching data with exact time range from ${dateRange.startTime} to ${dateRange.endTime}`);
+      } else {
+        // Activity params - filter by date
+        activityParams = {
+          include_details: true,
+          patient_id: patientId || undefined,
+          start_date: dateRange.start,
+          end_date: dateRange.end
+        };
+
+        // Blood sugar params - match the date range
+        bloodSugarParams = {
+          patient_id: patientId || undefined,
+          filter_by: 'reading_time',
+          start_date: dateRange.start,
+          end_date: dateRange.end
+        };
+
+        console.log(`Fetching data from ${dateRange.start} to ${dateRange.end}`);
+      }
+
+      // Fetch activity data with the properly constructed parameters
+      const activityResponse = await axios.get(
+        'http://localhost:5000/api/activity-history',
+        { params: activityParams, headers }
+      );
+
+      // Fetch blood sugar data with the matching time window
+      const bloodSugarResponse = await axios.get(
+        'http://localhost:5000/api/blood-sugar',
+        { params: bloodSugarParams, headers }
+      );
+
+      const activityLogs = activityResponse.data || [];
+      const bloodSugarReadings = bloodSugarResponse.data || [];
+
+      console.log(`Received ${activityLogs.length} activity records`);
+      console.log(`Received ${bloodSugarReadings.length} blood sugar records`);
+
+      // Process activity data
+      const processedActivityData = activityLogs.map(activity => {
+        let startTime, endTime;
+
+        // Try to get the most accurate times from the activity data
+        if (activity.startTime) {
+          startTime = moment.utc(activity.startTime).local();
+        } else if (activity.expectedTime) {
+          startTime = moment.utc(activity.expectedTime).local();
+        } else if (activity.completedTime) {
+          startTime = moment.utc(activity.completedTime).local();
+        } else {
+          startTime = moment.utc(activity.timestamp).local();
+        }
+
+        // Set end time based on duration or endTime field
+        if (activity.endTime) {
+          endTime = moment.utc(activity.endTime).local();
+        } else if (activity.duration) {
+          // Parse duration in format "HH:MM"
+          const [hours, minutes] = activity.duration.split(':').map(Number);
+          endTime = moment(startTime).add(hours, 'hours').add(minutes, 'minutes');
+        } else {
+          // Default 30 minute activity
+          endTime = moment(startTime).add(30, 'minutes');
+        }
+
+        return {
+          id: activity._id || `activity-${startTime.valueOf()}`,
+          activityType: activity.type || 'unknown',
+          level: activity.level || 0,
+          startTime: startTime.valueOf(),
+          endTime: endTime.valueOf(),
+          duration: activity.duration || '00:30',
+          formattedStartTime: startTime.format('MM/DD/YYYY, HH:mm'),
+          formattedEndTime: endTime.format('MM/DD/YYYY, HH:mm'),
+          impact: activity.impact || 1.0,
+          notes: activity.notes || ''
+        };
+      });
+
+      console.log(`Processed ${processedActivityData.length} activities`);
+
+      // Process blood sugar data - Use bloodSugarTimestamp field when available
+const processedBloodSugarData = bloodSugarReadings.map(reading => {
+  // Use proper casing for fields based on backend response
+  const readingTime = moment.utc(reading.bloodSugarTimestamp || reading.timestamp).local();
+
+  return {
+    id: reading._id,
+    bloodSugar: reading.bloodSugar || reading.blood_sugar, // Try both formats
+    readingTime: readingTime.valueOf(),
+    formattedTime: readingTime.format('MM/DD/YYYY, HH:mm'),
+    status: reading.status,
+    notes: reading.notes || ''
+  };
+});
+
+// Add debugging to check data
+console.log("Processed Blood Sugar Data:", processedBloodSugarData);
+      console.log(`Processed ${processedBloodSugarData.length} blood sugar readings`);
+
+      // Get unique activity levels
+      const levels = [...new Set(processedActivityData.map(item => String(item.level)))];
+      console.log(`Found activity levels: ${levels.join(', ')}`);
+
+      setActivityData(processedActivityData);
+      setBloodSugarData(processedBloodSugarData);
+      setActivityLevels(levels);
+
+      // Initialize selected levels if needed
+      if (selectedActivityLevels.length === 0 && levels.length > 0) {
+        setSelectedActivityLevels(levels);
+      }
+
+    } catch (err) {
+      console.error('Error fetching activity data:', err);
+      setError('Failed to load activity data. Please try again.');
+    } finally {
+      setLoading(false);
+      setIsRefreshing(false);
+    }
+  };
+
+  fetchData();
+}, [dateRange, refreshKey, patientId]);
 
   // Generate combined timeline data whenever activity or blood sugar data changes
   useEffect(() => {
@@ -373,16 +368,18 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
       };
 
       // Add blood sugar reading if available at this time
-      const closestBloodSugar = bloodSugarData.find(bs =>
-        Math.abs(bs.readingTime - currentTime) < 15 * 60 * 1000 // Within 15 minutes
-      );
+const closestBloodSugar = bloodSugarData.find(bs =>
+  Math.abs(bs.readingTime - currentTime) < 15 * 60 * 1000 // Within 15 minutes
+);
 
-      if (closestBloodSugar) {
-        timePoint.bloodSugar = closestBloodSugar.bloodSugar;
-        timePoint.bloodSugarStatus = closestBloodSugar.status;
-        timePoint.bloodSugarNotes = closestBloodSugar.notes;
-      }
+if (closestBloodSugar) {
+  timePoint.bloodSugar = closestBloodSugar.bloodSugar;
+  timePoint.bloodSugarStatus = closestBloodSugar.status;
+  timePoint.bloodSugarNotes = closestBloodSugar.notes;
 
+  // Add debug info
+  console.log(`Found blood sugar reading at ${timePoint.formattedTime}: ${timePoint.bloodSugar} mg/dL`);
+}
       // Record active activities at this time
       activityData.forEach(activity => {
         // Only process activities in selected levels
@@ -528,13 +525,7 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
   // Event handlers
   const handleDateChange = (e) => {
     const { name, value } = e.target;
-    setDateRange(prev => ({
-      ...prev,
-      [name]: value,
-      exactHours: false,
-      startTime: null,
-      endTime: null
-    }));
+    setDateRange(prev => ({ ...prev, [name]: value, exactHours: false }));
   };
 
   const handleActivityLevelToggle = (level) => {
@@ -903,44 +894,45 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
                     />
                   ))}
 
-                  {/* Activity Effect Areas */}
-                  {/* Positive effects (increases blood sugar) - show in red/orange */}
-                  {(viewMode === 'combined' || viewMode === 'effect') && showExpectedEffect && (
-                    <Area
-                      yAxisId="bloodSugar"
-                      type="monotone"
-                      dataKey={(dataPoint) => {
-                        const effect = dataPoint.totalActivityEffect - 100;
-                        // Only return value if it's strictly above baseline
-                        return effect > 0 ? dataPoint.totalActivityEffect : 100;
-                      }}
-                      name="Blood Sugar Increase"
-                      fill="rgba(255, 127, 80, 0.5)" // Orange/red for increases
-                      stroke="none"
-                      fillOpacity={0.3}
-                      connectNulls
-                      baseLine={100}
-                    />
-                  )}
+                  {/* Activity Effect Area */}
+{/* Positive effects (increases blood sugar) - show in red/orange */}
+{/* Positive effects (increases blood sugar) - show in red/orange */}
+{(viewMode === 'combined' || viewMode === 'effect') && showExpectedEffect && (
+  <Area
+    yAxisId="bloodSugar"
+    type="monotone"
+    dataKey={(dataPoint) => {
+      const effect = dataPoint.totalActivityEffect - 100;
+      // Only return value if it's strictly above baseline
+      return effect > 0 ? dataPoint.totalActivityEffect : 100;
+    }}
+    name="Blood Sugar Increase"
+    fill="rgba(255, 127, 80, 0.5)" // Orange/red for increases
+    stroke="none"
+    fillOpacity={0.3}
+    connectNulls
+    baseLine={100}
+  />
+)}
 
-                  {/* Negative effects (decreases blood sugar) - show in green */}
-                  {(viewMode === 'combined' || viewMode === 'effect') && showExpectedEffect && (
-                    <Area
-                      yAxisId="bloodSugar"
-                      type="monotone"
-                      dataKey={(dataPoint) => {
-                        const effect = dataPoint.totalActivityEffect - 100;
-                        // Only return value if it's strictly below baseline
-                        return effect < 0 ? dataPoint.totalActivityEffect : 100;
-                      }}
-                      name="Blood Sugar Decrease"
-                      fill="rgba(46, 204, 113, 0.5)" // Green for decreases
-                      stroke="none"
-                      fillOpacity={0.3}
-                      connectNulls
-                      baseLine={100}
-                    />
-                  )}
+{/* Negative effects (decreases blood sugar) - show in green */}
+{(viewMode === 'combined' || viewMode === 'effect') && showExpectedEffect && (
+  <Area
+    yAxisId="bloodSugar"
+    type="monotone"
+    dataKey={(dataPoint) => {
+      const effect = dataPoint.totalActivityEffect - 100;
+      // Only return value if it's strictly below baseline
+      return effect < 0 ? dataPoint.totalActivityEffect : 100;
+    }}
+    name="Blood Sugar Decrease"
+    fill="rgba(46, 204, 113, 0.5)" // Green for decreases
+    stroke="none"
+    fillOpacity={0.3}
+    connectNulls
+    baseLine={100}
+  />
+)}
 
                   {/* Activity Effect Peak Markers */}
                   {(viewMode === 'combined' || viewMode === 'effect') && showExpectedEffect && (
