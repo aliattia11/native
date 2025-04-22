@@ -1,0 +1,32 @@
+ # Blood Sugar Visualization Graph: Features Overview ##
+Blood Sugar Visualization Graph: Features Overview
+Main Features
+Dual-Line Display: Shows actual readings (solid purple line) and estimated values (dashed purple line)
+Smart Connectivity: Connects actual readings only when they're within 20 minutes of each other (adjustable)
+Target-Based Estimation: Estimated line gradually returns to target glucose after readings
+Reference Lines: Clearly displays target glucose, high, and low thresholds with horizontal reference lines
+Current Time Indicator: Red vertical line shows the current time position on the graph
+Color Coding
+Purple Dots/Line: Actual blood glucose readings
+Dashed Purple Line: Estimated blood glucose pattern
+Green Range: Normal blood glucose zone (within target range)
+Orange Line: High threshold (30% above target)
+Red Line: Low threshold (30% below target)
+Key Controls
+Date Range: Select custom date range or use quick preset buttons (Last 24h, Last Week, Last Month)
+Connect Readings: Control maximum time gap (in minutes) to connect actual readings
+Return to Target: Adjust how quickly estimated values return to target glucose level
+Fill Options: Choose to fill from range start and extend to graph end
+View Toggle: Switch between chart and table views for detailed data analysis
+Realistic Estimation
+All estimated values return to target glucose after a period of time (no prolonged elevation)
+No artificial rising patterns without meal or activity data
+Smooth transitions between actual readings and estimated values
+Estimation fills gaps at beginning of time range, between readings, and to current time/graph end
+Interaction Features
+Hover Tooltips: Display detailed info about any point (reading time, glucose value, status)
+Legend: Clear explanation of all visual elements and settings
+Target Info: Shows patient's target glucose and current settings at top of chart
+This visualization provides a physiologically accurate representation of blood glucose 
+
+
