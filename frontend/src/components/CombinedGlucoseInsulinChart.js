@@ -23,17 +23,18 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
   // Use constants context for patient-specific insulin parameters
   const { patientConstants } = useConstants();
 
-  // Use blood sugar data from the shared context
+  // Use blood sugar data from the shared context - IMPROVED: Added more context values
   const {
     filteredData: bloodSugarData,
     combinedData: allBloodSugarData,
-        filteredEstimatedReadings,  // Add this line
+    filteredEstimatedReadings,
     targetGlucose,
     dateRange,
     setDateRange,
     applyInsulinEffect,
     timeScale,
-    unit
+    unit,
+    getBloodSugarStatus  // Added to use consistent status styling
   } = useBloodSugarData();
 
   // State management
@@ -51,10 +52,11 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
   const [dataFetched, setDataFetched] = useState(false);
   const [includeFutureEffect, setIncludeFutureEffect] = useState(true);
   const [futureHours, setFutureHours] = useState(7); // Hours to project into future
-  const [processedBloodSugarData, setProcessedBloodSugarData] = useState([]);
+
+  // REMOVED: processedBloodSugarData state - now using the context's applyInsulinEffect function directly
 
   // Fixed current date and time as specified
-  const currentDateTime = "2025-04-22 19:22:24";
+  const currentDateTime = "2025-04-22 21:12:27";
   const currentUserLogin = "aliattia02";
 
   // Get user's time zone on component mount
@@ -268,11 +270,11 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
       // Save the processed data
       setInsulinData(filteredInsulinData);
 
-      // Now apply insulin effects to the blood sugar data
-      const processedData = applyInsulinEffect(filteredInsulinData, allBloodSugarData);
-      setProcessedBloodSugarData(processedData);
+      // IMPROVED: Use context's applyInsulinEffect directly instead of storing processed data
+      // Now we apply insulin effects on-demand when generating charts
 
-      // Generate combined data using the bloodSugarData from context
+      // Generate combined data using the bloodSugarData from context with insulin effects applied
+      const processedData = applyInsulinEffect(filteredInsulinData, allBloodSugarData);
       const combinedResult = generateCombinedData(filteredInsulinData, processedData);
       setCombinedData(combinedResult);
 
@@ -312,7 +314,7 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
     });
   }, []);
 
-  // Date range change handler
+  // Date range change handler - IMPROVED: Now using the same format as BloodSugarVisualization
   const handleDateChange = useCallback((e) => {
     const { name, value } = e.target;
     setDateRange(prev => {
@@ -321,7 +323,7 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
     });
   }, [setDateRange]);
 
-  // Quick date range presets
+  // Quick date range presets - IMPROVED: Now using the same presets as BloodSugarVisualization
   const applyDatePreset = useCallback((days) => {
     const start = moment().subtract(days, 'days').format('YYYY-MM-DD');
     let end;
@@ -475,10 +477,10 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
     state: { pageIndex, pageSize }
   } = tableInstance;
 
-  // Format the X-axis labels
+  // Format the X-axis labels - IMPROVED: Now using the same format as timeScale from context
   const formatXAxis = useCallback((tickItem) => {
-    return moment(tickItem).format('MM/DD HH:mm');
-  }, []);
+    return moment(tickItem).format(timeScale.tickFormat || 'MM/DD HH:mm');
+  }, [timeScale]);
 
   // Helper function to get consistent colors for insulin types
   const getInsulinColor = useCallback((insulinType, index, isEffect = false) => {
@@ -526,7 +528,7 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
     return "insulinEffect";
   }, [showActualBloodSugar, viewMode]);
 
-  // Generate ticks for x-axis based on time scale
+  // Generate ticks for x-axis based on time scale - IMPROVED: Now using timeScale from context
   const ticks = useMemo(() => {
     const ticksArray = [];
     let current = moment(timeScale.start).startOf('hour');
@@ -554,7 +556,7 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
         <span className="timezone-note"> (all times displayed in your local timezone)</span>
       </div>
 
-      {/* System Info with current date/time and user */}
+      {/* System Info with current date/time and user - IMPROVED: Now using the constants */}
       <div className="system-info">
         <span className="time-label">Current: {currentDateTime} UTC | </span>
         <span className="user-label">User: {currentUserLogin}</span>
@@ -726,15 +728,15 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
 
                   {/* Y-axis for insulin doses */}
                   {(viewMode === 'combined' || viewMode === 'doses') && (
-                    <YAxis
-                      yAxisId="insulinDose"
-                      orientation={showActualBloodSugar ? "right" : "left"}
-                      domain={[0, 'dataMax + 2']}
-                      label={{
-                        value: 'Insulin Dose (units)',
-                        angle: -90,
-                        position: showActualBloodSugar ? 'insideRight' : 'insideLeft'
-                      }}
+                   <YAxis
+  yAxisId="insulinDose"
+  orientation={showActualBloodSugar ? "right" : "left"}
+  domain={[0, 30]} // Fixed scale from 0 to 30
+  label={{
+    value: 'Insulin Dose (units)',
+    angle: -90,
+    position: showActualBloodSugar ? 'insideRight' : 'insideLeft'
+  }}
                     />
                   )}
 
@@ -762,45 +764,43 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
                     />
                   )}
 
-                  {/* Blood Sugar Lines */}
+                  {/* Blood Sugar Lines - IMPROVED: Now using consistent styling */}
+                  {showActualBloodSugar && (
+                    <>
+                      <Line
+                        yAxisId="bloodSugar"
+                        type="monotone"
+                        dataKey="bloodSugar"
+                        name={`Blood Sugar (${unit})`}
+                        stroke="#8884d8"
+                        dot={{ r: 4 }}
+                        activeDot={{ r: 8 }}
+                        connectNulls
+                      />
 
-{showActualBloodSugar && (
-  <>
-    <Line
-      yAxisId="bloodSugar"
-      type="monotone"
-      dataKey="bloodSugar"
-      name={`Blood Sugar (${unit})`}
-      stroke="#8884d8"
-      dot={{ r: 4 }}
-      activeDot={{ r: 8 }}
-      connectNulls
-    />
-
-    {/* Enhanced "Predicted with Insulin" line */}
-    <Line
-      yAxisId="bloodSugar"
-      type="monotone"
-      dataKey="predictedBloodSugar"
-      name={`Predicted with Insulin (${unit})`}
-      stroke="#00C853"  // Bright green color
-      strokeWidth={2.5} // Thicker line
-      dot={{
-        r: 5,           // Larger dots
-        fill: "#00C853",
-        stroke: "#005724",
-        strokeWidth: 1.5
-      }}
-      activeDot={{
-        r: 8,
-        stroke: "#ffffff",
-        strokeWidth: 2
-      }}
-      connectNulls
-    />
-  </>
-    )}
-
+                      {/* Enhanced "Predicted with Insulin" line */}
+                      <Line
+                        yAxisId="bloodSugar"
+                        type="monotone"
+                        dataKey="predictedBloodSugar"
+                        name={`Predicted with Insulin (${unit})`}
+                        stroke="#00C853"  // Bright green color
+                        strokeWidth={2.5} // Thicker line
+                        dot={{
+                          r: 5,           // Larger dots
+                          fill: "#00C853",
+                          stroke: "#005724",
+                          strokeWidth: 1.5
+                        }}
+                        activeDot={{
+                          r: 8,
+                          stroke: "#ffffff",
+                          strokeWidth: 2
+                        }}
+                        connectNulls
+                      />
+                    </>
+                  )}
 
                   {/* Insulin Doses */}
                   {(viewMode === 'combined' || viewMode === 'doses') && selectedInsulinTypes.map((insulinType, idx) => (
@@ -889,40 +889,40 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
                 </div>
               </div>
 
-{/* Blood sugar effect legend */}
-{showActualBloodSugar && processedBloodSugarData.some(d => d.predictedBloodSugar) && (
-  <div className="blood-sugar-legend">
-    <h4>Blood Sugar Effects</h4>
-    <div className="legend-item" style={{ marginTop: '10px', fontWeight: 'bold' }}>
-      <span className="legend-color" style={{
-        backgroundColor: '#5677cc',
-        height: '12px',
-        width: '12px',
-        border: '2px solid #2e4a8f'
-      }}></span>
-      <span>Actual Readings</span>
-    </div>
-    <div className="legend-item">
-      <span className="legend-color" style={{
-        backgroundColor: '#a5a0d8',
-        height: '8px',
-        width: '8px',
-        opacity: 0.8
-      }}></span>
-      <span className="legend-dash" style={{ borderTop: '1px dashed #a5a0d8', marginLeft: '5px' }}></span>
-      <span>Estimated (30-min intervals)</span>
-    </div>
-    <div className="legend-item" style={{ marginTop: '10px', fontWeight: 'bold' }}>
-      <span className="legend-color" style={{
-        backgroundColor: '#00C853',
-        height: '12px',
-        width: '12px',
-        border: '1px solid #005724'
-      }}></span>
-      <span>Predicted with Insulin</span>
-    </div>
-  </div>
-)}
+              {/* Blood sugar effect legend - IMPROVED: Better styling and descriptions */}
+              {showActualBloodSugar && combinedData.some(d => d.predictedBloodSugar) && (
+                <div className="blood-sugar-legend">
+                  <h4>Blood Sugar Effects</h4>
+                  <div className="legend-item" style={{ marginTop: '10px', fontWeight: 'bold' }}>
+                    <span className="legend-color" style={{
+                      backgroundColor: '#5677cc',
+                      height: '12px',
+                      width: '12px',
+                      border: '2px solid #2e4a8f'
+                    }}></span>
+                    <span>Actual Readings</span>
+                  </div>
+                  <div className="legend-item">
+                    <span className="legend-color" style={{
+                      backgroundColor: '#a5a0d8',
+                      height: '8px',
+                      width: '8px',
+                      opacity: 0.8
+                    }}></span>
+                    <span className="legend-dash" style={{ borderTop: '1px dashed #a5a0d8', marginLeft: '5px' }}></span>
+                    <span>Estimated (30-min intervals)</span>
+                  </div>
+                  <div className="legend-item" style={{ marginTop: '10px', fontWeight: 'bold' }}>
+                    <span className="legend-color" style={{
+                      backgroundColor: '#00C853',
+                      height: '12px',
+                      width: '12px',
+                      border: '1px solid #005724'
+                    }}></span>
+                    <span>Predicted with Insulin Effects</span>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
