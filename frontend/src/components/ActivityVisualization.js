@@ -362,7 +362,7 @@ useEffect(() => {
         formattedTime: moment(currentTime).format('MM/DD/YYYY, HH:mm'),
         activeActivities: {},
         activityEffects: {},
-        totalActivityEffect: 0
+        totalActivityEffect: 100 // Changed from 0 to 100 as the baseline (no effect)
       };
 
       // Add blood sugar reading if available at this time
@@ -409,7 +409,7 @@ useEffect(() => {
             timePoint.activityEffects[levelKey] = 0;
           }
           timePoint.activityEffects[levelKey] += effect;
-          timePoint.totalActivityEffect += effect;
+          timePoint.totalActivityEffect += effect; // Add effect to the 100 baseline
         }
       });
 
@@ -429,7 +429,9 @@ useEffect(() => {
           // Only project forward for a reasonable time (extended to match future projection)
           if (hoursSinceReading <= futureHours + 4) {
             // Start with the last actual reading and apply the activity effect
-            timePoint.expectedBloodSugar = lastReading.bloodSugar + timePoint.totalActivityEffect;
+            // Now we need to adjust the calculation to work with our new baseline of 100
+            const effectRelativeTo100 = timePoint.totalActivityEffect - 100;
+            timePoint.expectedBloodSugar = lastReading.bloodSugar + effectRelativeTo100;
           }
         }
       }
@@ -559,11 +561,11 @@ useEffect(() => {
           )}
 
           {/* Display activity effect on blood sugar */}
-          {data.totalActivityEffect !== 0 && (
+          {data.totalActivityEffect !== 100 && (
             <div className="tooltip-section">
               <p className="tooltip-header">Blood Sugar Effect:</p>
               <p className="tooltip-effect">
-                Total: {data.totalActivityEffect > 0 ? '+' : ''}{data.totalActivityEffect.toFixed(1)} mg/dL
+                Total: {data.totalActivityEffect > 100 ? '+' : ''}{(data.totalActivityEffect - 100).toFixed(1)} mg/dL
               </p>
               {Object.entries(data.activityEffects).map(([level, effect], idx) => (
                 effect !== 0 && (
@@ -787,29 +789,29 @@ useEffect(() => {
 
                   {/* Y-axis for blood sugar */}
                   {showActualBloodSugar && (
-<YAxis
-  yAxisId="bloodSugar"
-  orientation="left"
-  domain={['dataMin - 10', 'dataMax + 10']}
-  tickFormatter={(value) => Math.round(value)}
-  label={{ value: 'Blood Sugar (mg/dL)', angle: -90, position: 'insideLeft' }}
-/>
+                    <YAxis
+                      yAxisId="bloodSugar"
+                      orientation="left"
+                      domain={['dataMin - 10', 'dataMax + 10']}
+                      tickFormatter={(value) => Math.round(value)}
+                      label={{ value: 'Blood Sugar (mg/dL)', angle: -90, position: 'insideLeft' }}
+                    />
                   )}
 
                   {/* Y-axis for activity counts */}
-{(viewMode === 'combined' || viewMode === 'activities') && (
-  <YAxis
-    yAxisId="activityCount"
-    orientation="right"
-    allowDecimals={false}
-    domain={[0, 7]}  // Changed from [0, 'auto'] to fixed range [0, 7]
-    label={{
-      value: 'Active Activities',
-      angle: -90,
-      position: 'insideRight'
-    }}
-  />
-)}
+                  {(viewMode === 'combined' || viewMode === 'activities') && (
+                    <YAxis
+                      yAxisId="activityCount"
+                      orientation="right"
+                      allowDecimals={false}
+                      domain={[0, 7]}  // Changed from [0, 'auto'] to fixed range [0, 7]
+                      label={{
+                        value: 'Active Activities',
+                        angle: -90,
+                        position: 'insideRight'
+                      }}
+                    />
+                  )}
 
                   <Tooltip content={<CustomTooltip />} />
                   <Legend />
@@ -824,6 +826,22 @@ useEffect(() => {
                       label={{
                         position: 'insideBottomRight',
                         value: 'Target',
+                        fill: '#666',
+                        fontSize: 12
+                      }}
+                    />
+                  )}
+
+                  {/* Reference line for baseline activity effect (100 = no effect) */}
+                  {(viewMode === 'combined' || viewMode === 'effect') && showExpectedEffect && (
+                    <ReferenceLine
+                      yAxisId="bloodSugar"
+                      y={100}
+                      stroke="#666"
+                      strokeDasharray="3 3"
+                      label={{
+                        position: 'insideTopRight',
+                        value: 'No Effect',
                         fill: '#666',
                         fontSize: 12
                       }}
@@ -883,37 +901,39 @@ useEffect(() => {
                       stroke="none"
                       fillOpacity={0.3}
                       connectNulls
-                      baseLine={0}
+                      baseLine={100} // Changed from 0 to 100 as the baseline
                     />
                   )}
-{/* Activity Effect Peak Markers */}
-{(viewMode === 'combined' || viewMode === 'effect') && showExpectedEffect && (
-  <Line
-    yAxisId="bloodSugar"
-    type="monotone"
-    dataKey="totalActivityEffect"
-    name="Activity Effect Peak"
-    stroke="rgba(43, 150, 100, 0.9)"
-    strokeWidth={2}
-    dot={(props) => {
-      const { cx, cy, payload } = props;
-      // Only show dots for significant effects (>5 points)
-      return Math.abs(payload.totalActivityEffect) > 5 ? (
-        <circle
-          cx={cx}
-          cy={cy}
-          r={4}
-          fill="rgba(43, 150, 100, 0.9)"
-          stroke="#fff"
-          strokeWidth={1}
-        />
-      ) : null;
-    }}
-    activeDot={{ r: 8, fill: "rgba(43, 150, 100, 0.9)", stroke: "#fff", strokeWidth: 2 }}
-    isAnimationActive={false}
-  />
-)}
-                  {/* Reference line for current time - FIXED with yAxisId */}
+
+                  {/* Activity Effect Peak Markers */}
+                  {(viewMode === 'combined' || viewMode === 'effect') && showExpectedEffect && (
+                    <Line
+                      yAxisId="bloodSugar"
+                      type="monotone"
+                      dataKey="totalActivityEffect"
+                      name="Activity Effect Peak"
+                      stroke="rgba(43, 150, 100, 0.9)"
+                      strokeWidth={2}
+                      dot={(props) => {
+                        const { cx, cy, payload } = props;
+                        // Only show dots for significant effects (>5 points different from baseline 100)
+                        return Math.abs(payload.totalActivityEffect - 100) > 5 ? (
+                          <circle
+                            cx={cx}
+                            cy={cy}
+                            r={4}
+                            fill="rgba(43, 150, 100, 0.9)"
+                            stroke="#fff"
+                            strokeWidth={1}
+                          />
+                        ) : null;
+                      }}
+                      activeDot={{ r: 8, fill: "rgba(43, 150, 100, 0.9)", stroke: "#fff", strokeWidth: 2 }}
+                      isAnimationActive={false}
+                    />
+                  )}
+
+                  {/* Reference line for current time */}
                   <ReferenceLine
                     x={Date.now()}
                     yAxisId={currentTimeYAxisId}
