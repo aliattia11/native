@@ -362,7 +362,7 @@ useEffect(() => {
         formattedTime: moment(currentTime).format('MM/DD/YYYY, HH:mm'),
         activeActivities: {},
         activityEffects: {},
-        totalActivityEffect: 100 // Changed from 0 to 100 as the baseline (no effect)
+        totalActivityEffect: 0 // Changed from 100 to 0 as the baseline (no effect)
       };
 
       // Add blood sugar reading if available at this time
@@ -409,7 +409,7 @@ useEffect(() => {
             timePoint.activityEffects[levelKey] = 0;
           }
           timePoint.activityEffects[levelKey] += effect;
-          timePoint.totalActivityEffect += effect; // Add effect to the 100 baseline
+          timePoint.totalActivityEffect += effect; // Add effect directly (no 100 baseline)
         }
       });
 
@@ -428,10 +428,8 @@ useEffect(() => {
 
           // Only project forward for a reasonable time (extended to match future projection)
           if (hoursSinceReading <= futureHours + 4) {
-            // Start with the last actual reading and apply the activity effect
-            // Now we need to adjust the calculation to work with our new baseline of 100
-            const effectRelativeTo100 = timePoint.totalActivityEffect - 100;
-            timePoint.expectedBloodSugar = lastReading.bloodSugar + effectRelativeTo100;
+            // Start with the last actual reading and apply the activity effect directly
+            timePoint.expectedBloodSugar = lastReading.bloodSugar + timePoint.totalActivityEffect;
           }
         }
       }
@@ -561,11 +559,11 @@ useEffect(() => {
           )}
 
           {/* Display activity effect on blood sugar */}
-          {data.totalActivityEffect !== 100 && (
+          {data.totalActivityEffect !== 0 && (
             <div className="tooltip-section">
               <p className="tooltip-header">Blood Sugar Effect:</p>
               <p className="tooltip-effect">
-                Total: {data.totalActivityEffect > 100 ? '+' : ''}{(data.totalActivityEffect - 100).toFixed(1)} mg/dL
+                Total: {data.totalActivityEffect > 0 ? '+' : ''}{data.totalActivityEffect.toFixed(1)} mg/dL
               </p>
               {Object.entries(data.activityEffects).map(([level, effect], idx) => (
                 effect !== 0 && (
@@ -804,7 +802,7 @@ useEffect(() => {
                       yAxisId="activityCount"
                       orientation="right"
                       allowDecimals={false}
-                      domain={[0, 7]}  // Changed from [0, 'auto'] to fixed range [0, 7]
+                      domain={[0, 7]}  // Fixed range [0, 7]
                       label={{
                         value: 'Active Activities',
                         angle: -90,
@@ -832,11 +830,11 @@ useEffect(() => {
                     />
                   )}
 
-                  {/* Reference line for baseline activity effect (100 = no effect) */}
+                  {/* Reference line for baseline activity effect (0 = no effect) */}
                   {(viewMode === 'combined' || viewMode === 'effect') && showExpectedEffect && (
                     <ReferenceLine
                       yAxisId="bloodSugar"
-                      y={100}
+                      y={0}
                       stroke="#666"
                       strokeDasharray="3 3"
                       label={{
@@ -901,7 +899,7 @@ useEffect(() => {
                       stroke="none"
                       fillOpacity={0.3}
                       connectNulls
-                      baseLine={100} // Changed from 0 to 100 as the baseline
+                      baseLine={0} // Changed from 100 to 0 as the baseline
                     />
                   )}
 
@@ -916,8 +914,8 @@ useEffect(() => {
                       strokeWidth={2}
                       dot={(props) => {
                         const { cx, cy, payload } = props;
-                        // Only show dots for significant effects (>5 points different from baseline 100)
-                        return Math.abs(payload.totalActivityEffect - 100) > 5 ? (
+                        // Only show dots for significant effects (>5 points)
+                        return Math.abs(payload.totalActivityEffect) > 5 ? (
                           <circle
                             cx={cx}
                             cy={cy}
@@ -1033,70 +1031,70 @@ useEffect(() => {
                                     : ' 🔼'
                                 : ''}
                           </span>
-                        </th>
-                      ))}
-                    </tr>
+                            </th>
+                        ))}
+                      </tr>
                   ))}
-                </thead>
-                <tbody {...getTableBodyProps()}>
+                  </thead>
+                  <tbody {...getTableBodyProps()}>
                   {page.map((row, i) => {
                     prepareRow(row);
                     return (
-                      <tr
-                        key={`row-${i}`}
-                        {...row.getRowProps()}
-                        style={{
-                          borderLeft: `4px solid ${activityColors[row.original.level] || '#ccc'}`
-                        }}
-                      >
-                        {row.cells.map((cell, j) => (
-                          <td key={`cell-${i}-${j}`} {...cell.getCellProps()}>
-                            {cell.render('Cell')}
-                          </td>
-                        ))}
-                      </tr>
+                        <tr
+                            key={`row-${i}`}
+                            {...row.getRowProps()}
+                            style={{
+                              borderLeft: `4px solid ${activityColors[row.original.level] || '#ccc'}`
+                            }}
+                        >
+                          {row.cells.map((cell, j) => (
+                              <td key={`cell-${i}-${j}`} {...cell.getCellProps()}>
+                                {cell.render('Cell')}
+                              </td>
+                          ))}
+                        </tr>
                     );
                   })}
-                </tbody>
-              </table>
+                  </tbody>
+                </table>
 
-              {/* Pagination */}
-              <div className="pagination">
-                <button onClick={() => gotoPage(0)} disabled={!canPreviousPage}>{'<<'}</button>
-                <button onClick={() => previousPage()} disabled={!canPreviousPage}>{'<'}</button>
-                <button onClick={() => nextPage()} disabled={!canNextPage}>{'>'}</button>
-                <button onClick={() => gotoPage(pageCount - 1)} disabled={!canNextPage}>{'>>'}</button>
-                <span>
+                {/* Pagination */}
+                <div className="pagination">
+                  <button onClick={() => gotoPage(0)} disabled={!canPreviousPage}>{'<<'}</button>
+                  <button onClick={() => previousPage()} disabled={!canPreviousPage}>{'<'}</button>
+                  <button onClick={() => nextPage()} disabled={!canNextPage}>{'>'}</button>
+                  <button onClick={() => gotoPage(pageCount - 1)} disabled={!canNextPage}>{'>>'}</button>
+                  <span>
                   Page{' '}
-                  <strong>
+                    <strong>
                     {pageIndex + 1} of {Math.max(1, pageCount)}
                   </strong>
                 </span>
-                <span>
+                  <span>
                   | Go to page:{' '}
-                  <input
-                    type="number"
-                    defaultValue={pageIndex + 1}
-                    onChange={e => {
-                      const page = e.target.value ? Number(e.target.value) - 1 : 0;
-                      gotoPage(page);
-                    }}
-                  />
+                    <input
+                        type="number"
+                        defaultValue={pageIndex + 1}
+                        onChange={e => {
+                          const page = e.target.value ? Number(e.target.value) - 1 : 0;
+                          gotoPage(page);
+                        }}
+                    />
                 </span>
-                <select
-                  value={pageSize}
-                  onChange={e => {
-                    setPageSize(Number(e.target.value));
-                  }}
-                >
-                  {[10, 20, 30, 40, 50].map(size => (
-                    <option key={size} value={size}>
-                      Show {size}
-                    </option>
-                  ))}
-                </select>
+                  <select
+                      value={pageSize}
+                      onChange={e => {
+                        setPageSize(Number(e.target.value));
+                      }}
+                  >
+                    {[10, 20, 30, 40, 50].map(size => (
+                        <option key={size} value={size}>
+                          Show {size}
+                        </option>
+                    ))}
+                  </select>
+                </div>
               </div>
-            </div>
           )}
         </div>
       )}
