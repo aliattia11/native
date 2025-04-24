@@ -69,13 +69,17 @@ const ActivityBloodSugarChart = ({ isDoctor = false, patientId = null }) => {
   const [localBloodSugarData, setLocalBloodSugarData] = useState([]);
   // Flag to track if we need to force refetch after date range changes
   const [needsRefresh, setNeedsRefresh] = useState(true);
+  // State to track hovered activity for tooltips
+  const [hoveredActivity, setHoveredActivity] = useState(null);
 
   // Track initialization
   const initializedRef = useRef(false);
   const prevDateRangeRef = useRef(null);
+  // Proper React ref for the chart
+  const chartRef = useRef(null);
 
   // System info
-  const currentDateTime = "2025-04-24 12:30:06";
+  const currentDateTime = "2025-04-24 13:04:18";
   const currentUserLogin = "aliattia02";
 
   // Get activity levels from patient constants - WITH DEFENSIVE CHECKS
@@ -739,7 +743,7 @@ const ActivityBloodSugarChart = ({ isDoctor = false, patientId = null }) => {
     return ticksArray;
   }, [timeScale]);
 
-  // Custom activity bar that renders differently based on activity level
+  // Custom activity bar that renders differently based on activity level with mouse event handlers
   const CustomActivityBar = useCallback((props) => {
     const { x, y, width, height, fill, activityData, dataKey } = props;
 
@@ -764,6 +768,12 @@ const ActivityBloodSugarChart = ({ isDoctor = false, patientId = null }) => {
     const durationHours = durationMs / (60 * 60 * 1000);
     const calculatedWidth = Math.max(minWidth, Math.min(maxWidth, durationHours * 15)); // 15px per hour
 
+    // Add mouse event handlers for hover detection
+    const eventHandlers = {
+      onMouseEnter: () => setHoveredActivity(activityData),
+      onMouseLeave: () => setHoveredActivity(null)
+    };
+
     if (isDecreasing) {
       // Decreasing activities emerge from top
       const barHeight = maxBarHeight * (Math.abs(activityData.level) / 2); // Scale by level (1 or 2)
@@ -773,7 +783,8 @@ const ActivityBloodSugarChart = ({ isDoctor = false, patientId = null }) => {
         width: calculatedWidth,
         height: barHeight,
         fill,
-        className: 'activity-bar decreasing'
+        className: 'activity-bar decreasing',
+        ...eventHandlers
       };
     } else if (isIncreasing) {
       // Increasing activities emerge from bottom
@@ -784,7 +795,8 @@ const ActivityBloodSugarChart = ({ isDoctor = false, patientId = null }) => {
         width: calculatedWidth,
         height: barHeight,
         fill,
-        className: 'activity-bar increasing'
+        className: 'activity-bar increasing',
+        ...eventHandlers
       };
     } else if (isNeutral) {
       // Neutral activities as thin lines in the middle
@@ -794,12 +806,13 @@ const ActivityBloodSugarChart = ({ isDoctor = false, patientId = null }) => {
         width: calculatedWidth,
         height: 10,
         fill,
-        className: 'activity-bar neutral'
+        className: 'activity-bar neutral',
+        ...eventHandlers
       };
     }
 
     return <Rectangle {...barProps} />;
-  }, [barMaxHeight]);
+  }, [barMaxHeight, setHoveredActivity]);
 
   // Generate activity bars for the chart
   const renderActivityBars = useCallback(() => {
@@ -830,18 +843,46 @@ const ActivityBloodSugarChart = ({ isDoctor = false, patientId = null }) => {
       });
   }, [activityData, selectedActivityLevels, systemActivityLevels, getActivityColor, CustomActivityBar, safeToFixed]);
 
-  // Fixed CustomTooltip with improved context awareness
+  // Updated CustomTooltip component that uses hoveredActivity state
   const CustomTooltip = useCallback(({ active, payload }) => {
-    if (!active || !payload || !payload.length || !payload[0] || !payload[0].payload) return null;
+    // If tooltip is not active or has no payload, don't render anything
+    if (!active || !payload || !payload.length) return null;
 
     try {
-      const dataPoint = payload[0].payload;
+      // Check if we have a hovered activity
+      if (hoveredActivity) {
+        // Return a tooltip for the specific activity
+        return (
+          <div className="activity-tooltip">
+            <p className="tooltip-time">
+              {moment(hoveredActivity.startTime).format('MM/DD/YYYY, HH:mm')} -
+              {moment(hoveredActivity.endTime).format('HH:mm')}
+            </p>
+            <div className="tooltip-section">
+              <p className="tooltip-header">Activity Details:</p>
+              <p><strong>{hoveredActivity.levelLabel}</strong> - {safeToFixed(hoveredActivity.impact)}x effect</p>
+              <p>Duration: {hoveredActivity.duration}</p>
+              {hoveredActivity.notes && <p>Notes: {hoveredActivity.notes}</p>}
+            </div>
 
-      // Make sure we only show data from the current visible time range
-      if (dataPoint.timestamp < timeScale.start || dataPoint.timestamp > timeScale.end) {
-        return null;
+            <div className="tooltip-section">
+              <p className="tooltip-header">Effect on Blood Sugar:</p>
+              <p className="tooltip-effect" style={{
+                color: hoveredActivity.impact < 1.0 ? '#d32f2f' : '#388e3c'
+              }}>
+                {hoveredActivity.impact < 1.0 ? 'Decreases' : 'Increases'} insulin sensitivity
+                {' '}({safeToFixed(hoveredActivity.impact)}x)
+              </p>
+            </div>
+          </div>
+        );
       }
 
+      // If no activity is hovered, use default tooltip behavior for time series data
+      const dataPoint = payload[0].payload;
+      if (!dataPoint) return null;
+
+      // Original time series tooltip logic
       return (
         <div className="activity-tooltip">
           <p className="tooltip-time">
@@ -875,9 +916,8 @@ const ActivityBloodSugarChart = ({ isDoctor = false, patientId = null }) => {
               </p>
 
               {/* Detailed breakdown by activity level */}
-              {dataPoint.effectsByLevel && Object.entries(dataPoint.effectsByLevel)
-                .filter(([_, effect]) => effect !== 0)
-                .map(([level, effect], idx) => (
+              {dataPoint.effectsByLevel && Object.entries(dataPoint.effectsByLevel).map(([level, effect], idx) => (
+                effect !== 0 && (
                   <p key={idx} className="tooltip-effect-detail" style={{
                     color: effect < 0 ? '#d32f2f' : '#388e3c',
                     fontSize: '0.9em',
@@ -886,7 +926,8 @@ const ActivityBloodSugarChart = ({ isDoctor = false, patientId = null }) => {
                     {systemActivityLevels.find(l => l.value === parseInt(level))?.label || `Level ${level}`}:
                     {effect > 0 ? '+' : ''}{(effect * 100).toFixed(1)}% effect
                   </p>
-                ))}
+                )
+              ))}
 
               {/* Show counteracting information if both effects present */}
               {dataPoint.decreaseEffect > 0 && dataPoint.increaseEffect > 0 && (
@@ -923,7 +964,7 @@ const ActivityBloodSugarChart = ({ isDoctor = false, patientId = null }) => {
       console.error("Error rendering tooltip:", error);
       return <div>Error displaying tooltip</div>;
     }
-  }, [unit, safeToFixed, systemActivityLevels, timeScale.start, timeScale.end]);
+  }, [hoveredActivity, unit, safeToFixed, systemActivityLevels]);
 
   // Check if current time is within chart range
   const currentTimeInRange = useMemo(() => {
@@ -1218,8 +1259,9 @@ const ActivityBloodSugarChart = ({ isDoctor = false, patientId = null }) => {
             <div className="chart-container">
               <ResponsiveContainer width="100%" height={500}>
                 <ComposedChart
-                  data={filteredData}
+                  data={combinedData}
                   margin={{ top: 5, right: 30, left: 20, bottom: 25 }}
+                  ref={chartRef} // Use the proper React ref here
                 >
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis
@@ -1313,7 +1355,7 @@ const ActivityBloodSugarChart = ({ isDoctor = false, patientId = null }) => {
                     </>
                   )}
 
-                  {/* Activity Bars - Now rendered with custom component */}
+                  {/* Activity Bars - with mouse event handlers for hover detection */}
                   {(viewMode === 'combined' || viewMode === 'activities') &&
                     // Map individual activities to custom bars
                     activityData
