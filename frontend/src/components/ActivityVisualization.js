@@ -12,7 +12,8 @@ import {
   Tooltip,
   Legend,
   Area,
-  ReferenceLine
+  ReferenceLine,
+  Rectangle
 } from 'recharts';
 import { useTable, useSortBy, usePagination } from 'react-table';
 import { useConstants } from '../contexts/ConstantsContext';
@@ -20,12 +21,14 @@ import { useBloodSugarData } from '../contexts/BloodSugarDataContext';
 import './ActivityVisualization.css';
 
 /**
- * Combined Activity and Blood Sugar Chart Component
+ * Enhanced Activity and Blood Sugar Chart Component
  *
  * Visualizes the relationship between physical activity and blood glucose levels,
  * showing both immediate and extended effects of activity on blood sugar.
  *
- * Uses patient-specific activity coefficients set by doctors in EnhancedPatientConstantsUI.
+ * Activities that decrease blood sugar (high/vigorous) emerge from the top of the chart.
+ * Activities that increase blood sugar (low/very low) emerge from the bottom of the chart.
+ * Bar width represents the duration of the activity.
  */
 const ActivityBloodSugarChart = ({ isDoctor = false, patientId = null }) => {
   // Context hooks for patient constants and blood sugar data
@@ -47,6 +50,7 @@ const ActivityBloodSugarChart = ({ isDoctor = false, patientId = null }) => {
   const [activityLevels, setActivityLevels] = useState([]);
   const [selectedActivityLevels, setSelectedActivityLevels] = useState([]);
   const [combinedData, setCombinedData] = useState([]);
+  const [filteredData, setFilteredData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showActualBloodSugar, setShowActualBloodSugar] = useState(true);
@@ -59,12 +63,13 @@ const ActivityBloodSugarChart = ({ isDoctor = false, patientId = null }) => {
   const [activityImpactThreshold, setActivityImpactThreshold] = useState(2); // Hours
   const [activityEffectMultiplier, setActivityEffectMultiplier] = useState(1.0); // Effect strength multiplier
   const [processedBloodSugarData, setProcessedBloodSugarData] = useState([]);
+  const [barMaxHeight, setBarMaxHeight] = useState(25); // Maximum height of activity bars as percentage of chart
 
   // Track initialization
   const initializedRef = useRef(false);
 
   // System info - using your provided values
-  const currentDateTime = "2025-04-23 22:46:55";
+  const currentDateTime = "2025-04-24 01:17:07";
   const currentUserLogin = "aliattia02";
 
   // Get activity levels from patient constants - ADDED MORE DEFENSIVE CHECKS
@@ -515,6 +520,7 @@ const ActivityBloodSugarChart = ({ isDoctor = false, patientId = null }) => {
               formattedStartTime: moment(startTime).format('MM/DD/YYYY, HH:mm'),
               formattedEndTime: moment(endTime).format('MM/DD/YYYY, HH:mm'),
               duration: activity.duration || '00:00',
+              durationMs: endTime - startTime,
               impact,
               notes: activity.notes || '',
               type: activity.type || 'unknown'
@@ -657,6 +663,97 @@ const ActivityBloodSugarChart = ({ isDoctor = false, patientId = null }) => {
 
     return ticksArray;
   }, [timeScale]);
+
+  // Custom activity bar that renders differently based on activity level
+  const CustomActivityBar = useCallback((props) => {
+    const { x, y, width, height, fill, activityData, dataKey } = props;
+
+    if (!activityData) return null;
+
+    // Determine if this is a decreasing or increasing activity
+    const isDecreasing = activityData.level > 0; // High/vigorous activities decrease blood sugar
+    const isIncreasing = activityData.level < 0; // Low/very low activities increase blood sugar
+    const isNeutral = activityData.level === 0; // Normal activities have minimal effect
+
+    // Calculate the visual representation
+    let barProps = {};
+    const chartHeight = 400; // Assuming default chart height
+    const maxBarHeight = chartHeight * (barMaxHeight / 100); // Convert percentage to pixels
+
+    // Calculate duration-based width
+    const minWidth = 5; // Minimum width in pixels
+    const maxWidth = width || 10; // Max width from props or default
+
+    // Calculate bar width based on duration
+    const durationMs = activityData.durationMs || 1800000; // Default to 30 minutes if not specified
+    const durationHours = durationMs / (60 * 60 * 1000);
+    const calculatedWidth = Math.max(minWidth, Math.min(maxWidth, durationHours * 15)); // 15px per hour
+
+    if (isDecreasing) {
+      // Decreasing activities emerge from top
+      const barHeight = maxBarHeight * (Math.abs(activityData.level) / 2); // Scale by level (1 or 2)
+      barProps = {
+        x: x - (calculatedWidth / 2), // Center the bar on the x point
+        y: 0, // Start from the top
+        width: calculatedWidth,
+        height: barHeight,
+        fill,
+        className: 'activity-bar decreasing'
+      };
+    } else if (isIncreasing) {
+      // Increasing activities emerge from bottom
+      const barHeight = maxBarHeight * (Math.abs(activityData.level) / 2); // Scale by level (1 or 2)
+      barProps = {
+        x: x - (calculatedWidth / 2), // Center the bar on the x point
+        y: chartHeight - barHeight, // Start from the bottom
+        width: calculatedWidth,
+        height: barHeight,
+        fill,
+        className: 'activity-bar increasing'
+      };
+    } else if (isNeutral) {
+      // Neutral activities as thin lines in the middle
+      barProps = {
+        x: x - (calculatedWidth / 2), // Center the bar on the x point
+        y: chartHeight / 2 - 5, // Center in the chart with small height
+        width: calculatedWidth,
+        height: 10,
+        fill,
+        className: 'activity-bar neutral'
+      };
+    }
+
+    return <Rectangle {...barProps} />;
+  }, [barMaxHeight]);
+
+  // Generate activity bars for the chart
+  const renderActivityBars = useCallback(() => {
+    if (!activityData || !Array.isArray(activityData) || activityData.length === 0) {
+      return null;
+    }
+
+    // Filter for selected activity levels
+    const filteredActivities = activityData.filter(activity =>
+      activity && selectedActivityLevels.includes(activity.level)
+    );
+
+    return systemActivityLevels
+      .filter(level => selectedActivityLevels.includes(level.value))
+      .map(level => {
+        const activitiesAtLevel = filteredActivities.filter(a => a.level === level.value);
+
+        return (
+          <Bar
+            key={`activity-level-${level.value}`}
+            dataKey="timestamp" // Use timestamp as the x-axis value
+            name={`${level.label} (${safeToFixed(level.impact)}x)`}
+            data={activitiesAtLevel}
+            fill={getActivityColor(level.value)}
+            shape={<CustomActivityBar activityData={activitiesAtLevel[0]} />}
+          />
+        );
+      });
+  }, [activityData, selectedActivityLevels, systemActivityLevels, getActivityColor, CustomActivityBar, safeToFixed]);
 
   // Custom tooltip for the chart with EXTRA SAFETY CHECKS
   const CustomTooltip = useCallback(({ active, payload }) => {
@@ -986,6 +1083,19 @@ const ActivityBloodSugarChart = ({ isDoctor = false, patientId = null }) => {
               onChange={handleEffectMultiplierChange}
             />
           </div>
+
+          <div className="threshold-input">
+            <label htmlFor="bar-max-height">Activity Bar Height (% of chart):</label>
+            <input
+              id="bar-max-height"
+              type="number"
+              min="5"
+              max="50"
+              step="5"
+              value={barMaxHeight}
+              onChange={(e) => setBarMaxHeight(parseInt(e.target.value) || 25)}
+            />
+          </div>
         </div>
 
         <button className="update-btn" onClick={handleForceUpdate}>Update Data</button>
@@ -1030,18 +1140,13 @@ const ActivityBloodSugarChart = ({ isDoctor = false, patientId = null }) => {
                     />
                   )}
 
-                  {/* Y-axis for activity levels */}
+                  {/* Y-axis for activity levels - HIDDEN, used only for positioning */}
                   {(viewMode === 'combined' || viewMode === 'activities') && (
                     <YAxis
                       yAxisId="activityLevel"
                       orientation={showActualBloodSugar ? "right" : "left"}
                       domain={[-2, 2]} // Fixed domain based on system activity scale
-                      ticks={[-2, -1, 0, 1, 2]}
-                      label={{
-                        value: 'Activity Level',
-                        angle: -90,
-                        position: showActualBloodSugar ? 'insideRight' : 'insideLeft'
-                      }}
+                      hide={true} // Hide this axis as we're using custom rendering
                     />
                   )}
 
@@ -1103,28 +1208,29 @@ const ActivityBloodSugarChart = ({ isDoctor = false, patientId = null }) => {
                     </>
                   )}
 
-                  {/* Activity Bars based on system activity levels */}
+                  {/* Activity Bars - Now rendered with custom component */}
                   {(viewMode === 'combined' || viewMode === 'activities') &&
-                    systemActivityLevels
-                      .filter(level => selectedActivityLevels.includes(level.value))
-                      .map((level) => (
+                    // Map individual activities to custom bars
+                    activityData
+                      .filter(activity => selectedActivityLevels.includes(activity.level))
+                      .map(activity => (
                         <Bar
-                          key={`activity-level-${level.value}`}
+                          key={`activity-${activity.id}`}
                           yAxisId="activityLevel"
-                          dataKey={(dataPoint) => {
-                            if (!dataPoint || !dataPoint.activeActivities) return null;
-
-                            // Count activities at this level that are active at this time point
-                            const activeAtThisLevel = dataPoint.activeActivities.filter(
-                              activity => activity && activity.level === level.value
-                            ).length || 0;
-
-                            return activeAtThisLevel > 0 ? level.value : null;
-                          }}
-                          name={`${level.label} (${safeToFixed(level.impact)}x)`}
-                          fill={getActivityColor(level.value)}
-                          barSize={40}
-                          stackId="activities"
+                          dataKey="timestamp"
+                          name={activity.levelLabel}
+                          fill={getActivityColor(activity.level)}
+                          shape={(props) => (
+                            <CustomActivityBar
+                              {...props}
+                              activityData={activity}
+                              width={(activity.durationMs / (60 * 60 * 1000)) * 15}
+                            />
+                          )}
+                          data={[
+                            // Create a single data point at the middle of the activity
+                            { timestamp: activity.startTime + (activity.durationMs / 2) }
+                          ]}
                         />
                       ))
                   }
@@ -1180,6 +1286,8 @@ const ActivityBloodSugarChart = ({ isDoctor = false, patientId = null }) => {
                           color: level.impact < 1.0 ? '#d32f2f' : level.impact > 1.0 ? '#388e3c' : '#666666'
                         }}>
                           Impact: {safeToFixed(level.impact)}x
+                          {level.impact < 1.0 ? ' (decreases blood sugar)' :
+                           level.impact > 1.0 ? ' (increases blood sugar)' : ' (neutral)'}
                         </span>
                       </div>
                     </div>
@@ -1241,6 +1349,36 @@ const ActivityBloodSugarChart = ({ isDoctor = false, patientId = null }) => {
                     </div>
                   </div>
                 )}
+
+                {/* Activity bars legend */}
+                <div className="activity-bars-legend">
+                  <h4>Activity Bar Visualization</h4>
+                  <div className="legend-item">
+                    <span className="legend-bar decreasing" style={{
+                      backgroundColor: '#e6550d',
+                      height: '20px',
+                      width: '20px',
+                      display: 'inline-block',
+                      marginRight: '8px',
+                      verticalAlign: 'top'
+                    }}></span>
+                    <span>High/Vigorous Activities: Emerge from top ↓ (decrease blood sugar)</span>
+                  </div>
+                  <div className="legend-item">
+                    <span className="legend-bar increasing" style={{
+                      backgroundColor: '#6baed6',
+                      height: '20px',
+                      width: '20px',
+                      display: 'inline-block',
+                      marginRight: '8px',
+                      verticalAlign: 'bottom'
+                    }}></span>
+                    <span>Low/Very Low Activities: Emerge from bottom ↑ (increase blood sugar)</span>
+                  </div>
+                  <div className="legend-note">
+                    <span>Bar width represents activity duration. Bar height represents activity intensity.</span>
+                  </div>
+                </div>
               </div>
             </div>
           )}

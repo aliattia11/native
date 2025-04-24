@@ -1,502 +1,453 @@
+/* Activity Visualization Component Styles */
 .combined-activity-blood-sugar-chart {
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  max-width: 1200px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  max-width: 98%;
   margin: 0 auto;
-  padding: 1rem;
+  padding: 20px;
   background-color: #fff;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
   border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .combined-activity-blood-sugar-chart .title {
+  text-align: center;
   color: #333;
-  margin-bottom: 0.5rem;
-  border-bottom: 2px solid #eee;
-  padding-bottom: 0.5rem;
+  margin-bottom: 15px;
+  font-size: 1.8rem;
 }
 
-.combined-activity-blood-sugar-chart .timezone-info {
+/* System Info */
+.system-info {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 15px;
   font-size: 0.8rem;
-  color: #666;
-  margin-bottom: 1rem;
+  color: #777;
 }
 
-.combined-activity-blood-sugar-chart .timezone-note {
+.time-label, .user-label {
+  margin-left: 10px;
+}
+
+/* Timezone Info */
+.timezone-info {
+  text-align: right;
+  font-size: 0.85rem;
+  color: #555;
+  margin-bottom: 10px;
+}
+
+.timezone-note {
   font-style: italic;
-  color: #888;
+  color: #777;
 }
 
-.combined-activity-blood-sugar-chart .system-info {
-  font-size: 0.8rem;
-  color: #666;
-  margin-bottom: 1rem;
-  padding: 0.5rem;
-  background-color: #f8f9fa;
-  border-radius: 4px;
-}
-
-.combined-activity-blood-sugar-chart .view-toggle,
-.combined-activity-blood-sugar-chart .view-mode-toggle {
+/* View Toggles */
+.view-toggle, .view-mode-toggle {
   display: flex;
-  margin-bottom: 1rem;
-  gap: 0.5rem;
+  justify-content: center;
+  margin-bottom: 15px;
 }
 
-.combined-activity-blood-sugar-chart .toggle-btn {
-  padding: 0.5rem 1rem;
+.toggle-btn {
   background-color: #f0f0f0;
-  border: 1px solid #ccc;
-  border-radius: 4px;
+  border: 1px solid #ddd;
+  padding: 8px 15px;
+  margin: 0 5px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  transition: all 0.2s;
 }
 
-.combined-activity-blood-sugar-chart .toggle-btn.active {
-  background-color: #007bff;
+.toggle-btn:hover {
+  background-color: #e0e0e0;
+}
+
+.toggle-btn.active {
+  background-color: #2196F3;
   color: white;
-  border-color: #0056b3;
+  border-color: #1976D2;
 }
 
-.combined-activity-blood-sugar-chart .toggle-btn:hover:not(.active) {
-  background-color: #e0e0e0;
-}
-
-.combined-activity-blood-sugar-chart .controls {
+/* Controls Section */
+.controls {
   display: flex;
   flex-wrap: wrap;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
-  padding: 1rem;
-  background-color: #f8f9fa;
-  border-radius: 8px;
+  gap: 10px;
+  margin-bottom: 20px;
+  padding: 15px;
+  background-color: #f9f9f9;
+  border-radius: 6px;
+  border: 1px solid #eee;
 }
 
-.combined-activity-blood-sugar-chart .date-controls {
+.date-controls {
   display: flex;
-  gap: 1rem;
+  gap: 10px;
+  align-items: center;
 }
 
-.combined-activity-blood-sugar-chart .date-input-group {
+.date-input-group {
   display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
+  align-items: center;
+  gap: 5px;
 }
 
-.combined-activity-blood-sugar-chart .date-input-group label {
-  font-size: 0.9rem;
+.date-input-group label {
+  font-weight: 500;
   color: #555;
 }
 
-.combined-activity-blood-sugar-chart .date-input-group input {
-  padding: 0.4rem;
+.date-input-group input {
+  padding: 6px 10px;
   border: 1px solid #ccc;
   border-radius: 4px;
+  font-size: 0.9rem;
 }
 
-.combined-activity-blood-sugar-chart .quick-ranges {
+.quick-ranges {
   display: flex;
-  gap: 0.5rem;
+  gap: 5px;
 }
 
-.combined-activity-blood-sugar-chart .quick-ranges button {
-  padding: 0.4rem 0.8rem;
-  background-color: #f0f0f0;
+.quick-ranges button {
+  padding: 6px 12px;
+  background-color: #e0e0e0;
   border: 1px solid #ccc;
   border-radius: 4px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  font-size: 0.9rem;
+  transition: background-color 0.2s;
 }
 
-.combined-activity-blood-sugar-chart .quick-ranges button:hover {
-  background-color: #e0e0e0;
+.quick-ranges button:hover {
+  background-color: #d0d0d0;
 }
 
-.combined-activity-blood-sugar-chart .activity-level-filters {
+.activity-level-filters {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 8px;
+  flex-grow: 1;
 }
 
-.combined-activity-blood-sugar-chart .filter-header {
-  font-weight: bold;
-  font-size: 0.9rem;
+.filter-header {
+  font-weight: 500;
+  color: #333;
 }
 
-.combined-activity-blood-sugar-chart .filter-options {
+.filter-options {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 10px;
 }
 
-.combined-activity-blood-sugar-chart .filter-option {
+.filter-option {
   display: flex;
   align-items: center;
-  gap: 0.3rem;
-  font-size: 0.9rem;
-  padding: 0.2rem 0.4rem;
-  border-radius: 3px;
-  background-color: #f5f5f5;
+  gap: 5px;
+  cursor: pointer;
 }
 
-.combined-activity-blood-sugar-chart .display-options {
+.display-options {
   display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+  flex-wrap: wrap;
+  gap: 15px;
+  align-items: center;
 }
 
-.combined-activity-blood-sugar-chart .display-option {
+.display-option {
   display: flex;
   align-items: center;
-  gap: 0.3rem;
-  font-size: 0.9rem;
+  gap: 5px;
+  cursor: pointer;
 }
 
-.combined-activity-blood-sugar-chart .threshold-input {
+.threshold-input {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
+  gap: 5px;
 }
 
-.combined-activity-blood-sugar-chart .threshold-input label {
+.threshold-input label {
   font-size: 0.9rem;
   color: #555;
 }
 
-.combined-activity-blood-sugar-chart .threshold-input input {
+.threshold-input input {
   width: 60px;
-  padding: 0.3rem;
+  padding: 5px;
   border: 1px solid #ccc;
   border-radius: 4px;
+  text-align: center;
 }
 
-.combined-activity-blood-sugar-chart .update-btn {
-  padding: 0.5rem 1rem;
-  background-color: #28a745;
+.update-btn {
+  padding: 8px 16px;
+  background-color: #4CAF50;
   color: white;
   border: none;
   border-radius: 4px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  font-weight: 500;
+  transition: background-color 0.2s;
 }
 
-.combined-activity-blood-sugar-chart .update-btn:hover {
-  background-color: #218838;
+.update-btn:hover {
+  background-color: #388E3C;
 }
 
-.combined-activity-blood-sugar-chart .error-message {
-  color: #dc3545;
-  margin-bottom: 1rem;
-  padding: 0.5rem;
-  background-color: #f8d7da;
-  border-radius: 4px;
+/* Error and Loading Messages */
+.error-message {
+  color: #d32f2f;
+  padding: 10px;
+  border-left: 4px solid #d32f2f;
+  background-color: #ffebee;
+  margin-bottom: 15px;
 }
 
-.combined-activity-blood-sugar-chart .loading,
-.combined-activity-blood-sugar-chart .no-data {
+.loading, .no-data {
   text-align: center;
-  padding: 2rem;
-  color: #666;
+  padding: 20px;
+  color: #777;
+  font-style: italic;
 }
 
-.combined-activity-blood-sugar-chart .chart-container {
-  margin-bottom: 2rem;
-  position: relative;
+/* Content Container */
+.content-container {
+  margin-top: 20px;
 }
 
-/* Activity Rectangle Styling */
-.combined-activity-blood-sugar-chart .activity-rectangle {
-  cursor: pointer;
-  transition: opacity 0.2s ease;
+/* Chart Styles */
+.chart-container {
+  overflow: hidden;
+  margin-bottom: 30px;
 }
 
-.combined-activity-blood-sugar-chart .activity-rectangle:hover {
-  opacity: 0.9;
-  stroke-width: 2px;
+/* Activity Bars */
+.activity-bar {
+  stroke: rgba(0, 0, 0, 0.3);
+  stroke-width: 1;
 }
 
-/* Activity Visualization Guide */
-.combined-activity-blood-sugar-chart .activity-visualization-guide {
-  margin: 1rem 0;
-  padding: 0.5rem;
-  background-color: #f8f9fa;
-  border: 1px solid #eee;
-  border-radius: 4px;
+.activity-bar.decreasing {
+  opacity: 0.8;
 }
 
-.combined-activity-blood-sugar-chart .activity-zones {
-  display: flex;
-  flex-direction: column;
-  height: 120px;
-  position: relative;
+.activity-bar.increasing {
+  opacity: 0.8;
 }
 
-.combined-activity-blood-sugar-chart .decrease-zone,
-.combined-activity-blood-sugar-chart .blood-sugar-zone,
-.combined-activity-blood-sugar-chart .increase-zone {
-  display: flex;
-  align-items: center;
-  position: relative;
+.activity-bar.neutral {
+  opacity: 0.6;
 }
 
-.combined-activity-blood-sugar-chart .decrease-zone {
-  height: 30px;
-  border-bottom: 1px dashed #ddd;
-  background: linear-gradient(to top, rgba(91, 168, 222, 0.1), rgba(25, 118, 210, 0.2));
-  justify-content: space-between;
-  padding: 0 10px;
-}
-
-.combined-activity-blood-sugar-chart .blood-sugar-zone {
-  height: 60px;
-  justify-content: center;
+/* Chart Legend */
+.chart-legend {
+  margin-top: 20px;
+  padding: 15px;
   background-color: #f9f9f9;
+  border-radius: 6px;
+  border: 1px solid #eee;
 }
 
-.combined-activity-blood-sugar-chart .increase-zone {
-  height: 30px;
-  border-top: 1px dashed #ddd;
-  background: linear-gradient(to bottom, rgba(222, 156, 91, 0.1), rgba(210, 118, 25, 0.2));
-  justify-content: space-between;
-  padding: 0 10px;
+.chart-legend h4 {
+  margin-top: 15px;
+  margin-bottom: 10px;
+  color: #333;
+  font-size: 1.1rem;
 }
 
-.combined-activity-blood-sugar-chart .zone-label {
-  font-size: 0.8rem;
-  color: #555;
-}
-
-.combined-activity-blood-sugar-chart .zone-bar {
-  width: 20px;
-  position: absolute;
-}
-
-.combined-activity-blood-sugar-chart .top-bar {
-  height: 25px;
-  top: 0;
-  right: 50px;
-  background-color: #1976d2;
-}
-
-.combined-activity-blood-sugar-chart .bottom-bar {
-  height: 25px;
-  bottom: 0;
-  right: 50px;
-  background-color: #d27619;
-}
-
-.combined-activity-blood-sugar-chart .chart-legend {
-  margin-top: 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.combined-activity-blood-sugar-chart .activity-levels-grid {
+.activity-levels-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 10px;
+  margin-bottom: 15px;
 }
 
-.combined-activity-blood-sugar-chart .activity-level-details {
-  padding: 0.5rem;
-  border: 1px solid #eee;
+.activity-level-details {
+  padding: 8px;
   border-radius: 4px;
-  background-color: #f9f9f9;
+  background-color: #f0f0f0;
 }
 
-.combined-activity-blood-sugar-chart .activity-level-header {
+.activity-level-header {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 0.3rem;
+  gap: 8px;
+  margin-bottom: 5px;
 }
 
-.combined-activity-blood-sugar-chart .activity-color-box {
-  width: 16px;
-  height: 16px;
+.activity-color-box {
+  display: inline-block;
+  width: 15px;
+  height: 15px;
   border-radius: 3px;
 }
 
-.combined-activity-blood-sugar-chart .activity-level-name {
-  font-weight: bold;
+.activity-level-name {
+  font-weight: 500;
 }
 
-.combined-activity-blood-sugar-chart .activity-impact {
+.activity-impact {
   font-size: 0.9rem;
-  color: #666;
+  padding-left: 23px;
 }
 
-.combined-activity-blood-sugar-chart .decrease-impact {
-  color: #1976d2;
+.blood-sugar-legend, .impact-legend, .activity-bars-legend {
+  margin-top: 15px;
 }
 
-.combined-activity-blood-sugar-chart .increase-impact {
-  color: #d27619;
-}
-
-.combined-activity-blood-sugar-chart .blood-sugar-legend,
-.combined-activity-blood-sugar-chart .impact-legend {
-  margin-top: 1rem;
-}
-
-.combined-activity-blood-sugar-chart h4 {
-  margin-top: 0;
-  margin-bottom: 0.5rem;
-  font-size: 1rem;
-  color: #444;
-}
-
-.combined-activity-blood-sugar-chart .legend-item {
+.legend-item {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 0.3rem;
+  margin-bottom: 8px;
 }
 
-.combined-activity-blood-sugar-chart .legend-color,
-.combined-activity-blood-sugar-chart .legend-dash {
-  width: 24px;
-  height: 12px;
-  display: inline-block;
+.legend-color, .legend-bar, .legend-area {
+  margin-right: 10px;
+  border-radius: 3px;
 }
 
-.combined-activity-blood-sugar-chart .legend-area {
-  width: 40px;
-  height: 20px;
-  display: inline-block;
-  opacity: 0.6;
-  margin-right: 8px;
-}
-
-.combined-activity-blood-sugar-chart .decrease-impact-area {
-  background-color: #5ba8de;
-}
-
-.combined-activity-blood-sugar-chart .increase-impact-area {
-  background-color: #de9c5b;
-}
-
-/* Activity Type indicators in tooltip and table */
-.combined-activity-blood-sugar-chart .activity-type {
-  display: inline-block;
-  margin-right: 5px;
-  font-size: 1.1em;
-}
-
-.combined-activity-blood-sugar-chart .activity-time {
-  font-size: 0.8em;
-  color: #666;
-  margin-left: 6px;
-}
-
-/* Tooltip styling */
-.combined-activity-blood-sugar-chart .activity-tooltip {
-  background-color: rgba(255, 255, 255, 0.95);
-  padding: 0.75rem;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-  max-width: 320px;
-  font-size: 0.9rem;
-}
-
-.combined-activity-blood-sugar-chart .tooltip-time {
-  font-weight: bold;
-  margin-top: 0;
-  margin-bottom: 0.5rem;
-  padding-bottom: 0.3rem;
-  border-bottom: 1px solid #eee;
-}
-
-.combined-activity-blood-sugar-chart .tooltip-section {
-  margin-bottom: 0.5rem;
-  padding-bottom: 0.3rem;
-  border-bottom: 1px solid #f5f5f5;
-}
-
-.combined-activity-blood-sugar-chart .tooltip-section:last-child {
-  border-bottom: none;
-}
-
-.combined-activity-blood-sugar-chart .tooltip-header {
-  font-weight: bold;
-  margin-bottom: 0.2rem;
-  margin-top: 0.5rem;
-  color: #333;
-}
-
-.combined-activity-blood-sugar-chart .tooltip-activity,
-.combined-activity-blood-sugar-chart .tooltip-effect,
-.combined-activity-blood-sugar-chart .tooltip-effect-detail,
-.combined-activity-blood-sugar-chart .tooltip-blood-sugar {
-  margin: 0.2rem 0;
+.legend-note {
   font-size: 0.85rem;
-  line-height: 1.3;
+  font-style: italic;
+  color: #666;
+  margin-top: 5px;
 }
 
-.combined-activity-blood-sugar-chart .tooltip-blood-sugar.adjusted {
-  font-style: italic;
+/* Tooltip Styles */
+.activity-tooltip {
+  background-color: rgba(255, 255, 255, 0.95);
+  border: 1px solid #ccc;
+  padding: 10px;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  max-width: 300px;
+}
+
+.tooltip-time {
+  font-weight: bold;
+  margin-bottom: 8px;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 5px;
+}
+
+.tooltip-section {
+  margin-bottom: 8px;
+}
+
+.tooltip-header {
+  font-weight: 500;
+  margin-bottom: 2px;
+  color: #555;
+}
+
+.tooltip-activity {
+  margin: 2px 0;
+  padding-left: 10px;
+}
+
+.tooltip-effect {
+  font-weight: 500;
+}
+
+.tooltip-blood-sugar {
+  font-weight: 500;
+}
+
+.tooltip-blood-sugar.adjusted {
   color: #4CAF50;
 }
 
-.combined-activity-blood-sugar-chart .table-container {
+/* Table Styles */
+.table-container {
   overflow-x: auto;
 }
 
-.combined-activity-blood-sugar-chart .activity-effect-table {
+.activity-effect-table {
   width: 100%;
   border-collapse: collapse;
+  margin-bottom: 15px;
 }
 
-.combined-activity-blood-sugar-chart .activity-effect-table th,
-.combined-activity-blood-sugar-chart .activity-effect-table td {
-  padding: 0.6rem;
+.activity-effect-table th,
+.activity-effect-table td {
+  padding: 10px;
   text-align: left;
   border-bottom: 1px solid #ddd;
-  vertical-align: top;
 }
 
-.combined-activity-blood-sugar-chart .activity-effect-table th {
+.activity-effect-table th {
   background-color: #f2f2f2;
-  font-weight: bold;
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+  z-index: 1;
 }
 
-.combined-activity-blood-sugar-chart .activity-effect-table tr:nth-child(even) {
-  background-color: #f9f9f9;
+.activity-effect-table tr:hover {
+  background-color: #f5f5f5;
 }
 
-.combined-activity-blood-sugar-chart .pagination {
+/* Pagination Controls */
+.pagination {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  margin-top: 1rem;
-  padding: 0.5rem 0;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 15px;
+  flex-wrap: wrap;
 }
 
-.combined-activity-blood-sugar-chart .pagination button {
-  padding: 0.25rem 0.5rem;
-  background-color: #f0f0f0;
-  border: 1px solid #ccc;
-  border-radius: 4px;
+.pagination button {
+  padding: 5px 10px;
+  border: 1px solid #ddd;
+  background-color: #f8f8f8;
   cursor: pointer;
+  border-radius: 3px;
 }
 
-.combined-activity-blood-sugar-chart .pagination button:disabled {
+.pagination button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-.combined-activity-blood-sugar-chart .pagination input {
-  width: 50px;
-  padding: 0.25rem;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  text-align: center;
+.pagination button:hover:not(:disabled) {
+  background-color: #e0e0e0;
 }
 
-.combined-activity-blood-sugar-chart .pagination select {
-  padding: 0.25rem;
-  border: 1px solid #ccc;
-  border-radius: 4px;
+.pagination span {
+  margin: 0 5px;
+}
+
+.pagination input {
+  width: 50px;
+  padding: 5px;
+  text-align: center;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+}
+
+.pagination select {
+  padding: 5px;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+  .date-controls, .activity-level-filters, .display-options {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .controls {
+    flex-direction: column;
+  }
+
+  .activity-levels-grid {
+    grid-template-columns: 1fr;
+  }
 }
