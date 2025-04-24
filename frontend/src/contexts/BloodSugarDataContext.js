@@ -522,6 +522,7 @@ export const BloodSugarDataProvider = ({ children }) => {
     targetGlucose,
     dateRange,
     timeScale,
+      setTimeScale,  // Add this line
     unit,
     estimationSettings,
     currentDateTime,

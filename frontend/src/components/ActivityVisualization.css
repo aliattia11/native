@@ -451,3 +451,43 @@
     grid-template-columns: 1fr;
   }
 }
+/* Ensure chart container handles the absolute positioning */
+.chart-container {
+  position: relative;
+}
+
+/* Make sure bars can extend from borders */
+.recharts-wrapper, .recharts-surface {
+  overflow: visible;
+}
+
+/* Decreasing activity bars (from top) */
+.activity-bar.decreasing {
+  fill-opacity: 0.8;
+  stroke: #333;
+  stroke-width: 1;
+}
+
+/* Increasing activity bars (from bottom) */
+.activity-bar.increasing {
+  fill-opacity: 0.8;
+  stroke: #333;
+  stroke-width: 1;
+}
+
+/* Add visual indicator for bar direction */
+.activity-bar.decreasing:after {
+  content: '↓';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.activity-bar.increasing:after {
+  content: '↑';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+}
