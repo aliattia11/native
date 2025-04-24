@@ -42,7 +42,8 @@ const ActivityBloodSugarChart = ({ isDoctor = false, patientId = null }) => {
     setDateRange,
     timeScale,
     unit,
-    getBloodSugarAtTime
+    getBloodSugarAtTime,
+    fetchBloodSugarData
   } = useBloodSugarData();
 
   // Local state
@@ -64,15 +65,20 @@ const ActivityBloodSugarChart = ({ isDoctor = false, patientId = null }) => {
   const [activityEffectMultiplier, setActivityEffectMultiplier] = useState(1.0); // Effect strength multiplier
   const [processedBloodSugarData, setProcessedBloodSugarData] = useState([]);
   const [barMaxHeight, setBarMaxHeight] = useState(25); // Maximum height of activity bars as percentage of chart
+  // Add a local copy of blood sugar data that we can filter consistently
+  const [localBloodSugarData, setLocalBloodSugarData] = useState([]);
+  // Flag to track if we need to force refetch after date range changes
+  const [needsRefresh, setNeedsRefresh] = useState(true);
 
   // Track initialization
   const initializedRef = useRef(false);
+  const prevDateRangeRef = useRef(null);
 
-  // System info - using your provided values
-  const currentDateTime = "2025-04-24 01:17:07";
+  // System info
+  const currentDateTime = "2025-04-24 12:30:06";
   const currentUserLogin = "aliattia02";
 
-  // Get activity levels from patient constants - ADDED MORE DEFENSIVE CHECKS
+  // Get activity levels from patient constants - WITH DEFENSIVE CHECKS
   const systemActivityLevels = useMemo(() => {
     if (!patientConstants || !patientConstants.activity_coefficients) {
       return [];
@@ -153,144 +159,144 @@ const ActivityBloodSugarChart = ({ isDoctor = false, patientId = null }) => {
 
   // Calculate activity effect on blood glucose at a given time point
   const calculateActivityEffect = useCallback((activityImpact, hoursSinceStart, hoursDuration) => {
-  // Safety checks
-  if (activityImpact === undefined || hoursSinceStart === undefined || hoursDuration === undefined) {
+    // Safety checks
+    if (activityImpact === undefined || hoursSinceStart === undefined || hoursDuration === undefined) {
+      return 0;
+    }
+
+    // No effect before activity starts
+    if (hoursSinceStart < 0) return 0;
+
+    // Scale effect magnitude based on duration (similar to your old implementation)
+    // Longer activities have stronger effect, up to a maximum at 2 hours
+    const durationScalingFactor = Math.min(1.0, hoursDuration / 2);
+    const scaledImpact = activityImpact * durationScalingFactor;
+
+    // During activity - progressive buildup like your old implementation
+    if (hoursSinceStart <= hoursDuration) {
+      // Build up gradually during activity (optional - remove if you prefer instant effect)
+      const progressFactor = Math.min(1.0, hoursSinceStart / Math.max(0.5, hoursDuration/2));
+      return scaledImpact * progressFactor;
+    }
+
+    // After activity, effect gradually diminishes over activityImpactThreshold hours
+    const hoursAfterActivity = hoursSinceStart - hoursDuration;
+    if (hoursAfterActivity <= activityImpactThreshold) {
+      // Using existing decay curve but with scaled impact
+      const normalizedTime = hoursAfterActivity / activityImpactThreshold;
+      const exponentialComponent = Math.exp(-2 * normalizedTime);
+      const linearComponent = 1 - normalizedTime;
+      const blendFactor = Math.min(1, normalizedTime * 2);
+      const blendedEffect = exponentialComponent * (1 - blendFactor) + linearComponent * blendFactor;
+
+      return scaledImpact * blendedEffect;
+    }
+
     return 0;
-  }
-
-  // No effect before activity starts
-  if (hoursSinceStart < 0) return 0;
-
-  // Scale effect magnitude based on duration (similar to your old implementation)
-  // Longer activities have stronger effect, up to a maximum at 2 hours
-  const durationScalingFactor = Math.min(1.0, hoursDuration / 2);
-  const scaledImpact = activityImpact * durationScalingFactor;
-
-  // During activity - progressive buildup like your old implementation
-  if (hoursSinceStart <= hoursDuration) {
-    // Build up gradually during activity (optional - remove if you prefer instant effect)
-    const progressFactor = Math.min(1.0, hoursSinceStart / Math.max(0.5, hoursDuration/2));
-    return scaledImpact * progressFactor;
-  }
-
-  // After activity, effect gradually diminishes over activityImpactThreshold hours
-  const hoursAfterActivity = hoursSinceStart - hoursDuration;
-  if (hoursAfterActivity <= activityImpactThreshold) {
-    // Using existing decay curve but with scaled impact
-    const normalizedTime = hoursAfterActivity / activityImpactThreshold;
-    const exponentialComponent = Math.exp(-2 * normalizedTime);
-    const linearComponent = 1 - normalizedTime;
-    const blendFactor = Math.min(1, normalizedTime * 2);
-    const blendedEffect = exponentialComponent * (1 - blendFactor) + linearComponent * blendFactor;
-
-    return scaledImpact * blendedEffect;
-  }
-
-  return 0;
-}, [activityImpactThreshold]);
+  }, [activityImpactThreshold]);
 
   // Calculate the cumulative effect of multiple activities
- const calculateCumulativeEffect = useCallback((activities, timestamp) => {
-  if (!activities || activities.length === 0 || timestamp === undefined) {
-    return {
-      netEffect: 0,
-      effectMultiplier: 1.0,
-      decreaseEffect: 0,
-      increaseEffect: 0,
-      details: []
-    };
-  }
+  const calculateCumulativeEffect = useCallback((activities, timestamp) => {
+    if (!activities || activities.length === 0 || timestamp === undefined) {
+      return {
+        netEffect: 0,
+        effectMultiplier: 1.0,
+        decreaseEffect: 0,
+        increaseEffect: 0,
+        details: []
+      };
+    }
 
-  // Track individual effects for detailed reporting
-  const effectDetails = [];
+    // Track individual effects for detailed reporting
+    const effectDetails = [];
 
-  // Track effects by level for detailed tooltip display
-  const effectsByLevel = {};
+    // Track effects by level for detailed tooltip display
+    const effectsByLevel = {};
 
-  // Calculate effect from each activity
-  let totalDecreaseEffect = 0;
-  let totalIncreaseEffect = 0;
+    // Calculate effect from each activity
+    let totalDecreaseEffect = 0;
+    let totalIncreaseEffect = 0;
 
-  activities.forEach(activity => {
-    if (!activity) return; // Skip undefined activities
+    activities.forEach(activity => {
+      if (!activity) return; // Skip undefined activities
 
-    // Calculate time parameters
-    const startTime = activity.startTime;
-    const endTime = activity.endTime;
-    if (!startTime || !endTime) return; // Skip activities with missing times
+      // Calculate time parameters
+      const startTime = activity.startTime;
+      const endTime = activity.endTime;
+      if (!startTime || !endTime) return; // Skip activities with missing times
 
-    const durationHours = (endTime - startTime) / (60 * 60 * 1000);
-    const hoursSinceStart = (timestamp - startTime) / (60 * 60 * 1000);
+      const durationHours = (endTime - startTime) / (60 * 60 * 1000);
+      const hoursSinceStart = (timestamp - startTime) / (60 * 60 * 1000);
 
-    // Skip if activity hasn't started yet
-    if (hoursSinceStart < 0) return;
+      // Skip if activity hasn't started yet
+      if (hoursSinceStart < 0) return;
 
-    // Get impact coefficient (how much this activity affects insulin sensitivity)
-    const activityImpact = typeof activity.impact === 'number' ? activity.impact : 1.0;
+      // Get impact coefficient (how much this activity affects insulin sensitivity)
+      const activityImpact = typeof activity.impact === 'number' ? activity.impact : 1.0;
 
-    // Calculate raw effect magnitude (0 to 1 scale)
-    const effectMagnitude = calculateActivityEffect(
-      Math.abs(activityImpact - 1.0),  // Get absolute magnitude of deviation from neutral
-      hoursSinceStart,
-      durationHours
+      // Calculate raw effect magnitude (0 to 1 scale)
+      const effectMagnitude = calculateActivityEffect(
+        Math.abs(activityImpact - 1.0),  // Get absolute magnitude of deviation from neutral
+        hoursSinceStart,
+        durationHours
+      );
+
+      if (effectMagnitude <= 0) return;
+
+      // Determine if this is a glucose-increasing or glucose-decreasing activity
+      const isDecreasing = activityImpact < 1.0;
+
+      // Calculate the actual effect (not just magnitude)
+      // This is key for proper cancellation - we need the sign
+      const actualEffect = isDecreasing ? -effectMagnitude : effectMagnitude;
+
+      // Add to appropriate level bucket for tooltip display
+      if (!effectsByLevel[activity.level]) {
+        effectsByLevel[activity.level] = 0;
+      }
+      effectsByLevel[activity.level] += actualEffect;
+
+      // Track individual positive and negative effects for analysis
+      if (isDecreasing) {
+        totalDecreaseEffect += effectMagnitude;
+      } else {
+        totalIncreaseEffect += effectMagnitude;
+      }
+
+      // Store details for this activity's effect
+      effectDetails.push({
+        activity,
+        effectMagnitude,
+        actualEffect,
+        isDecreasing,
+        hoursSinceStart,
+        durationHours
+      });
+    });
+
+    // Calculate the true net effect (allowing for cancellation)
+    // The difference here from the original is we calculate algebraic sum
+    // rather than just taking the dominant effect
+    const algebraicSum = effectDetails.reduce(
+      (sum, detail) => sum + (detail.isDecreasing ? -detail.effectMagnitude : detail.effectMagnitude),
+      0
     );
 
-    if (effectMagnitude <= 0) return;
+    // Apply effect multiplier to strengthen/weaken the overall impact
+    const scaledSum = algebraicSum * activityEffectMultiplier;
 
-    // Determine if this is a glucose-increasing or glucose-decreasing activity
-    const isDecreasing = activityImpact < 1.0;
+    // Determine final multiplier (e.g., 0.8x or 1.2x)
+    const multiplier = 1.0 + scaledSum;
 
-    // Calculate the actual effect (not just magnitude)
-    // This is key for proper cancellation - we need the sign
-    const actualEffect = isDecreasing ? -effectMagnitude : effectMagnitude;
-
-    // Add to appropriate level bucket for tooltip display
-    if (!effectsByLevel[activity.level]) {
-      effectsByLevel[activity.level] = 0;
-    }
-    effectsByLevel[activity.level] += actualEffect;
-
-    // Track individual positive and negative effects for analysis
-    if (isDecreasing) {
-      totalDecreaseEffect += effectMagnitude;
-    } else {
-      totalIncreaseEffect += effectMagnitude;
-    }
-
-    // Store details for this activity's effect
-    effectDetails.push({
-      activity,
-      effectMagnitude,
-      actualEffect,
-      isDecreasing,
-      hoursSinceStart,
-      durationHours
-    });
-  });
-
-  // Calculate the true net effect (allowing for cancellation)
-  // The difference here from the original is we calculate algebraic sum
-  // rather than just taking the dominant effect
-  const algebraicSum = effectDetails.reduce(
-    (sum, detail) => sum + (detail.isDecreasing ? -detail.effectMagnitude : detail.effectMagnitude),
-    0
-  );
-
-  // Apply effect multiplier to strengthen/weaken the overall impact
-  const scaledSum = algebraicSum * activityEffectMultiplier;
-
-  // Determine final multiplier (e.g., 0.8x or 1.2x)
-  const multiplier = 1.0 + scaledSum;
-
-  return {
-    netEffect: scaledSum, // This could be positive or negative
-    effectMultiplier: multiplier,
-    decreaseEffect: totalDecreaseEffect,
-    increaseEffect: totalIncreaseEffect,
-    effectsByLevel: effectsByLevel,  // Added for detailed tooltip
-    details: effectDetails
-  };
-}, [calculateActivityEffect, activityEffectMultiplier]);
+    return {
+      netEffect: scaledSum, // This could be positive or negative
+      effectMultiplier: multiplier,
+      decreaseEffect: totalDecreaseEffect,
+      increaseEffect: totalIncreaseEffect,
+      effectsByLevel: effectsByLevel,  // Added for detailed tooltip
+      details: effectDetails
+    };
+  }, [calculateActivityEffect, activityEffectMultiplier]);
 
   // Get estimated blood sugar at a specific time
   const getBloodSugarEstimation = useCallback((timestamp) => {
@@ -362,34 +368,44 @@ const ActivityBloodSugarChart = ({ isDoctor = false, patientId = null }) => {
   }, [activityImpactThreshold, calculateCumulativeEffect]);
 
   // Process and combine activity and blood sugar data
-const processAndCombineData = useCallback((activityData, bloodSugarData) => {
-  try {
-    if (!activityData || !bloodSugarData || !Array.isArray(activityData) || !Array.isArray(bloodSugarData)) {
-      setCombinedData([]);
-      return;
-    }
+  const processAndCombineData = useCallback((activityData, bloodSugarData) => {
+    try {
+      if (!activityData || !bloodSugarData || !Array.isArray(activityData) || !Array.isArray(bloodSugarData)) {
+        setCombinedData([]);
+        return [];
+      }
 
-    // IMPORTANT FIX: Filter blood sugar data to the current time range first
-    const filteredBloodSugarData = bloodSugarData.filter(reading =>
-      reading && reading.readingTime &&
-      reading.readingTime >= timeScale.start &&
-      reading.readingTime <= timeScale.end
-    );
+      // IMPROVED: Filter blood sugar data to the current time range more consistently
+      const startTime = timeScale.start;
+      const endTime = timeScale.end;
+      const filteredBloodSugarData = bloodSugarData.filter(reading =>
+        reading && reading.readingTime &&
+        reading.readingTime >= startTime &&
+        reading.readingTime <= endTime
+      );
 
-    // Only use timestamps from filtered blood sugar data
-    const allTimestamps = [
-      ...activityData.map(d => d?.startTime).filter(Boolean),
-      ...activityData.map(d => d?.endTime).filter(Boolean),
-      ...filteredBloodSugarData.map(d => d?.readingTime).filter(Boolean)
-    ];
+      // Only use timestamps from filtered blood sugar data and activities within the time range
+      const filteredActivityData = activityData.filter(activity =>
+        activity && activity.startTime && activity.endTime &&
+        ((activity.startTime >= startTime && activity.startTime <= endTime) ||
+        (activity.endTime >= startTime && activity.endTime <= endTime) ||
+        (activity.startTime <= startTime && activity.endTime >= endTime))
+      );
+
+      const allTimestamps = [
+        ...filteredActivityData.map(d => d?.startTime).filter(Boolean),
+        ...filteredActivityData.map(d => d?.endTime).filter(Boolean),
+        ...filteredBloodSugarData.map(d => d?.readingTime).filter(Boolean)
+      ];
 
       if (allTimestamps.length === 0) {
         setCombinedData([]);
-        return;
+        return [];
       }
 
-      const minTime = Math.min(...allTimestamps);
-      let maxTime = Math.max(...allTimestamps);
+      // Make sure we're using the time scale's boundaries
+      const minTime = startTime;
+      const maxTime = endTime;
 
       // Generate timeline with 15-minute intervals
       const timelineData = [];
@@ -397,27 +413,27 @@ const processAndCombineData = useCallback((activityData, bloodSugarData) => {
       const interval = 15 * 60 * 1000; // 15 minutes in milliseconds
 
       while (currentTime <= maxTime) {
-      const timePoint = {
-        timestamp: currentTime,
-        formattedTime: moment(currentTime).format('MM/DD/YYYY, HH:mm'),
-        activeActivities: [],
-        activityEffects: {},
-        effectsByLevel: {}, // Add this for detailed level effects
-        totalActivityImpact: 0,
-        activityEffectMultiplier: 1.0,
-        netActivityEffect: 0,
-        decreaseActivityEffect: 0,
-        increaseActivityEffect: 0,
-      };
+        const timePoint = {
+          timestamp: currentTime,
+          formattedTime: moment(currentTime).format('MM/DD/YYYY, HH:mm'),
+          activeActivities: [],
+          activityEffects: {},
+          effectsByLevel: {}, // Add this for detailed level effects
+          totalActivityImpact: 0,
+          activityEffectMultiplier: 1.0,
+          netActivityEffect: 0,
+          decreaseActivityEffect: 0,
+          increaseActivityEffect: 0,
+        };
 
         // Find activities that are active at this time
-        const activeActivities = activityData
-          .filter(activity => activity && activity.startTime && activity.endTime) // Filter out undefined or incomplete activities
+        const activeActivities = filteredActivityData
+          .filter(activity => activity && activity.startTime && activity.endTime)
           .filter(activity => currentTime >= activity.startTime && currentTime <= activity.endTime);
 
         // Find all activities that could affect this time (including post-activity effects)
-        const relevantActivities = activityData
-          .filter(activity => activity && activity.startTime && activity.endTime) // Filter out undefined or incomplete activities
+        const relevantActivities = filteredActivityData
+          .filter(activity => activity && activity.startTime && activity.endTime)
           .filter(activity => {
             const activityEnd = activity.endTime;
             const postEffectEnd = activityEnd + (activityImpactThreshold * 60 * 60 * 1000);
@@ -425,20 +441,19 @@ const processAndCombineData = useCallback((activityData, bloodSugarData) => {
           });
 
         // Calculate cumulative activity effect at this time point
-      const effectResult = calculateCumulativeEffect(relevantActivities, currentTime);
+        const effectResult = calculateCumulativeEffect(relevantActivities, currentTime);
 
         // Store activity data
         timePoint.activeActivities = activeActivities || [];
-      timePoint.activeActivityCount = activeActivities?.length || 0;
-      timePoint.netActivityEffect = effectResult.netEffect;
-      timePoint.activityEffectMultiplier = effectResult.effectMultiplier;
-      timePoint.decreaseActivityEffect = effectResult.decreaseEffect;
-      timePoint.increaseActivityEffect = effectResult.increaseEffect;
-      timePoint.effectsByLevel = effectResult.effectsByLevel || {}; // Store level effects
-
+        timePoint.activeActivityCount = activeActivities?.length || 0;
+        timePoint.netActivityEffect = effectResult.netEffect;
+        timePoint.activityEffectMultiplier = effectResult.effectMultiplier;
+        timePoint.decreaseActivityEffect = effectResult.decreaseEffect;
+        timePoint.increaseActivityEffect = effectResult.increaseEffect;
+        timePoint.effectsByLevel = effectResult.effectsByLevel || {};
 
         // Add blood sugar reading if available at this time
-        const closestBloodSugar = bloodSugarData.find(bs =>
+        const closestBloodSugar = filteredBloodSugarData.find(bs =>
           bs && bs.readingTime && Math.abs(bs.readingTime - currentTime) < 15 * 60 * 1000 // Within 15 minutes
         );
 
@@ -473,18 +488,18 @@ const processAndCombineData = useCallback((activityData, bloodSugarData) => {
         currentTime += interval;
       }
 
-      setCombinedData(timelineData);
-
       // Process blood sugar data with activity effects
-      if (Array.isArray(bloodSugarData) && bloodSugarData.length > 0) {
-        const processedBS = applyActivityEffect(activityData, bloodSugarData);
+      if (Array.isArray(filteredBloodSugarData) && filteredBloodSugarData.length > 0) {
+        const processedBS = applyActivityEffect(filteredActivityData, filteredBloodSugarData);
         setProcessedBloodSugarData(processedBS);
       }
+
+      return timelineData;
     } catch (error) {
       console.error('Error generating combined data:', error);
-      setCombinedData([]);
+      return [];
     }
-  }, [calculateCumulativeEffect, activityImpactThreshold, getBloodSugarEstimation, applyActivityEffect]);
+  }, [calculateCumulativeEffect, activityImpactThreshold, getBloodSugarEstimation, applyActivityEffect, timeScale.start, timeScale.end]);
 
   // Fetch activity data from API
   const fetchActivityData = useCallback(async () => {
@@ -572,19 +587,25 @@ const processAndCombineData = useCallback((activityData, bloodSugarData) => {
 
       setActivityData(processedActivityData);
 
-      // Generate combined data with blood sugar
-      processAndCombineData(processedActivityData, allBloodSugarData);
+      // Also fetch blood sugar data to ensure it's current with the same date range
+      await fetchBloodSugarData(patientId);
+
+      // Generate combined data with blood sugar - IMPROVED to handle time filtering
+      const processed = processAndCombineData(processedActivityData, allBloodSugarData);
+      setCombinedData(processed);
+      setFilteredData(processed);
 
       setError('');
       setDataFetched(true);
+      setNeedsRefresh(false);
     } catch (error) {
       console.error('Error fetching activity data:', error);
       setError('Failed to load activity data: ' + (error.message || 'Unknown error'));
     } finally {
       setLoading(false);
     }
-  }, [dateRange, patientId, selectedActivityLevels.length, getActivityImpact, allBloodSugarData,
-      systemActivityLevels, processAndCombineData]);
+  }, [dateRange, patientId, selectedActivityLevels.length, getActivityImpact,
+      allBloodSugarData, systemActivityLevels, processAndCombineData, fetchBloodSugarData]);
 
   // Initialize time zone once
   useEffect(() => {
@@ -601,31 +622,54 @@ const processAndCombineData = useCallback((activityData, bloodSugarData) => {
     }
   }, [systemActivityLevels, selectedActivityLevels.length]);
 
-  // Date range change handler
+  // Detect date range changes and set needs refresh flag
+  useEffect(() => {
+    if (prevDateRangeRef.current &&
+        (prevDateRangeRef.current.start !== dateRange.start ||
+         prevDateRangeRef.current.end !== dateRange.end)) {
+      setNeedsRefresh(true);
+    }
+    prevDateRangeRef.current = { ...dateRange };
+  }, [dateRange]);
+
+  // New effect to update combined data when timeScale changes
+  useEffect(() => {
+    if (activityData.length > 0 && allBloodSugarData.length > 0) {
+      const processed = processAndCombineData(activityData, allBloodSugarData);
+      setCombinedData(processed);
+      setFilteredData(processed);
+    }
+  }, [timeScale, processAndCombineData, activityData, allBloodSugarData]);
+
+  // Date range change handler - IMPROVED to handle quick presets properly
   const handleDateChange = useCallback((e) => {
     const { name, value } = e.target;
     setDateRange(prev => {
       const newRange = { ...prev, [name]: value };
       return newRange;
     });
-  }, [setDateRange]);
+    setNeedsRefresh(true);
+  }, []);
 
-  // Quick date range presets
+  // Quick date range presets - FIXED to properly update timescale
   const applyDatePreset = useCallback((days) => {
-    const start = moment().subtract(days, 'days').format('YYYY-MM-DD');
-    let end;
+    let start, end;
 
     if (days === 1) {
-      // For "Last 24h": past day plus 12 hours
-      end = moment().add(12, 'hours').format('YYYY-MM-DD');
+      // For "Last 24h": past 24 hours exactly
+      start = moment().subtract(24, 'hours').format('YYYY-MM-DD');
+      end = moment().format('YYYY-MM-DD');
     } else if (days === 3) {
-      // For "Last 3 Days": past 3 days plus one future day
-      end = moment().add(1, 'day').format('YYYY-MM-DD');
+      // For "Last 3 Days": past 3 days
+      start = moment().subtract(3, 'days').format('YYYY-MM-DD');
+      end = moment().format('YYYY-MM-DD');
     } else if (days === 7) {
-      // For "Last Week": past 7 days plus one future day
-      end = moment().add(1, 'day').format('YYYY-MM-DD');
+      // For "Last Week": past 7 days
+      start = moment().subtract(7, 'days').format('YYYY-MM-DD');
+      end = moment().format('YYYY-MM-DD');
     } else {
       // Default case
+      start = moment().subtract(days, 'days').format('YYYY-MM-DD');
       end = moment().format('YYYY-MM-DD');
     }
 
@@ -633,7 +677,9 @@ const processAndCombineData = useCallback((activityData, bloodSugarData) => {
       start: start,
       end: end
     });
-  }, [setDateRange]);
+
+    setNeedsRefresh(true);
+  }, []);
 
   // Activity level toggle handler
   const handleActivityLevelToggle = useCallback((level) => {
@@ -784,96 +830,100 @@ const processAndCombineData = useCallback((activityData, bloodSugarData) => {
       });
   }, [activityData, selectedActivityLevels, systemActivityLevels, getActivityColor, CustomActivityBar, safeToFixed]);
 
-  // Custom tooltip for the chart with EXTRA SAFETY CHECKS
-// Enhanced CustomTooltip with detailed effect information
-const CustomTooltip = useCallback(({ active, payload }) => {
-  if (!active || !payload || !payload.length || !payload[0] || !payload[0].payload) return null;
+  // Fixed CustomTooltip with improved context awareness
+  const CustomTooltip = useCallback(({ active, payload }) => {
+    if (!active || !payload || !payload.length || !payload[0] || !payload[0].payload) return null;
 
-  try {
-    const dataPoint = payload[0].payload;
+    try {
+      const dataPoint = payload[0].payload;
 
-    return (
-      <div className="activity-tooltip">
-        <p className="tooltip-time">
-          {moment(dataPoint.timestamp).format('MM/DD/YYYY, HH:mm')}
-        </p>
+      // Make sure we only show data from the current visible time range
+      if (dataPoint.timestamp < timeScale.start || dataPoint.timestamp > timeScale.end) {
+        return null;
+      }
 
-        {/* Display active activities */}
-        {dataPoint.activeActivities && dataPoint.activeActivities.length > 0 && (
-          <div className="tooltip-section">
-            <p className="tooltip-header">Active Activities:</p>
-            {dataPoint.activeActivities
-              .filter(activity => activity) // Filter out null activities
-              .map((activity, idx) => (
-                <p key={idx} className="tooltip-activity">
-                  {activity.levelLabel || 'Unknown'} - {safeToFixed(activity.impact)}x effect
-                </p>
-              ))}
-          </div>
-        )}
+      return (
+        <div className="activity-tooltip">
+          <p className="tooltip-time">
+            {moment(dataPoint.timestamp).format('MM/DD/YYYY, HH:mm')}
+          </p>
 
-        {/* Display activity effect with enhanced details */}
-        {dataPoint.netActivityEffect !== 0 && (
-          <div className="tooltip-section">
-            <p className="tooltip-header">Activity Effect:</p>
-            <p className="tooltip-effect" style={{
-              color: dataPoint.netActivityEffect < 0 ? '#d32f2f' : '#388e3c'
-            }}>
-              {Math.abs((dataPoint.netActivityEffect || 0) * 100).toFixed(1)}%
-              {(dataPoint.netActivityEffect || 0) < 0 ? ' decrease' : ' increase'}
-              {' '}(Multiplier: {safeToFixed(dataPoint.activityEffectMultiplier)}x)
-            </p>
+          {/* Display active activities */}
+          {dataPoint.activeActivities && dataPoint.activeActivities.length > 0 && (
+            <div className="tooltip-section">
+              <p className="tooltip-header">Active Activities:</p>
+              {dataPoint.activeActivities
+                .filter(activity => activity) // Filter out null activities
+                .map((activity, idx) => (
+                  <p key={idx} className="tooltip-activity">
+                    {activity.levelLabel || 'Unknown'} - {safeToFixed(activity.impact)}x effect
+                  </p>
+                ))}
+            </div>
+          )}
 
-            {/* Detailed breakdown by activity level - similar to old code */}
-            {dataPoint.effectsByLevel && Object.entries(dataPoint.effectsByLevel).map(([level, effect], idx) => (
-              effect !== 0 && (
-                <p key={idx} className="tooltip-effect-detail" style={{
-                  color: effect < 0 ? '#d32f2f' : '#388e3c',
-                  fontSize: '0.9em',
-                  margin: '3px 0 3px 10px'
-                }}>
-                  {systemActivityLevels.find(l => l.value === parseInt(level))?.label || `Level ${level}`}:
-                  {effect > 0 ? '+' : ''}{(effect * 100).toFixed(1)}% effect
-                </p>
-              )
-            ))}
-
-            {/* Show counteracting information if both effects present */}
-            {dataPoint.decreaseEffect > 0 && dataPoint.increaseEffect > 0 && (
-              <p className="tooltip-counteracting" style={{
-                color: '#555',
-                fontStyle: 'italic',
-                marginTop: '5px'
+          {/* Display activity effect with enhanced details */}
+          {dataPoint.netActivityEffect !== 0 && (
+            <div className="tooltip-section">
+              <p className="tooltip-header">Activity Effect:</p>
+              <p className="tooltip-effect" style={{
+                color: dataPoint.netActivityEffect < 0 ? '#d32f2f' : '#388e3c'
               }}>
-                Some effects are counteracting each other
+                {Math.abs((dataPoint.netActivityEffect || 0) * 100).toFixed(1)}%
+                {(dataPoint.netActivityEffect || 0) < 0 ? ' decrease' : ' increase'}
+                {' '}(Multiplier: {safeToFixed(dataPoint.activityEffectMultiplier)}x)
               </p>
-            )}
-          </div>
-        )}
 
-        {/* Display blood sugar information */}
-        {dataPoint.bloodSugar !== undefined && (
-          <div className="tooltip-section">
-            <p className="tooltip-header">Blood Sugar:</p>
-            <p className="tooltip-blood-sugar">
-              {dataPoint.bloodSugar} {unit}
-              {dataPoint.bloodSugarStatus && dataPoint.bloodSugarStatus.label &&
-                ` (${dataPoint.bloodSugarStatus.label})`}
-            </p>
-            {dataPoint.adjustedBloodSugar !== undefined && dataPoint.netActivityEffect !== 0 && (
-              <p className="tooltip-blood-sugar adjusted">
-                With activity effect: {Math.round(dataPoint.adjustedBloodSugar)} {unit}
+              {/* Detailed breakdown by activity level */}
+              {dataPoint.effectsByLevel && Object.entries(dataPoint.effectsByLevel)
+                .filter(([_, effect]) => effect !== 0)
+                .map(([level, effect], idx) => (
+                  <p key={idx} className="tooltip-effect-detail" style={{
+                    color: effect < 0 ? '#d32f2f' : '#388e3c',
+                    fontSize: '0.9em',
+                    margin: '3px 0 3px 10px'
+                  }}>
+                    {systemActivityLevels.find(l => l.value === parseInt(level))?.label || `Level ${level}`}:
+                    {effect > 0 ? '+' : ''}{(effect * 100).toFixed(1)}% effect
+                  </p>
+                ))}
+
+              {/* Show counteracting information if both effects present */}
+              {dataPoint.decreaseEffect > 0 && dataPoint.increaseEffect > 0 && (
+                <p className="tooltip-counteracting" style={{
+                  color: '#555',
+                  fontStyle: 'italic',
+                  marginTop: '5px'
+                }}>
+                  Some effects are counteracting each other
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Display blood sugar information */}
+          {dataPoint.bloodSugar !== undefined && (
+            <div className="tooltip-section">
+              <p className="tooltip-header">Blood Sugar:</p>
+              <p className="tooltip-blood-sugar">
+                {dataPoint.bloodSugar} {unit}
+                {dataPoint.bloodSugarStatus && dataPoint.bloodSugarStatus.label &&
+                  ` (${dataPoint.bloodSugarStatus.label})`}
               </p>
-            )}
-          </div>
-        )}
-      </div>
-    );
-  } catch (error) {
-    console.error("Error rendering tooltip:", error);
-    return <div>Error displaying tooltip</div>;
-  }
-}, [unit, safeToFixed, systemActivityLevels]);
+              {dataPoint.adjustedBloodSugar !== undefined && dataPoint.netActivityEffect !== 0 && (
+                <p className="tooltip-blood-sugar adjusted">
+                  With activity effect: {Math.round(dataPoint.adjustedBloodSugar)} {unit}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    } catch (error) {
+      console.error("Error rendering tooltip:", error);
+      return <div>Error displaying tooltip</div>;
+    }
+  }, [unit, safeToFixed, systemActivityLevels, timeScale.start, timeScale.end]);
 
   // Check if current time is within chart range
   const currentTimeInRange = useMemo(() => {
@@ -886,14 +936,14 @@ const CustomTooltip = useCallback(({ active, payload }) => {
     }
   }, [timeScale]);
 
-  // Fetch data when date range changes
+  // Fetch data when date range changes or needsRefresh is true
   useEffect(() => {
-    if (!loading && dateRange && dateRange.start && dateRange.end) {
+    if (needsRefresh && dateRange && dateRange.start && dateRange.end) {
       fetchActivityData();
     }
-  }, [fetchActivityData, dateRange]);
+  }, [fetchActivityData, dateRange, needsRefresh]);
 
-  // Table columns with more defensive coding
+  // Table columns with defensive coding
   const columns = useMemo(() => [
     {
       Header: 'Time',
@@ -1168,7 +1218,7 @@ const CustomTooltip = useCallback(({ active, payload }) => {
             <div className="chart-container">
               <ResponsiveContainer width="100%" height={500}>
                 <ComposedChart
-                  data={combinedData}
+                  data={filteredData}
                   margin={{ top: 5, right: 30, left: 20, bottom: 25 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" />
@@ -1267,7 +1317,13 @@ const CustomTooltip = useCallback(({ active, payload }) => {
                   {(viewMode === 'combined' || viewMode === 'activities') &&
                     // Map individual activities to custom bars
                     activityData
-                      .filter(activity => selectedActivityLevels.includes(activity.level))
+                      .filter(activity =>
+                        selectedActivityLevels.includes(activity.level) &&
+                        // Only include activities within the current time range
+                        ((activity.startTime >= timeScale.start && activity.startTime <= timeScale.end) ||
+                         (activity.endTime >= timeScale.start && activity.endTime <= timeScale.end) ||
+                         (activity.startTime <= timeScale.start && activity.endTime >= timeScale.end))
+                      )
                       .map(activity => (
                         <Bar
                           key={`activity-${activity.id}`}
