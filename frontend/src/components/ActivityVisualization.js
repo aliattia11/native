@@ -1,4 +1,4 @@
-                     import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import axios from 'axios';
 import moment from 'moment';
 import {
@@ -71,10 +71,6 @@ const ActivityBloodSugarChart = ({ isDoctor = false, patientId = null }) => {
   const [needsRefresh, setNeedsRefresh] = useState(true);
   // State to track hovered activity for tooltips
   const [hoveredActivity, setHoveredActivity] = useState(null);
-  // New state to track whether we're currently hovering an activity (priority flag)
-  const [isHoveringActivity, setIsHoveringActivity] = useState(false);
-  // Ref to store timeout ID for hover state management
-  const hoverTimeoutRef = useRef(null);
 
   // Track initialization
   const initializedRef = useRef(false);
@@ -649,15 +645,6 @@ const ActivityBloodSugarChart = ({ isDoctor = false, patientId = null }) => {
     }
   }, [timeScale, processAndCombineData, activityData, allBloodSugarData]);
 
-  // Clean up hover timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (hoverTimeoutRef.current) {
-        clearTimeout(hoverTimeoutRef.current);
-      }
-    };
-  }, []);
-
   // Date range change handler - IMPROVED to handle quick presets properly
   const handleDateChange = useCallback((e) => {
     const { name, value } = e.target;
@@ -756,27 +743,7 @@ const ActivityBloodSugarChart = ({ isDoctor = false, patientId = null }) => {
     return ticksArray;
   }, [timeScale]);
 
-  // ENHANCED: Enhanced mouse event handlers for activity bars with better coordination
-  const handleActivityMouseEnter = useCallback((activity) => {
-    // Clear any existing timeout to prevent conflicts
-    if (hoverTimeoutRef.current) {
-      clearTimeout(hoverTimeoutRef.current);
-    }
-
-    // Set the activity hover state immediately
-    setIsHoveringActivity(true);
-    setHoveredActivity(activity);
-  }, []);
-
-  const handleActivityMouseLeave = useCallback(() => {
-    // Use a short delay before clearing to prevent flickering when moving between elements
-    hoverTimeoutRef.current = setTimeout(() => {
-      setIsHoveringActivity(false);
-      setHoveredActivity(null);
-    }, 100); // 100ms delay seems reasonable
-  }, []);
-
-  // Custom activity bar that renders differently based on activity level with enhanced mouse event handlers
+  // Custom activity bar that renders differently based on activity level with mouse event handlers
   const CustomActivityBar = useCallback((props) => {
     const { x, y, width, height, fill, activityData, dataKey } = props;
 
@@ -801,17 +768,10 @@ const ActivityBloodSugarChart = ({ isDoctor = false, patientId = null }) => {
     const durationHours = durationMs / (60 * 60 * 1000);
     const calculatedWidth = Math.max(minWidth, Math.min(maxWidth, durationHours * 15)); // 15px per hour
 
-    // ENHANCED: Use our improved mouse event handlers for better priority control
+    // Add mouse event handlers for hover detection
     const eventHandlers = {
-      onMouseEnter: () => handleActivityMouseEnter(activityData),
-      onMouseLeave: handleActivityMouseLeave,
-      // Add pointer events style to ensure activity bars get priority
-      style: {
-        cursor: 'pointer',
-        pointerEvents: 'all',
-        // z-index doesn't work in SVG the same way as in HTML, but this can help with hit testing priority
-        zIndex: 10
-      }
+      onMouseEnter: () => setHoveredActivity(activityData),
+      onMouseLeave: () => setHoveredActivity(null)
     };
 
     if (isDecreasing) {
@@ -851,23 +811,8 @@ const ActivityBloodSugarChart = ({ isDoctor = false, patientId = null }) => {
       };
     }
 
-    // Add a transparent larger hit area to make it easier to hover on thin bars
-    const hitAreaProps = {
-      ...barProps,
-      height: Math.max(barProps.height, 20), // Ensure hit area is at least 20px high
-      fill: 'transparent',
-      strokeWidth: 0,
-      className: barProps.className + ' hit-area',
-      ...eventHandlers
-    };
-
-    return (
-      <g>
-        <Rectangle {...barProps} />
-        <Rectangle {...hitAreaProps} />
-      </g>
-    );
-  }, [barMaxHeight, handleActivityMouseEnter, handleActivityMouseLeave]);
+    return <Rectangle {...barProps} />;
+  }, [barMaxHeight, setHoveredActivity]);
 
   // Generate activity bars for the chart
   const renderActivityBars = useCallback(() => {
@@ -893,22 +838,20 @@ const ActivityBloodSugarChart = ({ isDoctor = false, patientId = null }) => {
             data={activitiesAtLevel}
             fill={getActivityColor(level.value)}
             shape={<CustomActivityBar activityData={activitiesAtLevel[0]} />}
-            isAnimationActive={false} // Disable animation to improve responsiveness
           />
         );
       });
   }, [activityData, selectedActivityLevels, systemActivityLevels, getActivityColor, CustomActivityBar, safeToFixed]);
 
-  // ENHANCED: CustomTooltip component with improved priority handling for activities vs time series
+  // Updated CustomTooltip component that uses hoveredActivity state
   const CustomTooltip = useCallback(({ active, payload }) => {
     // If tooltip is not active or has no payload, don't render anything
     if (!active || !payload || !payload.length) return null;
 
     try {
-      // PRIORITY CHECK: First check if we have a hovered activity state
-      // This takes precedence over any other tooltip data
-      if (isHoveringActivity && hoveredActivity) {
-        // Return a tooltip specifically for the activity
+      // Check if we have a hovered activity
+      if (hoveredActivity) {
+        // Return a tooltip for the specific activity
         return (
           <div className="activity-tooltip">
             <p className="tooltip-time">
@@ -935,10 +878,11 @@ const ActivityBloodSugarChart = ({ isDoctor = false, patientId = null }) => {
         );
       }
 
-      // Time series tooltip logic when no activity is being hovered
+      // If no activity is hovered, use default tooltip behavior for time series data
       const dataPoint = payload[0].payload;
       if (!dataPoint) return null;
 
+      // Original time series tooltip logic
       return (
         <div className="activity-tooltip">
           <p className="tooltip-time">
@@ -1020,15 +964,7 @@ const ActivityBloodSugarChart = ({ isDoctor = false, patientId = null }) => {
       console.error("Error rendering tooltip:", error);
       return <div>Error displaying tooltip</div>;
     }
-  }, [hoveredActivity, isHoveringActivity, unit, safeToFixed, systemActivityLevels]);
-
-  // ENHANCED: Custom tooltip watcher to handle tooltip priority
-  const handleChartMouseOver = useCallback(() => {
-    // If not currently hovering an activity, clear any delayed reset
-    if (!isHoveringActivity && hoverTimeoutRef.current) {
-      clearTimeout(hoverTimeoutRef.current);
-    }
-  }, [isHoveringActivity]);
+  }, [hoveredActivity, unit, safeToFixed, systemActivityLevels]);
 
   // Check if current time is within chart range
   const currentTimeInRange = useMemo(() => {
@@ -1325,8 +1261,7 @@ const ActivityBloodSugarChart = ({ isDoctor = false, patientId = null }) => {
                 <ComposedChart
                   data={combinedData}
                   margin={{ top: 5, right: 30, left: 20, bottom: 25 }}
-                  ref={chartRef}
-                  onMouseOver={handleChartMouseOver} // Add listener for chart mouse events
+                  ref={chartRef} // Use the proper React ref here
                 >
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis
@@ -1374,12 +1309,7 @@ const ActivityBloodSugarChart = ({ isDoctor = false, patientId = null }) => {
                     />
                   )}
 
-                  {/* ENHANCED: Use our custom tooltip that respects the hover priority */}
-                  <Tooltip
-                    content={<CustomTooltip />}
-                    isAnimationActive={false}  // Disable animation for responsiveness
-                    cursor={{ stroke: isHoveringActivity ? 'transparent' : '#ccc' }} // Hide cursor when hovering activity
-                  />
+                  <Tooltip content={<CustomTooltip />} />
                   <Legend />
 
                   {/* Target glucose reference line */}
@@ -1393,8 +1323,39 @@ const ActivityBloodSugarChart = ({ isDoctor = false, patientId = null }) => {
                     />
                   )}
 
-                  {/* Activity bars - Render BEFORE blood sugar lines so mouse events work better
-                      This ensures activity bars get first priority for mouse events */}
+                  {/* Blood Sugar Lines */}
+                  {showActualBloodSugar && (
+                    <>
+                      {/* Actual blood sugar line */}
+                      <Line
+                        yAxisId="bloodSugar"
+                        type="monotone"
+                        dataKey="bloodSugar"
+                        name={`Blood Sugar (${unit})`}
+                        stroke="#8884d8"
+                        dot={{ r: 4 }}
+                        activeDot={{ r: 8 }}
+                        connectNulls
+                      />
+
+                      {/* Activity-adjusted blood sugar */}
+                      {showActivityImpact && (
+                        <Line
+                          yAxisId="bloodSugar"
+                          type="monotone"
+                          dataKey="adjustedBloodSugar"
+                          name={`With Activity Effect (${unit})`}
+                          stroke="#4CAF50"
+                          strokeWidth={2}
+                          dot={false}
+                          activeDot={{ r: 6 }}
+                          connectNulls
+                        />
+                      )}
+                    </>
+                  )}
+
+                  {/* Activity Bars - with mouse event handlers for hover detection */}
                   {(viewMode === 'combined' || viewMode === 'activities') &&
                     // Map individual activities to custom bars
                     activityData
@@ -1423,44 +1384,9 @@ const ActivityBloodSugarChart = ({ isDoctor = false, patientId = null }) => {
                             // Create a single data point at the middle of the activity
                             { timestamp: activity.startTime + (activity.durationMs / 2) }
                           ]}
-                          isAnimationActive={false} // Disable animation for responsiveness
                         />
                       ))
                   }
-
-                  {/* Blood Sugar Lines - MOVED AFTER activity bars for proper z-ordering */}
-                  {showActualBloodSugar && (
-                    <>
-                      {/* Actual blood sugar line */}
-                      <Line
-                        yAxisId="bloodSugar"
-                        type="monotone"
-                        dataKey="bloodSugar"
-                        name={`Blood Sugar (${unit})`}
-                        stroke="#8884d8"
-                        dot={{ r: 4 }}
-                        activeDot={isHoveringActivity ? { r: 0 } : { r: 8 }} // Don't show active dot when hovering activity
-                        connectNulls
-                        isAnimationActive={false}
-                      />
-
-                      {/* Activity-adjusted blood sugar */}
-                      {showActivityImpact && (
-                        <Line
-                          yAxisId="bloodSugar"
-                          type="monotone"
-                          dataKey="adjustedBloodSugar"
-                          name={`With Activity Effect (${unit})`}
-                          stroke="#4CAF50"
-                          strokeWidth={2}
-                          dot={false}
-                          activeDot={isHoveringActivity ? { r: 0 } : { r: 6 }} // Don't show active dot when hovering activity
-                          connectNulls
-                          isAnimationActive={false}
-                        />
-                      )}
-                    </>
-                  )}
 
                   {/* Activity Impact Area */}
                   {(viewMode === 'combined' || viewMode === 'impact') && showActivityImpact && (
