@@ -1,412 +1,404 @@
-/* Activity Visualization Component Styles */
-.combined-activity-blood-sugar-chart {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-  max-width: 98%;
+/* ActivityVisualization.css */
+.activity-visualization {
+  width: 100%;
+  max-width: 1200px;
   margin: 0 auto;
   padding: 20px;
-  background-color: #fff;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-sizing: border-box;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
-.combined-activity-blood-sugar-chart .title {
+.activity-visualization .title {
   text-align: center;
+  font-size: 24px;
+  margin-bottom: 20px;
   color: #333;
-  margin-bottom: 15px;
-  font-size: 1.8rem;
 }
 
-/* System Info */
-.system-info {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 15px;
-  font-size: 0.8rem;
-  color: #777;
-}
-
-.time-label, .user-label {
-  margin-left: 10px;
-}
-
-/* Timezone Info */
 .timezone-info {
-  text-align: right;
-  font-size: 0.85rem;
-  color: #555;
-  margin-bottom: 10px;
+  text-align: center;
+  font-size: 0.9rem;
+  color: #666;
+  margin-bottom: 15px;
 }
 
 .timezone-note {
   font-style: italic;
-  color: #777;
 }
 
-/* View Toggles */
+/* View Toggle Buttons */
 .view-toggle, .view-mode-toggle {
   display: flex;
   justify-content: center;
-  margin-bottom: 15px;
+  margin: 15px 0;
 }
 
 .toggle-btn {
-  background-color: #f0f0f0;
-  border: 1px solid #ddd;
-  padding: 8px 15px;
+  padding: 8px 16px;
   margin: 0 5px;
-  cursor: pointer;
+  border: 1px solid #ddd;
+  background-color: #f9f9f9;
+  color: #333;
   border-radius: 4px;
-  font-size: 0.9rem;
-  transition: all 0.2s;
-}
-
-.toggle-btn:hover {
-  background-color: #e0e0e0;
+  cursor: pointer;
+  transition: all 0.3s ease;
 }
 
 .toggle-btn.active {
-  background-color: #2196F3;
+  background-color: #007bff;
   color: white;
-  border-color: #1976D2;
+  border-color: #0056b3;
+}
+
+.toggle-btn:hover:not(.active) {
+  background-color: #e9e9e9;
 }
 
 /* Controls Section */
 .controls {
   display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-bottom: 20px;
+  flex-direction: column;
+  background-color: #f5f5f5;
   padding: 15px;
-  background-color: #f9f9f9;
-  border-radius: 6px;
-  border: 1px solid #eee;
+  border-radius: 8px;
+  margin-bottom: 20px;
 }
 
 .date-controls {
   display: flex;
-  gap: 10px;
-  align-items: center;
+  justify-content: center;
+  margin-bottom: 15px;
 }
 
 .date-input-group {
   display: flex;
   align-items: center;
-  gap: 5px;
+  margin: 0 10px;
 }
 
 .date-input-group label {
+  margin-right: 8px;
   font-weight: 500;
-  color: #555;
 }
 
 .date-input-group input {
-  padding: 6px 10px;
-  border: 1px solid #ccc;
+  padding: 8px;
+  border: 1px solid #ddd;
   border-radius: 4px;
-  font-size: 0.9rem;
 }
 
 .quick-ranges {
   display: flex;
-  gap: 5px;
+  justify-content: center;
+  margin-bottom: 15px;
 }
 
 .quick-ranges button {
-  padding: 6px 12px;
-  background-color: #e0e0e0;
-  border: 1px solid #ccc;
+  padding: 5px 10px;
+  margin: 0 5px;
+  background-color: #e9e9e9;
+  border: 1px solid #ddd;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 0.9rem;
-  transition: background-color 0.2s;
 }
 
 .quick-ranges button:hover {
-  background-color: #d0d0d0;
+  background-color: #ddd;
 }
 
+/* Activity Level Filters */
 .activity-level-filters {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  flex-grow: 1;
+  margin-bottom: 15px;
 }
 
 .filter-header {
-  font-weight: 500;
-  color: #333;
+  font-weight: 600;
+  margin-bottom: 8px;
+  text-align: center;
 }
 
 .filter-options {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  justify-content: center;
 }
 
 .filter-option {
+  margin: 0 10px 5px 0;
   display: flex;
   align-items: center;
-  gap: 5px;
   cursor: pointer;
 }
 
+.filter-option input {
+  margin-right: 5px;
+}
+
+/* Display Options */
 .display-options {
   display: flex;
   flex-wrap: wrap;
-  gap: 15px;
-  align-items: center;
+  justify-content: center;
+  margin-bottom: 15px;
 }
 
 .display-option {
+  margin: 0 15px;
   display: flex;
   align-items: center;
-  gap: 5px;
   cursor: pointer;
 }
 
-.threshold-input {
+.display-option input {
+  margin-right: 5px;
+}
+
+.effect-duration {
   display: flex;
   align-items: center;
-  gap: 5px;
+  margin: 0 15px;
 }
 
-.threshold-input label {
-  font-size: 0.9rem;
-  color: #555;
+.effect-duration label {
+  margin-right: 10px;
 }
 
-.threshold-input input {
+.effect-duration input {
   width: 60px;
   padding: 5px;
-  border: 1px solid #ccc;
+  border: 1px solid #ddd;
   border-radius: 4px;
-  text-align: center;
 }
 
 .update-btn {
-  padding: 8px 16px;
-  background-color: #4CAF50;
+  align-self: center;
+  padding: 8px 20px;
+  background-color: #007bff;
   color: white;
   border: none;
   border-radius: 4px;
   cursor: pointer;
-  font-weight: 500;
-  transition: background-color 0.2s;
+  transition: background-color 0.3s ease;
 }
 
 .update-btn:hover {
-  background-color: #388E3C;
+  background-color: #0056b3;
 }
 
-/* Error and Loading Messages */
-.error-message {
-  color: #d32f2f;
-  padding: 10px;
-  border-left: 4px solid #d32f2f;
-  background-color: #ffebee;
-  margin-bottom: 15px;
+/* Content Area */
+.content-container {
+  background-color: white;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .loading, .no-data {
   text-align: center;
-  padding: 20px;
-  color: #777;
-  font-style: italic;
+  padding: 50px;
+  color: #666;
 }
 
-/* Content Container */
-.content-container {
-  margin-top: 20px;
+.error-message {
+  color: #d32f2f;
+  background-color: #ffebee;
+  padding: 10px;
+  border-radius: 4px;
+  margin-bottom: 15px;
+  text-align: center;
 }
 
-/* Chart Styles */
+/* Chart Container */
 .chart-container {
-  overflow: hidden;
-  margin-bottom: 30px;
+  width: 100%;
+  height: auto;
 }
 
-/* Activity Bars */
-.activity-bar {
-  stroke: rgba(0, 0, 0, 0.3);
-  stroke-width: 1;
+/* Activity Scale Guide */
+.activity-legend {
+  margin-top: 20px;
+  border-top: 1px solid #eee;
+  padding-top: 15px;
 }
 
-.activity-bar.decreasing {
-  opacity: 0.8;
+.activity-legend h4 {
+  margin-bottom: 10px;
+  text-align: center;
 }
 
-.activity-bar.increasing {
-  opacity: 0.8;
+.activity-scale {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 15px;
 }
 
-.activity-bar.neutral {
-  opacity: 0.6;
+.activity-scale-item {
+  display: flex;
+  align-items: center;
+  margin: 5px 0;
+  width: 100%;
+  max-width: 600px;
+  padding: 5px;
+  border-radius: 4px;
+  background-color: #f9f9f9;
+}
+
+.scale-color {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  margin-right: 10px;
+}
+
+.scale-label {
+  flex: 2;
+  font-weight: 600;
+}
+
+.scale-direction {
+  flex: 1;
+  text-align: right;
+  font-style: italic;
+  color: #666;
 }
 
 /* Chart Legend */
 .chart-legend {
   margin-top: 20px;
-  padding: 15px;
-  background-color: #f9f9f9;
-  border-radius: 6px;
-  border: 1px solid #eee;
+  border-top: 1px solid #eee;
+  padding-top: 15px;
 }
 
 .chart-legend h4 {
-  margin-top: 15px;
-  margin-bottom: 10px;
-  color: #333;
-  font-size: 1.1rem;
+  margin-bottom: 15px;
+  text-align: center;
 }
 
 .activity-levels-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 10px;
-  margin-bottom: 15px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 15px;
 }
 
 .activity-level-details {
-  padding: 8px;
-  border-radius: 4px;
-  background-color: #f0f0f0;
+  background-color: #f9f9f9;
+  border: 1px solid #eee;
+  border-radius: 6px;
+  padding: 10px;
+  min-width: 200px;
 }
 
 .activity-level-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 5px;
+  margin-bottom: 8px;
 }
 
 .activity-color-box {
-  display: inline-block;
-  width: 15px;
-  height: 15px;
-  border-radius: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  margin-right: 8px;
 }
 
 .activity-level-name {
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .activity-impact {
-  font-size: 0.9rem;
-  padding-left: 23px;
-}
-
-.blood-sugar-legend, .impact-legend, .activity-bars-legend {
-  margin-top: 15px;
-}
-
-.legend-item {
   display: flex;
-  align-items: center;
-  margin-bottom: 8px;
+  flex-direction: column;
+  font-size: 0.9rem;
 }
 
-.legend-color, .legend-bar, .legend-area {
-  margin-right: 10px;
-  border-radius: 3px;
+.activity-impact span {
+  margin-bottom: 4px;
 }
 
-.legend-note {
-  font-size: 0.85rem;
-  font-style: italic;
-  color: #666;
-  margin-top: 5px;
-}
-
-/* Tooltip Styles */
-.activity-tooltip {
-  background-color: rgba(255, 255, 255, 0.95);
-  border: 1px solid #ccc;
-  padding: 10px;
-  border-radius: 4px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-  max-width: 300px;
-}
-
-.tooltip-time {
-  font-weight: bold;
-  margin-bottom: 8px;
-  border-bottom: 1px solid #eee;
-  padding-bottom: 5px;
-}
-
-.tooltip-section {
-  margin-bottom: 8px;
-}
-
-.tooltip-header {
-  font-weight: 500;
-  margin-bottom: 2px;
-  color: #555;
-}
-
-.tooltip-activity {
-  margin: 2px 0;
-  padding-left: 10px;
-}
-
-.tooltip-effect {
-  font-weight: 500;
-}
-
-.tooltip-blood-sugar {
-  font-weight: 500;
-}
-
-.tooltip-blood-sugar.adjusted {
-  color: #4CAF50;
-}
-
-/* Table Styles */
+/* Table Container */
 .table-container {
   overflow-x: auto;
 }
 
-.activity-effect-table {
+.activity-table {
   width: 100%;
   border-collapse: collapse;
-  margin-bottom: 15px;
+  font-size: 0.9rem;
 }
 
-.activity-effect-table th,
-.activity-effect-table td {
+.activity-table th,
+.activity-table td {
   padding: 10px;
   text-align: left;
-  border-bottom: 1px solid #ddd;
+  border-bottom: 1px solid #eee;
 }
 
-.activity-effect-table th {
-  background-color: #f2f2f2;
-  font-weight: 600;
-  position: sticky;
-  top: 0;
-  z-index: 1;
-}
-
-.activity-effect-table tr:hover {
+.activity-table th {
   background-color: #f5f5f5;
+  font-weight: 600;
+  cursor: pointer;
 }
 
-/* Pagination Controls */
+.activity-table tbody tr:hover {
+  background-color: #f9f9f9;
+}
+
+/* Impact styling */
+.impact-increase {
+  color: #2e7d32;
+  font-weight: 600;
+}
+
+.impact-decrease {
+  color: #d32f2f;
+  font-weight: 600;
+}
+
+.impact-none {
+  color: #757575;
+}
+
+/* Blood sugar effect styling */
+.bs-decrease {
+  color: #2196f3;
+  font-weight: 600;
+}
+
+.bs-increase {
+  color: #f44336;
+  font-weight: 600;
+}
+
+.bs-neutral {
+  color: #757575;
+}
+
+/* Tooltip additions */
+.tooltip-direction {
+  font-style: italic;
+  font-size: 0.9em;
+  margin-left: 5px;
+  color: #666;
+}
+
+/* Pagination */
 .pagination {
   display: flex;
-  align-items: center;
-  gap: 8px;
   justify-content: center;
-  margin-top: 15px;
-  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 20px;
 }
 
 .pagination button {
   padding: 5px 10px;
+  margin: 0 3px;
+  background-color: #f5f5f5;
   border: 1px solid #ddd;
-  background-color: #f8f8f8;
+  border-radius: 4px;
   cursor: pointer;
-  border-radius: 3px;
 }
 
 .pagination button:disabled {
@@ -414,80 +406,121 @@
   cursor: not-allowed;
 }
 
-.pagination button:hover:not(:disabled) {
-  background-color: #e0e0e0;
-}
-
 .pagination span {
-  margin: 0 5px;
+  margin: 0 8px;
 }
 
 .pagination input {
   width: 50px;
   padding: 5px;
-  text-align: center;
+  margin: 0 5px;
   border: 1px solid #ddd;
-  border-radius: 3px;
+  border-radius: 4px;
 }
 
 .pagination select {
   padding: 5px;
+  margin: 0 5px;
   border: 1px solid #ddd;
-  border-radius: 3px;
+  border-radius: 4px;
 }
 
-/* Responsive Adjustments */
+/* Tooltip */
+.activity-tooltip {
+  background-color: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  max-width: 300px;
+  font-size: 0.9rem;
+}
+
+.tooltip-time {
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #333;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 4px;
+}
+
+.tooltip-section {
+  margin-top: 8px;
+}
+
+.tooltip-header {
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: #555;
+}
+
+.tooltip-activity, .tooltip-effect, .tooltip-blood-sugar, .tooltip-estimated-bg {
+  margin: 4px 0;
+}
+
+.tooltip-blood-sugar {
+  color: #8884d8;
+  font-weight: 600;
+}
+
+.tooltip-estimated-bg {
+  color: #8884d8;
+  font-style: italic;
+}
+
+/* Responsive Design */
 @media (max-width: 768px) {
-  .date-controls, .activity-level-filters, .display-options {
+  .date-controls, .quick-ranges, .display-options {
     flex-direction: column;
-    width: 100%;
+    align-items: center;
   }
 
-  .controls {
+  .date-input-group, .display-option {
+    margin: 5px 0;
+  }
+
+  .effect-duration {
+    margin: 5px 0;
+  }
+
+  .filter-options {
     flex-direction: column;
+    align-items: flex-start;
   }
 
-  .activity-levels-grid {
-    grid-template-columns: 1fr;
+  .filter-option {
+    margin: 5px 0;
+  }
+
+  .activity-scale-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .scale-color {
+    margin-bottom: 5px;
+  }
+
+  .scale-direction {
+    text-align: left;
+    margin-top: 5px;
   }
 }
-/* Ensure chart container handles the absolute positioning */
-.chart-container {
-  position: relative;
+
+/* Add to ActivityVisualization.css */
+.future-hours {
+  display: flex;
+  align-items: center;
+  margin: 0 15px;
 }
 
-/* Make sure bars can extend from borders */
-.recharts-wrapper, .recharts-surface {
-  overflow: visible;
+.future-hours label {
+  margin-right: 10px;
 }
 
-/* Decreasing activity bars (from top) */
-.activity-bar.decreasing {
-  fill-opacity: 0.8;
-  stroke: #333;
-  stroke-width: 1;
-}
-
-/* Increasing activity bars (from bottom) */
-.activity-bar.increasing {
-  fill-opacity: 0.8;
-  stroke: #333;
-  stroke-width: 1;
-}
-
-/* Add visual indicator for bar direction */
-.activity-bar.decreasing:after {
-  content: '↓';
-  position: absolute;
-  top: 0;
-  left: 50%;
-  transform: translateX(-50%);
-}
-
-.activity-bar.increasing:after {
-  content: '↑';
-  position: absolute;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
+.future-hours input {
+  width: 60px;
+  padding: 5px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
 }

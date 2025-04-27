@@ -1,0 +1,493 @@
+/* Activity Visualization Component Styles */
+.combined-activity-blood-sugar-chart {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  max-width: 98%;
+  margin: 0 auto;
+  padding: 20px;
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.combined-activity-blood-sugar-chart .title {
+  text-align: center;
+  color: #333;
+  margin-bottom: 15px;
+  font-size: 1.8rem;
+}
+
+/* System Info */
+.system-info {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 15px;
+  font-size: 0.8rem;
+  color: #777;
+}
+
+.time-label, .user-label {
+  margin-left: 10px;
+}
+
+/* Timezone Info */
+.timezone-info {
+  text-align: right;
+  font-size: 0.85rem;
+  color: #555;
+  margin-bottom: 10px;
+}
+
+.timezone-note {
+  font-style: italic;
+  color: #777;
+}
+
+/* View Toggles */
+.view-toggle, .view-mode-toggle {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 15px;
+}
+
+.toggle-btn {
+  background-color: #f0f0f0;
+  border: 1px solid #ddd;
+  padding: 8px 15px;
+  margin: 0 5px;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+}
+
+.toggle-btn:hover {
+  background-color: #e0e0e0;
+}
+
+.toggle-btn.active {
+  background-color: #2196F3;
+  color: white;
+  border-color: #1976D2;
+}
+
+/* Controls Section */
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 20px;
+  padding: 15px;
+  background-color: #f9f9f9;
+  border-radius: 6px;
+  border: 1px solid #eee;
+}
+
+.date-controls {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.date-input-group {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.date-input-group label {
+  font-weight: 500;
+  color: #555;
+}
+
+.date-input-group input {
+  padding: 6px 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.quick-ranges {
+  display: flex;
+  gap: 5px;
+}
+
+.quick-ranges button {
+  padding: 6px 12px;
+  background-color: #e0e0e0;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background-color 0.2s;
+}
+
+.quick-ranges button:hover {
+  background-color: #d0d0d0;
+}
+
+.activity-level-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-grow: 1;
+}
+
+.filter-header {
+  font-weight: 500;
+  color: #333;
+}
+
+.filter-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.filter-option {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+}
+
+.display-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+  align-items: center;
+}
+
+.display-option {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+}
+
+.threshold-input {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.threshold-input label {
+  font-size: 0.9rem;
+  color: #555;
+}
+
+.threshold-input input {
+  width: 60px;
+  padding: 5px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  text-align: center;
+}
+
+.update-btn {
+  padding: 8px 16px;
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.update-btn:hover {
+  background-color: #388E3C;
+}
+
+/* Error and Loading Messages */
+.error-message {
+  color: #d32f2f;
+  padding: 10px;
+  border-left: 4px solid #d32f2f;
+  background-color: #ffebee;
+  margin-bottom: 15px;
+}
+
+.loading, .no-data {
+  text-align: center;
+  padding: 20px;
+  color: #777;
+  font-style: italic;
+}
+
+/* Content Container */
+.content-container {
+  margin-top: 20px;
+}
+
+/* Chart Styles */
+.chart-container {
+  overflow: hidden;
+  margin-bottom: 30px;
+}
+
+/* Activity Bars */
+.activity-bar {
+  stroke: rgba(0, 0, 0, 0.3);
+  stroke-width: 1;
+}
+
+.activity-bar.decreasing {
+  opacity: 0.8;
+}
+
+.activity-bar.increasing {
+  opacity: 0.8;
+}
+
+.activity-bar.neutral {
+  opacity: 0.6;
+}
+
+/* Chart Legend */
+.chart-legend {
+  margin-top: 20px;
+  padding: 15px;
+  background-color: #f9f9f9;
+  border-radius: 6px;
+  border: 1px solid #eee;
+}
+
+.chart-legend h4 {
+  margin-top: 15px;
+  margin-bottom: 10px;
+  color: #333;
+  font-size: 1.1rem;
+}
+
+.activity-levels-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.activity-level-details {
+  padding: 8px;
+  border-radius: 4px;
+  background-color: #f0f0f0;
+}
+
+.activity-level-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 5px;
+}
+
+.activity-color-box {
+  display: inline-block;
+  width: 15px;
+  height: 15px;
+  border-radius: 3px;
+}
+
+.activity-level-name {
+  font-weight: 500;
+}
+
+.activity-impact {
+  font-size: 0.9rem;
+  padding-left: 23px;
+}
+
+.blood-sugar-legend, .impact-legend, .activity-bars-legend {
+  margin-top: 15px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.legend-color, .legend-bar, .legend-area {
+  margin-right: 10px;
+  border-radius: 3px;
+}
+
+.legend-note {
+  font-size: 0.85rem;
+  font-style: italic;
+  color: #666;
+  margin-top: 5px;
+}
+
+/* Tooltip Styles */
+.activity-tooltip {
+  background-color: rgba(255, 255, 255, 0.95);
+  border: 1px solid #ccc;
+  padding: 10px;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  max-width: 300px;
+}
+
+.tooltip-time {
+  font-weight: bold;
+  margin-bottom: 8px;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 5px;
+}
+
+.tooltip-section {
+  margin-bottom: 8px;
+}
+
+.tooltip-header {
+  font-weight: 500;
+  margin-bottom: 2px;
+  color: #555;
+}
+
+.tooltip-activity {
+  margin: 2px 0;
+  padding-left: 10px;
+}
+
+.tooltip-effect {
+  font-weight: 500;
+}
+
+.tooltip-blood-sugar {
+  font-weight: 500;
+}
+
+.tooltip-blood-sugar.adjusted {
+  color: #4CAF50;
+}
+
+/* Table Styles */
+.table-container {
+  overflow-x: auto;
+}
+
+.activity-effect-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 15px;
+}
+
+.activity-effect-table th,
+.activity-effect-table td {
+  padding: 10px;
+  text-align: left;
+  border-bottom: 1px solid #ddd;
+}
+
+.activity-effect-table th {
+  background-color: #f2f2f2;
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.activity-effect-table tr:hover {
+  background-color: #f5f5f5;
+}
+
+/* Pagination Controls */
+.pagination {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 15px;
+  flex-wrap: wrap;
+}
+
+.pagination button {
+  padding: 5px 10px;
+  border: 1px solid #ddd;
+  background-color: #f8f8f8;
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+.pagination button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pagination button:hover:not(:disabled) {
+  background-color: #e0e0e0;
+}
+
+.pagination span {
+  margin: 0 5px;
+}
+
+.pagination input {
+  width: 50px;
+  padding: 5px;
+  text-align: center;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+}
+
+.pagination select {
+  padding: 5px;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+  .date-controls, .activity-level-filters, .display-options {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .controls {
+    flex-direction: column;
+  }
+
+  .activity-levels-grid {
+    grid-template-columns: 1fr;
+  }
+}
+/* Ensure chart container handles the absolute positioning */
+.chart-container {
+  position: relative;
+}
+
+/* Make sure bars can extend from borders */
+.recharts-wrapper, .recharts-surface {
+  overflow: visible;
+}
+
+/* Decreasing activity bars (from top) */
+.activity-bar.decreasing {
+  fill-opacity: 0.8;
+  stroke: #333;
+  stroke-width: 1;
+}
+
+/* Increasing activity bars (from bottom) */
+.activity-bar.increasing {
+  fill-opacity: 0.8;
+  stroke: #333;
+  stroke-width: 1;
+}
+
+/* Add visual indicator for bar direction */
+.activity-bar.decreasing:after {
+  content: '↓';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.activity-bar.increasing:after {
+  content: '↑';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+}

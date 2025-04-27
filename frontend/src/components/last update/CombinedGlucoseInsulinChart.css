@@ -1,0 +1,184 @@
+.insulin-glucose-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 0.5rem;
+  background-color: #f7f7f9;
+  border-radius: 6px;
+  margin-bottom: 1rem;
+}
+
+.display-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.display-toggles label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.insulin-type-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.filter-header {
+  font-weight: bold;
+  font-size: 0.9rem;
+  color: #444;
+}
+
+.filter-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.filter-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.config-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 1.5rem;
+  margin-top: 0.5rem;
+}
+
+.config-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.config-field label {
+  font-size: 0.85rem;
+  color: #444;
+}
+
+.config-field input {
+  width: 70px;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.combined-chart-tooltip {
+  background-color: rgba(255, 255, 255, 0.9);
+  border: 1px solid #ddd;
+  padding: 0.75rem;
+  border-radius: 4px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  max-width: 300px;
+}
+
+.tooltip-time {
+  font-weight: bold;
+  margin-bottom: 0.5rem;
+  color: #333;
+}
+
+.tooltip-section {
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px dotted #eee;
+}
+
+.tooltip-section:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.tooltip-header {
+  font-weight: bold;
+  font-size: 0.9rem;
+  margin: 0.25rem 0;
+  color: #555;
+}
+
+.tooltip-blood-sugar {
+  font-size: 1.1rem;
+  margin: 0.25rem 0;
+}
+
+.tooltip-dose, .tooltip-effect, .tooltip-effect-detail, .tooltip-bg-change {
+  margin: 0.25rem 0;
+  font-size: 0.9rem;
+}
+
+.tooltip-effect-detail {
+  padding-left: 0.5rem;
+  opacity: 0.8;
+}
+
+.chart-legend {
+  margin-top: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.insulin-types-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1rem;
+}
+
+.insulin-type-details {
+  background-color: #f9f9f9;
+  padding: 0.75rem;
+  border-radius: 4px;
+  border: 1px solid #eee;
+}
+
+.insulin-type-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.insulin-color-box {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+}
+
+.insulin-type-name {
+  font-weight: bold;
+}
+
+.insulin-pharmacokinetics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  font-size: 0.85rem;
+  color: #555;
+}
+
+.insulin-brands {
+  margin-top: 0.5rem;
+  font-size: 0.8rem;
+  color: #666;
+}
+
+@media (max-width: 768px) {
+  .insulin-glucose-controls {
+    flex-direction: column;
+  }
+
+  .display-toggles, .filter-options, .config-options {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+}
