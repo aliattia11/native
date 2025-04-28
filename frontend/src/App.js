@@ -6,6 +6,7 @@ import PatientDashboard from './components/PatientDashboard';
 import DoctorDashboard from './components/DoctorDashboard';
 import { ConstantsProvider } from './contexts/ConstantsContext';
 import { BloodSugarDataProvider } from './contexts/BloodSugarDataContext';
+import { TimeProvider } from './contexts/TimeContext';
 import './App.css';
 
 function App() {
@@ -30,30 +31,32 @@ function App() {
 
   return (
     <Router>
-      <ConstantsProvider>
-        <BloodSugarDataProvider>
-          <div className="App">
-            <Routes>
-              <Route path="/login" element={
-                loggedIn ? <Navigate to="/dashboard" /> : <SignIn setLoggedIn={setLoggedIn} setUserType={setUserType} />
-              } />
-              <Route path="/register" element={<Register />} />
-              <Route path="/dashboard" element={
-                loggedIn ? (
-                  userType === 'patient' ? (
-                    <PatientDashboard handleLogout={handleLogout} />
+      <TimeProvider>
+        <ConstantsProvider>
+          <BloodSugarDataProvider>
+            <div className="App">
+              <Routes>
+                <Route path="/login" element={
+                  loggedIn ? <Navigate to="/dashboard" /> : <SignIn setLoggedIn={setLoggedIn} setUserType={setUserType} />
+                } />
+                <Route path="/register" element={<Register />} />
+                <Route path="/dashboard" element={
+                  loggedIn ? (
+                    userType === 'patient' ? (
+                      <PatientDashboard handleLogout={handleLogout} />
+                    ) : (
+                      <DoctorDashboard handleLogout={handleLogout} />
+                    )
                   ) : (
-                    <DoctorDashboard handleLogout={handleLogout} />
+                    <Navigate to="/login" />
                   )
-                ) : (
-                  <Navigate to="/login" />
-                )
-              } />
-              <Route path="/" element={<Navigate to="/login" />} />
-            </Routes>
-          </div>
-        </BloodSugarDataProvider>
-      </ConstantsProvider>
+                } />
+                <Route path="/" element={<Navigate to="/login" />} />
+              </Routes>
+            </div>
+          </BloodSugarDataProvider>
+        </ConstantsProvider>
+      </TimeProvider>
     </Router>
   );
 }

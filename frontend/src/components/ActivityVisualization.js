@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useContext } from 'react';
 import axios from 'axios';
 import moment from 'moment';
 import {
@@ -17,20 +17,33 @@ import {
 import { useTable, useSortBy, usePagination } from 'react-table';
 import { useConstants } from '../contexts/ConstantsContext';
 import { useBloodSugarData } from '../contexts/BloodSugarDataContext';
+import TimeManager from '../utils/TimeManager';
+import TimeContext from '../contexts/TimeContext';
+import TimeInput from '../components/TimeInput';
 import { ACTIVITY_LEVELS } from '../constants';
 import './ActivityVisualization.css';
 
 const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
+  // Use TimeContext for date range management
+  const timeContext = useContext(TimeContext);
+
   // Use contexts for activity coefficients and blood sugar data
   const { patientConstants } = useConstants();
-  const { combinedData: bloodSugarData, getFilteredData, targetGlucose } = useBloodSugarData();
+  const {
+    combinedData: bloodSugarData,
+    getFilteredData,
+    targetGlucose,
+    timeScale,
+    systemDateTime,
+    currentUserLogin
+  } = useBloodSugarData();
 
   // State management
   const [activityData, setActivityData] = useState([]);
   const [combinedData, setCombinedData] = useState([]);
   const [activityLevels, setActivityLevels] = useState([]);
   const [selectedActivityLevels, setSelectedActivityLevels] = useState([]);
-  const [dateRange, setDateRange] = useState({
+  const [localDateRange, setLocalDateRange] = useState({
     start: moment().subtract(3, 'days').format('YYYY-MM-DD'),
     end: moment().format('YYYY-MM-DD')
   });
@@ -43,10 +56,14 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
   const [userTimeZone, setUserTimeZone] = useState('');
   const [dataFetched, setDataFetched] = useState(false);
   const [effectDurationHours, setEffectDurationHours] = useState(5); // Hours activity affects blood sugar
+  const [showSystemInfo, setShowSystemInfo] = useState(true);
 
   // Add state for future effect projection
   const [includeFutureEffect, setIncludeFutureEffect] = useState(true);
   const [futureHours, setFutureHours] = useState(7); // Hours to project into future
+
+  // Use TimeContext values if available, otherwise use local state
+  const dateRange = timeContext ? timeContext.dateRange : localDateRange;
 
   // Get user's time zone on component mount
   useEffect(() => {
@@ -83,9 +100,9 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
 
     // Early return if outside the duration window
     const totalEffectHours = params.totalDurationHours + (duration || 1); // Add activity duration to effect duration
-if (hoursSinceActivity < 0 || hoursSinceActivity > totalEffectHours) {
-  return 0;
-}
+    if (hoursSinceActivity < 0 || hoursSinceActivity > totalEffectHours) {
+      return 0;
+    }
 
     let effectStrength = 0;
 
@@ -153,7 +170,7 @@ if (hoursSinceActivity < 0 || hoursSinceActivity > totalEffectHours) {
       while (currentTime <= maxTime) {
         const timePoint = {
           timestamp: currentTime,
-          formattedTime: moment(currentTime).format('MM/DD/YYYY, HH:mm'),
+          formattedTime: TimeManager.formatDate(currentTime, TimeManager.formats.DATETIME_DISPLAY),
           activities: {},
           activityEffects: {},
           totalActivityEffect: 0
@@ -280,8 +297,8 @@ if (hoursSinceActivity < 0 || hoursSinceActivity > totalEffectHours) {
           impact: activity.impact || getActivityImpactCoefficient(activity.level),
           startTime,
           endTime,
-          formattedStartTime: startTime ? moment(startTime).format('MM/DD/YYYY, HH:mm') : 'N/A',
-          formattedEndTime: endTime ? moment(endTime).format('MM/DD/YYYY, HH:mm') : 'N/A',
+          formattedStartTime: startTime ? TimeManager.formatDate(startTime, TimeManager.formats.DATETIME_DISPLAY) : 'N/A',
+          formattedEndTime: endTime ? TimeManager.formatDate(endTime, TimeManager.formats.DATETIME_DISPLAY) : 'N/A',
           duration: calculateDuration(startTime, endTime),
           type: activity.type || 'unknown',
           notes: activity.notes || ''
@@ -364,19 +381,19 @@ if (hoursSinceActivity < 0 || hoursSinceActivity > totalEffectHours) {
     });
   }, []);
 
-  // Date range change handler
-  const handleDateChange = useCallback((e) => {
-    const { name, value } = e.target;
-    setDateRange(prev => ({ ...prev, [name]: value }));
-  }, []);
+  // Date range change handler - Uses TimeContext when available
+  const handleDateRangeChange = useCallback((newRange) => {
+    if (timeContext) {
+      timeContext.setDateRange(newRange);
+    } else {
+      setLocalDateRange(newRange);
+    }
+  }, [timeContext]);
 
-  // Quick date range presets
-  const applyDatePreset = useCallback((days) => {
-    setDateRange({
-      start: moment().subtract(days, 'days').format('YYYY-MM-DD'),
-      end: moment().format('YYYY-MM-DD')
-    });
-  }, []);
+  // Toggle system info display
+  const toggleSystemInfo = useCallback(() => {
+    setShowSystemInfo(!showSystemInfo);
+  }, [showSystemInfo]);
 
   // Toggle future effects projection
   const toggleFutureEffect = useCallback(() => {
@@ -395,7 +412,7 @@ if (hoursSinceActivity < 0 || hoursSinceActivity > totalEffectHours) {
 
       return (
         <div className="activity-tooltip">
-          <p className="tooltip-time">{moment(data.timestamp).format('MM/DD/YYYY, HH:mm')}</p>
+          <p className="tooltip-time">{data.formattedTime}</p>
 
           {/* Display activities */}
           {data.activityDetails && data.activityDetails.length > 0 && (
@@ -543,10 +560,15 @@ if (hoursSinceActivity < 0 || hoursSinceActivity > totalEffectHours) {
     state: { pageIndex, pageSize }
   } = tableInstance;
 
-  // Format the X-axis labels
+  // Format the X-axis labels using TimeManager
   const formatXAxis = useCallback((tickItem) => {
-    return moment(tickItem).format('MM/DD HH:mm');
-  }, []);
+    return TimeManager.formatAxisTick(tickItem, timeScale.tickFormat || 'CHART_TICKS_MEDIUM');
+  }, [timeScale]);
+
+  // Generate ticks for x-axis based on time scale
+  const ticks = useMemo(() => {
+    return TimeManager.generateTimeTicks(timeScale.start, timeScale.end, timeScale.tickInterval || 12);
+  }, [timeScale]);
 
   // Helper function to get consistent colors for activity levels
   const getActivityColor = useCallback((level, isEffect = false) => {
@@ -588,6 +610,13 @@ if (hoursSinceActivity < 0 || hoursSinceActivity > totalEffectHours) {
     return "activityLevel";
   }, [showActualBloodSugar]);
 
+  // Check if current time is within chart range
+  const currentTimeInRange = TimeManager.isTimeInRange(
+    new Date().getTime(),
+    timeScale.start,
+    timeScale.end
+  );
+
   return (
     <div className="activity-visualization">
       <h2 className="title">Activity Analysis</h2>
@@ -596,6 +625,30 @@ if (hoursSinceActivity < 0 || hoursSinceActivity > totalEffectHours) {
         Your timezone: {userTimeZone}
         <span className="timezone-note"> (all times displayed in your local timezone)</span>
       </div>
+
+      {showSystemInfo && (
+        <div className="system-info">
+          <span className="time-label">Current Date and Time (UTC - YYYY-MM-DD HH:MM:SS formatted): {systemDateTime} | </span>
+          <span className="user-label">User: {currentUserLogin}</span>
+          <button
+            onClick={toggleSystemInfo}
+            className="system-info-toggle"
+            aria-label="Hide system information"
+          >
+            Hide
+          </button>
+        </div>
+      )}
+
+      {!showSystemInfo && (
+        <button
+          onClick={toggleSystemInfo}
+          className="system-info-toggle show-btn"
+          aria-label="Show system information"
+        >
+          Show System Info
+        </button>
+      )}
 
       <div className="view-toggle">
         <button
@@ -636,34 +689,15 @@ if (hoursSinceActivity < 0 || hoursSinceActivity > totalEffectHours) {
       )}
 
       <div className="controls">
-        <div className="date-controls">
-          <div className="date-input-group">
-            <label htmlFor="start-date">From:</label>
-            <input
-              id="start-date"
-              type="date"
-              name="start"
-              value={dateRange.start}
-              onChange={handleDateChange}
-            />
-          </div>
-          <div className="date-input-group">
-            <label htmlFor="end-date">To:</label>
-            <input
-              id="end-date"
-              type="date"
-              name="end"
-              value={dateRange.end}
-              onChange={handleDateChange}
-            />
-          </div>
-        </div>
-
-        <div className="quick-ranges">
-          <button onClick={() => applyDatePreset(1)}>Last 24h</button>
-          <button onClick={() => applyDatePreset(3)}>Last 3 Days</button>
-          <button onClick={() => applyDatePreset(7)}>Last Week</button>
-        </div>
+        {/* Use TimeInput component in daterange mode */}
+        <TimeInput
+          mode="daterange"
+          value={dateRange}
+          onChange={handleDateRangeChange}
+          useTimeContext={!!timeContext}
+          label="Date Range"
+          className="date-range-control"
+        />
 
         <div className="activity-level-filters">
           <div className="filter-header">Activity Levels:</div>
@@ -753,7 +787,8 @@ if (hoursSinceActivity < 0 || hoursSinceActivity > totalEffectHours) {
                     dataKey="timestamp"
                     type="number"
                     scale="time"
-                    domain={['dataMin', 'dataMax']}
+                    domain={[timeScale.start, timeScale.end]}
+                    ticks={ticks}
                     tickFormatter={formatXAxis}
                     angle={-45}
                     textAnchor="end"
@@ -764,9 +799,9 @@ if (hoursSinceActivity < 0 || hoursSinceActivity > totalEffectHours) {
                   {showActualBloodSugar && (
                     <YAxis
                       yAxisId="bloodSugar"
-    orientation="left"
-    domain={['dataMin - 20', 'dataMax + 20']}
-    tickFormatter={(value) => Math.round(value)}
+                      orientation="left"
+                      domain={['dataMin - 20', 'dataMax + 20']}
+                      tickFormatter={(value) => Math.round(value)}
                       label={{ value: 'Blood Sugar (mg/dL)', angle: -90, position: 'insideLeft' }}
                     />
                   )}
@@ -889,14 +924,16 @@ if (hoursSinceActivity < 0 || hoursSinceActivity > totalEffectHours) {
                       />
                     ))}
 
-                  {/* Current time reference line - Using Date.now() */}
-                  <ReferenceLine
-                    x={Date.now()}
-                    yAxisId={currentTimeYAxisId}
-                    stroke="#ff0000"
-                    strokeWidth={2}
-                    label={{ value: 'Now', position: 'top', fill: '#ff0000' }}
-                  />
+                  {/* Current time reference line */}
+                  {currentTimeInRange && (
+                    <ReferenceLine
+                      x={new Date().getTime()}
+                      yAxisId={currentTimeYAxisId}
+                      stroke="#ff0000"
+                      strokeWidth={2}
+                      label={{ value: 'Now', position: 'top', fill: '#ff0000' }}
+                    />
+                  )}
                 </ComposedChart>
               </ResponsiveContainer>
 

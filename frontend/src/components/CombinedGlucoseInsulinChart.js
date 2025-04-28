@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useContext } from 'react';
 import axios from 'axios';
 import moment from 'moment';
 import {
@@ -17,13 +17,19 @@ import {
 import { useTable, useSortBy, usePagination } from 'react-table';
 import { useConstants } from '../contexts/ConstantsContext';
 import { useBloodSugarData } from '../contexts/BloodSugarDataContext';
+import TimeManager from '../utils/TimeManager';
+import TimeContext from '../contexts/TimeContext';
+import TimeInput from '../components/TimeInput';
 import './InsulinVisualization.css';
 
 const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => {
+  // Use TimeContext for date range management
+  const timeContext = useContext(TimeContext);
+
   // Use constants context for patient-specific insulin parameters
   const { patientConstants } = useConstants();
 
-  // Use blood sugar data from the shared context - IMPROVED: Added more context values
+  // Use blood sugar data from the shared context
   const {
     filteredData: bloodSugarData,
     combinedData: allBloodSugarData,
@@ -34,7 +40,9 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
     applyInsulinEffect,
     timeScale,
     unit,
-    getBloodSugarStatus  // Added to use consistent status styling
+    getBloodSugarStatus,
+    systemDateTime,
+    currentUserLogin
   } = useBloodSugarData();
 
   // State management
@@ -52,12 +60,7 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
   const [dataFetched, setDataFetched] = useState(false);
   const [includeFutureEffect, setIncludeFutureEffect] = useState(true);
   const [futureHours, setFutureHours] = useState(7); // Hours to project into future
-
-  // REMOVED: processedBloodSugarData state - now using the context's applyInsulinEffect function directly
-
-  // Fixed current date and time as specified
-  const currentDateTime = "2025-04-22 21:12:27";
-  const currentUserLogin = "aliattia02";
+  const [showSystemInfo, setShowSystemInfo] = useState(true);
 
   // Get user's time zone on component mount
   useEffect(() => {
@@ -147,7 +150,7 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
       while (currentTime <= maxTime) {
         const timePoint = {
           timestamp: currentTime,
-          formattedTime: moment(currentTime).format('MM/DD/YYYY, HH:mm'),
+          formattedTime: TimeManager.formatDate(currentTime, TimeManager.formats.DATETIME_DISPLAY),
           insulinDoses: {},
           insulinEffects: {},
           totalInsulinEffect: 0
@@ -251,7 +254,7 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
           medication: log.medication,
           dose: log.dose,
           administrationTime: adminTime.valueOf(),
-          formattedTime: adminTime.format('MM/DD/YYYY, HH:mm'),
+          formattedTime: TimeManager.formatDate(adminTime, TimeManager.formats.DATETIME_DISPLAY),
           notes: log.notes || '',
           mealType: log.meal_type || 'N/A',
           bloodSugar: log.blood_sugar,
@@ -269,9 +272,6 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
 
       // Save the processed data
       setInsulinData(filteredInsulinData);
-
-      // IMPROVED: Use context's applyInsulinEffect directly instead of storing processed data
-      // Now we apply insulin effects on-demand when generating charts
 
       // Generate combined data using the bloodSugarData from context with insulin effects applied
       const processedData = applyInsulinEffect(filteredInsulinData, allBloodSugarData);
@@ -314,39 +314,14 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
     });
   }, []);
 
-  // Date range change handler - IMPROVED: Now using the same format as BloodSugarVisualization
-  const handleDateChange = useCallback((e) => {
-    const { name, value } = e.target;
-    setDateRange(prev => {
-      const newRange = { ...prev, [name]: value };
-      return newRange;
-    });
-  }, [setDateRange]);
-
-  // Quick date range presets - IMPROVED: Now using the same presets as BloodSugarVisualization
-  const applyDatePreset = useCallback((days) => {
-    const start = moment().subtract(days, 'days').format('YYYY-MM-DD');
-    let end;
-
-    if (days === 1) {
-      // For "Last 24h": past day plus 12 hours
-      end = moment().add(12, 'hours').format('YYYY-MM-DD');
-    } else if (days === 3) {
-      // For "Last 3 Days": past 3 days plus one future day
-      end = moment().add(1, 'day').format('YYYY-MM-DD');
-    } else if (days === 7) {
-      // For "Last Week": past 7 days plus one future day
-      end = moment().add(1, 'day').format('YYYY-MM-DD');
+  // Date range change handler - Uses TimeContext when available
+  const handleDateRangeChange = useCallback((newRange) => {
+    if (timeContext) {
+      timeContext.setDateRange(newRange);
     } else {
-      // Default case
-      end = moment().format('YYYY-MM-DD');
+      setDateRange(newRange);
     }
-
-    setDateRange({
-      start: start,
-      end: end
-    });
-  }, [setDateRange]);
+  }, [timeContext, setDateRange]);
 
   // Custom tooltip for the chart
   const CustomTooltip = useCallback(({ active, payload }) => {
@@ -355,7 +330,7 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
 
       return (
         <div className="insulin-tooltip">
-          <p className="tooltip-time">{moment(data.timestamp).format('MM/DD/YYYY, HH:mm')}</p>
+          <p className="tooltip-time">{data.formattedTime}</p>
 
           {/* Display insulin doses */}
           {Object.entries(data.insulinDoses).length > 0 && (
@@ -477,9 +452,9 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
     state: { pageIndex, pageSize }
   } = tableInstance;
 
-  // Format the X-axis labels - IMPROVED: Now using the same format as timeScale from context
+  // Format the X-axis labels using TimeManager
   const formatXAxis = useCallback((tickItem) => {
-    return moment(tickItem).format(timeScale.tickFormat || 'MM/DD HH:mm');
+    return TimeManager.formatAxisTick(tickItem, timeScale.tickFormat || 'CHART_TICKS_MEDIUM');
   }, [timeScale]);
 
   // Helper function to get consistent colors for insulin types
@@ -516,6 +491,11 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
     setIncludeFutureEffect(!includeFutureEffect);
   }, [includeFutureEffect]);
 
+  // Toggle system info display
+  const toggleSystemInfo = useCallback(() => {
+    setShowSystemInfo(!showSystemInfo);
+  }, [showSystemInfo]);
+
   // Force update the data
   const handleForceUpdate = useCallback(() => {
     fetchInsulinData();
@@ -528,24 +508,17 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
     return "insulinEffect";
   }, [showActualBloodSugar, viewMode]);
 
-  // Generate ticks for x-axis based on time scale - IMPROVED: Now using timeScale from context
+  // Generate ticks for x-axis based on time scale using TimeManager
   const ticks = useMemo(() => {
-    const ticksArray = [];
-    let current = moment(timeScale.start).startOf('hour');
-    const end = moment(timeScale.end);
-    const tickInterval = timeScale.tickInterval || 12; // Default to 12 hours if not specified
-
-    // Align ticks to exact hour boundaries for consistent grid alignment
-    while (current.isBefore(end)) {
-      ticksArray.push(current.valueOf());
-      current = current.add(tickInterval, 'hours');
-    }
-
-    return ticksArray;
+    return TimeManager.generateTimeTicks(timeScale.start, timeScale.end, timeScale.tickInterval);
   }, [timeScale]);
 
   // Check if current time is within chart range
-  const currentTimeInRange = moment().valueOf() >= timeScale.start && moment().valueOf() <= timeScale.end;
+  const currentTimeInRange = TimeManager.isTimeInRange(
+    new Date().getTime(),
+    timeScale.start,
+    timeScale.end
+  );
 
   return (
     <div className="insulin-visualization">
@@ -556,11 +529,29 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
         <span className="timezone-note"> (all times displayed in your local timezone)</span>
       </div>
 
-      {/* System Info with current date/time and user - IMPROVED: Now using the constants */}
-      <div className="system-info">
-        <span className="time-label">Current: {currentDateTime} UTC | </span>
-        <span className="user-label">User: {currentUserLogin}</span>
-      </div>
+      {showSystemInfo && (
+        <div className="system-info">
+          <span className="time-label">Current Date and Time (UTC): {systemDateTime} | </span>
+          <span className="user-label">User: {currentUserLogin}</span>
+          <button
+            onClick={toggleSystemInfo}
+            className="system-info-toggle"
+            aria-label="Hide system information"
+          >
+            Hide
+          </button>
+        </div>
+      )}
+
+      {!showSystemInfo && (
+        <button
+          onClick={toggleSystemInfo}
+          className="system-info-toggle show-btn"
+          aria-label="Show system information"
+        >
+          Show System Info
+        </button>
+      )}
 
       <div className="view-toggle">
         <button
@@ -601,34 +592,15 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
       )}
 
       <div className="controls">
-        <div className="date-controls">
-          <div className="date-input-group">
-            <label htmlFor="start-date">From:</label>
-            <input
-              id="start-date"
-              type="date"
-              name="start"
-              value={dateRange.start}
-              onChange={handleDateChange}
-            />
-          </div>
-          <div className="date-input-group">
-            <label htmlFor="end-date">To:</label>
-            <input
-              id="end-date"
-              type="date"
-              name="end"
-              value={dateRange.end}
-              onChange={handleDateChange}
-            />
-          </div>
-        </div>
-
-        <div className="quick-ranges">
-          <button onClick={() => applyDatePreset(1)}>Last 24h</button>
-          <button onClick={() => applyDatePreset(3)}>Last 3 Days</button>
-          <button onClick={() => applyDatePreset(7)}>Last Week</button>
-        </div>
+        {/* Use TimeInput component in daterange mode */}
+        <TimeInput
+          mode="daterange"
+          value={dateRange}
+          onChange={handleDateRangeChange}
+          useTimeContext={!!timeContext}
+          label="Date Range"
+          className="date-range-control"
+        />
 
         <div className="insulin-type-filters">
           <div className="filter-header">Insulin Types:</div>
@@ -728,15 +700,15 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
 
                   {/* Y-axis for insulin doses */}
                   {(viewMode === 'combined' || viewMode === 'doses') && (
-                   <YAxis
-  yAxisId="insulinDose"
-  orientation={showActualBloodSugar ? "right" : "left"}
-  domain={[0, 30]} // Fixed scale from 0 to 30
-  label={{
-    value: 'Insulin Dose (units)',
-    angle: -90,
-    position: showActualBloodSugar ? 'insideRight' : 'insideLeft'
-  }}
+                    <YAxis
+                      yAxisId="insulinDose"
+                      orientation={showActualBloodSugar ? "right" : "left"}
+                      domain={[0, 30]} // Fixed scale from 0 to 30
+                      label={{
+                        value: 'Insulin Dose (units)',
+                        angle: -90,
+                        position: showActualBloodSugar ? 'insideRight' : 'insideLeft'
+                      }}
                     />
                   )}
 
@@ -764,7 +736,7 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
                     />
                   )}
 
-                  {/* Blood Sugar Lines - IMPROVED: Now using consistent styling */}
+                  {/* Blood Sugar Lines */}
                   {showActualBloodSugar && (
                     <>
                       <Line
@@ -784,10 +756,10 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
                         type="monotone"
                         dataKey="predictedBloodSugar"
                         name={`Predicted with Insulin (${unit})`}
-                        stroke="#00C853"  // Bright green color
-                        strokeWidth={2.5} // Thicker line
+                        stroke="#00C853"
+                        strokeWidth={2.5}
                         dot={{
-                          r: 5,           // Larger dots
+                          r: 5,
                           fill: "#00C853",
                           stroke: "#005724",
                           strokeWidth: 1.5
@@ -846,7 +818,7 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
                   {/* Current time reference line */}
                   {currentTimeInRange && (
                     <ReferenceLine
-                      x={moment().valueOf()}
+                      x={new Date().getTime()}
                       yAxisId={currentTimeYAxisId}
                       stroke="#ff0000"
                       strokeWidth={2}
@@ -889,7 +861,7 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
                 </div>
               </div>
 
-              {/* Blood sugar effect legend - IMPROVED: Better styling and descriptions */}
+              {/* Blood sugar effect legend */}
               {showActualBloodSugar && combinedData.some(d => d.predictedBloodSugar) && (
                 <div className="blood-sugar-legend">
                   <h4>Blood Sugar Effects</h4>

@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 import moment from 'moment';
+import TimeManager from '../utils/TimeManager';
+import TimeContext from '../contexts/TimeContext';
 
 // Create the context
 const BloodSugarDataContext = createContext();
@@ -16,6 +18,9 @@ export const useBloodSugarData = () => {
 
 // Provider component
 export const BloodSugarDataProvider = ({ children }) => {
+  // Access TimeContext
+  const timeContext = useContext(TimeContext);
+
   // Core state
   const [bloodSugarData, setBloodSugarData] = useState([]);
   const [estimatedBloodSugarData, setEstimatedBloodSugarData] = useState([]);
@@ -25,12 +30,12 @@ export const BloodSugarDataProvider = ({ children }) => {
   const [error, setError] = useState('');
   const [targetGlucose, setTargetGlucose] = useState(120);
 
-  // Configuration state
-  const [dateRange, setDateRange] = useState({
+  // Configuration state - use TimeContext if available, otherwise use local state
+  const [localDateRange, setLocalDateRange] = useState({
     start: moment().subtract(7, 'days').format('YYYY-MM-DD'),
     end: moment().add(1, 'day').format('YYYY-MM-DD')
   });
-  const [timeScale, setTimeScale] = useState({
+  const [localTimeScale, setLocalTimeScale] = useState({
     start: moment().subtract(7, 'days').valueOf(),
     end: moment().valueOf(),
     tickInterval: 12,
@@ -47,9 +52,13 @@ export const BloodSugarDataProvider = ({ children }) => {
     returnToTarget: true
   });
 
-  // Constants
-  const currentDateTime = "2025-04-22 18:39:40";
-  const currentUserLogin = "aliattia02";
+  // Use TimeContext values if available, otherwise use local state
+  const dateRange = timeContext ? timeContext.dateRange : localDateRange;
+  const timeScale = timeContext ? timeContext.timeScale : localTimeScale;
+
+  // System information
+  const systemDateTime = TimeManager.getSystemDateTime();
+  const currentUserLogin = TimeManager.getCurrentUserLogin();
 
   // Prevent initial render issues with refs
   const didInitialFetch = useRef(false);
@@ -68,74 +77,61 @@ export const BloodSugarDataProvider = ({ children }) => {
     return statusMap.normal;
   }, []);
 
-  // Update time scale based on date range
-  const updateTimeScale = useCallback(() => {
-    const startMoment = moment(dateRange.start).startOf('day');
-    const endMoment = moment(dateRange.end).endOf('day');
-    const diffDays = endMoment.diff(startMoment, 'days');
+  // Update local time scale based on date range when not using TimeContext
+  const updateLocalTimeScale = useCallback(() => {
+    if (timeContext) return; // Skip if using TimeContext
 
-    let tickInterval, tickFormat;
+    const newTimeScale = TimeManager.getTimeScaleForRange(localDateRange.start, localDateRange.end);
+    setLocalTimeScale(newTimeScale);
+  }, [localDateRange, timeContext]);
 
-    // Determine scaling based on the date range
-    if (diffDays <= 1) {
-      // Last 24 hours - 2 hour ticks
-      tickInterval = 2;
-      tickFormat = 'HH:mm';
-    } else if (diffDays <= 7) {
-      // Last week - 12 hour ticks
-      tickInterval = 12;
-      tickFormat = 'DD/MM HH:mm';
+  // Update date range handler that works with or without TimeContext
+  const handleDateRangeChange = useCallback((newRange) => {
+    if (timeContext) {
+      // If TimeContext is available, update there
+      timeContext.setDateRange(newRange);
     } else {
-      // Last month - 1 day ticks
-      tickInterval = 24;
-      tickFormat = 'MM/DD';
+      // Otherwise update local state
+      setLocalDateRange(newRange);
     }
-
-    setTimeScale({
-      start: startMoment.valueOf(),
-      end: endMoment.valueOf(),
-      tickInterval,
-      tickFormat
-    });
-  }, [dateRange]);
-
+  }, [timeContext]);
 
   const getFilteredEstimatedReadings = useCallback((allData = combinedData) => {
-  if (!allData || allData.length === 0) return [];
+    if (!allData || allData.length === 0) return [];
 
-  // Get only estimated/interpolated points
-  const estimatedPoints = allData.filter(r => r.isInterpolated || r.isEstimated);
+    // Get only estimated/interpolated points
+    const estimatedPoints = allData.filter(r => r.isInterpolated || r.isEstimated);
 
-  if (estimatedPoints.length <= 1) return estimatedPoints;
+    if (estimatedPoints.length <= 1) return estimatedPoints;
 
-  // Get actual readings to avoid overlap
-  const actualReadings = allData.filter(r => r.isActualReading);
+    // Get actual readings to avoid overlap
+    const actualReadings = allData.filter(r => r.isActualReading);
 
-  // Sort by time
-  estimatedPoints.sort((a, b) => a.readingTime - b.readingTime);
+    // Sort by time
+    estimatedPoints.sort((a, b) => a.readingTime - b.readingTime);
 
-  const filteredEstimates = [];
-  let lastIncludedTime = 0;
+    const filteredEstimates = [];
+    let lastIncludedTime = 0;
 
-  // Process each estimated point
-  estimatedPoints.forEach(point => {
-    // Check if this point is at least 30 minutes from the last included point
-    const timeGapOK = (point.readingTime - lastIncludedTime) >= 30 * 60 * 1000;
+    // Process each estimated point
+    estimatedPoints.forEach(point => {
+      // Check if this point is at least 30 minutes from the last included point
+      const timeGapOK = (point.readingTime - lastIncludedTime) >= 30 * 60 * 1000;
 
-    // Check if this point is at least 15 minutes away from any actual reading
-    const awayFromActualReadings = !actualReadings.some(actual =>
-      Math.abs(actual.readingTime - point.readingTime) < 15 * 60 * 1000
-    );
+      // Check if this point is at least 15 minutes away from any actual reading
+      const awayFromActualReadings = !actualReadings.some(actual =>
+        Math.abs(actual.readingTime - point.readingTime) < 15 * 60 * 1000
+      );
 
-    // Include the point if both conditions are met
-    if (timeGapOK && awayFromActualReadings) {
-      filteredEstimates.push(point);
-      lastIncludedTime = point.readingTime;
-    }
-  });
+      // Include the point if both conditions are met
+      if (timeGapOK && awayFromActualReadings) {
+        filteredEstimates.push(point);
+        lastIncludedTime = point.readingTime;
+      }
+    });
 
-  return filteredEstimates;
-}, [combinedData]);
+    return filteredEstimates;
+  }, [combinedData]);
 
 
   // Filter data based on time scale
@@ -214,10 +210,16 @@ export const BloodSugarDataProvider = ({ children }) => {
         // Calculate blood glucose based on our model
         let glucoseValue = modelBloodGlucose(startPoint, elapsedMinutes);
 
+        // Use TimeManager for date formatting
+        const formattedTime = TimeManager.formatDate(
+          new Date(pointTime),
+          TimeManager.formats.DATETIME_DISPLAY
+        );
+
         points.push({
           readingTime: pointTime,
           bloodSugar: glucoseValue,
-          formattedReadingTime: moment(pointTime).format('MM/DD/YYYY, HH:mm'),
+          formattedReadingTime: formattedTime,
           isActualReading: false,
           isInterpolated: true,
           isEstimated: true,
@@ -237,10 +239,17 @@ export const BloodSugarDataProvider = ({ children }) => {
       // Start with a target value at timeScale.start if needed
       if (estimationSettings.fillFromStart && sortedActualReadings.length > 0 &&
           sortedActualReadings[0].readingTime > timeScale.start) {
+
+        // Use TimeManager for date formatting
+        const formattedStartTime = TimeManager.formatDate(
+          new Date(timeScale.start),
+          TimeManager.formats.DATETIME_DISPLAY
+        );
+
         const startPoint = {
           readingTime: timeScale.start,
           bloodSugar: targetGlucose,
-          formattedReadingTime: moment(timeScale.start).format('MM/DD/YYYY, HH:mm'),
+          formattedReadingTime: formattedStartTime,
           isActualReading: false,
           isInterpolated: true,
           isEstimated: true,
@@ -304,10 +313,16 @@ export const BloodSugarDataProvider = ({ children }) => {
           estimatedPoints = [...estimatedPoints, ...pointsToEndTime];
 
           // Add final point at the end time showing target glucose
+          // Use TimeManager for date formatting
+          const formattedEndTime = TimeManager.formatDate(
+            new Date(endTime),
+            TimeManager.formats.DATETIME_DISPLAY
+          );
+
           const finalPoint = {
             readingTime: endTime,
             bloodSugar: targetGlucose,
-            formattedReadingTime: moment(endTime).format('MM/DD/YYYY, HH:mm'),
+            formattedReadingTime: formattedEndTime,
             isActualReading: false,
             isInterpolated: true,
             isEstimated: true,
@@ -345,7 +360,7 @@ export const BloodSugarDataProvider = ({ children }) => {
         throw new Error('Authentication token not found');
       }
 
-      // Build API endpoint
+      // Build API endpoint - use effective date range
       const startDate = moment(dateRange.start).format('YYYY-MM-DD');
       const endDate = moment(dateRange.end).format('YYYY-MM-DD');
 
@@ -370,11 +385,21 @@ export const BloodSugarDataProvider = ({ children }) => {
 
         const itemTarget = item.target || targetGlucose;
 
+        // Use TimeManager for date formatting
+        const formattedReadingTime = TimeManager.formatDate(
+          localReadingTime.toDate(),
+          TimeManager.formats.DATETIME_DISPLAY
+        );
+        const formattedRecordingTime = TimeManager.formatDate(
+          localRecordingTime.toDate(),
+          TimeManager.formats.DATETIME_DISPLAY
+        );
+
         return {
           ...item,
           readingTime: localReadingTime.valueOf(),
-          formattedReadingTime: localReadingTime.format('MM/DD/YYYY, HH:mm'),
-          formattedRecordingTime: localRecordingTime.format('MM/DD/YYYY, HH:mm'),
+          formattedReadingTime,
+          formattedRecordingTime,
           status: getBloodSugarStatus(item.bloodSugar, itemTarget),
           isActualReading: true,
           isInterpolated: false,
@@ -497,18 +522,22 @@ export const BloodSugarDataProvider = ({ children }) => {
     }
   }, [filteredData, estimationSettings, targetGlucose, generateEstimatedData]);
 
+  // Update local time scale when date range changes (if not using TimeContext)
+  useEffect(() => {
+    if (!timeContext) {
+      updateLocalTimeScale();
+    }
+  }, [localDateRange, timeContext, updateLocalTimeScale]);
+
   // Initial data fetch and setup
   useEffect(() => {
-    // This has to be done after the component mounts
-    updateTimeScale();
-
     // Only fetch if there's a token
     const token = localStorage.getItem('token');
     if (token && !didInitialFetch.current) {
       fetchBloodSugarData();
       didInitialFetch.current = true;
     }
-  }, [updateTimeScale, fetchBloodSugarData]);
+  }, [fetchBloodSugarData]);
 
   // Value to be provided by the context - define this AFTER all functions are defined
   const contextValue = {
@@ -522,24 +551,31 @@ export const BloodSugarDataProvider = ({ children }) => {
     targetGlucose,
     dateRange,
     timeScale,
-      setTimeScale,  // Add this line
     unit,
     estimationSettings,
-    currentDateTime,
-    currentUserLogin,
-        // Functions
-  filteredEstimatedReadings: getFilteredEstimatedReadings(),
-  getFilteredEstimatedReadings,
 
+    // System info from TimeManager
+    systemDateTime,
+    currentUserLogin,
+
+    // Functions
+    filteredEstimatedReadings: getFilteredEstimatedReadings(),
+    getFilteredEstimatedReadings,
     fetchBloodSugarData,
-    setDateRange,
+    setDateRange: handleDateRangeChange, // Updated to work with TimeContext
     setUnit,
     setTargetGlucose,
     setEstimationSettings,
     getBloodSugarStatus,
     getFilteredData,
     applyInsulinEffect,
-    getBloodSugarAtTime
+    getBloodSugarAtTime,
+
+    // TimeManager utilities
+    TimeManager,
+
+    // Access to TimeContext if available
+    timeContext
   };
 
   return (
