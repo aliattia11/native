@@ -274,8 +274,15 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
       setInsulinData(filteredInsulinData);
 
       // Generate combined data using the bloodSugarData from context with insulin effects applied
-      const processedData = applyInsulinEffect(filteredInsulinData, allBloodSugarData);
-      const combinedResult = generateCombinedData(filteredInsulinData, processedData);
+let processedData;
+if (allBloodSugarData && allBloodSugarData.length > 0) {
+  console.log("Using blood sugar data from context:", allBloodSugarData.length, "readings");
+  processedData = applyInsulinEffect(filteredInsulinData, allBloodSugarData);
+} else {
+  console.log("No blood sugar data available in context");
+  processedData = [];
+}
+const combinedResult = generateCombinedData(filteredInsulinData, processedData);
       setCombinedData(combinedResult);
 
       setError('');
@@ -287,6 +294,18 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
       setLoading(false);
     }
   }, [dateRange, includeFutureEffect, futureHours, patientId, selectedInsulinTypes.length, getInsulinParameters, allBloodSugarData, applyInsulinEffect, generateCombinedData]);
+
+  // Add this useEffect to trigger a re-render when blood sugar data changes
+useEffect(() => {
+  if (dataFetched && allBloodSugarData && allBloodSugarData.length > 0) {
+    // Regenerate combined data with the latest blood sugar data
+    const processedData = applyInsulinEffect(insulinData, allBloodSugarData);
+    const combinedResult = generateCombinedData(insulinData, processedData);
+    setCombinedData(combinedResult);
+  }
+}, [allBloodSugarData, applyInsulinEffect, dataFetched, generateCombinedData, insulinData]);
+
+
 
   // Effect to fetch data once when component mounts and when necessary params change
   useEffect(() => {

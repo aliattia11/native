@@ -318,13 +318,16 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
       setActivityData(processedActivityData);
 
       // Filter blood sugar data to match our date range
-      const filteredBloodSugar = bloodSugarData.filter(bs => {
-        const readingDate = moment(bs.readingTime);
-        return (
-          readingDate.isSameOrAfter(moment(dateRange.start).startOf('day')) &&
-          readingDate.isSameOrBefore(moment(endDate).endOf('day'))
-        );
-      });
+     let filteredBloodSugar = [];
+if (bloodSugarData && bloodSugarData.length > 0) {
+  console.log("Using blood sugar data from context:", bloodSugarData.length, "readings");
+  filteredBloodSugar = getFilteredData(bloodSugarData);
+  console.log("Filtered to:", filteredBloodSugar.length, "readings for date range");
+} else {
+  console.log("No blood sugar data available in context");
+  filteredBloodSugar = [];
+}
+
 
       // Generate combined data
       const combinedResult = generateCombinedData(processedActivityData, filteredBloodSugar);
@@ -369,6 +372,17 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
       fetchData();
     }
   }, [fetchData, dataFetched, dateRange]);
+
+  useEffect(() => {
+  if (dataFetched && bloodSugarData && bloodSugarData.length > 0 && activityData.length > 0) {
+    const filteredData = getFilteredData(bloodSugarData);
+    if (filteredData.length > 0) {
+      console.log("Regenerating combined data with updated blood sugar data");
+      const combinedResult = generateCombinedData(activityData, filteredData);
+      setCombinedData(combinedResult);
+    }
+  }
+}, [bloodSugarData, getFilteredData, dataFetched, generateCombinedData, activityData]);
 
   // Handler for activity level filter toggling
   const handleActivityLevelToggle = useCallback((level) => {
