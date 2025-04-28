@@ -29,8 +29,6 @@ export const BloodSugarDataProvider = ({ children }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [targetGlucose, setTargetGlucose] = useState(120);
-  const [lastFetchTime, setLastFetchTime] = useState(null);
-  const [dataNeedsUpdate, setDataNeedsUpdate] = useState(true);
 
   // Configuration state - use TimeContext if available, otherwise use local state
   const [localDateRange, setLocalDateRange] = useState({
@@ -57,17 +55,14 @@ export const BloodSugarDataProvider = ({ children }) => {
   // Use TimeContext values if available, otherwise use local state
   const dateRange = timeContext ? timeContext.dateRange : localDateRange;
   const timeScale = timeContext ? timeContext.timeScale : localTimeScale;
-  const includeFutureEffect = timeContext ? timeContext.includeFutureEffect : true;
-  const futureHours = timeContext ? timeContext.futureHours : 7;
 
-  // System information - use TimeContext for consistency
-  const systemDateTime = timeContext ? timeContext.systemDateTime : TimeManager.getSystemDateTime();
-  const currentUserLogin = timeContext ? timeContext.currentUserLogin : TimeManager.getCurrentUserLogin();
+  // System information
+  const systemDateTime = TimeManager.getSystemDateTime();
+  const currentUserLogin = TimeManager.getCurrentUserLogin();
 
   // Prevent initial render issues with refs
   const didInitialFetch = useRef(false);
   const processingData = useRef(false);
-  const dataUpdateTimer = useRef(null);
 
   // Helper function to determine blood sugar status
   const getBloodSugarStatus = useCallback((bloodSugar, target) => {
@@ -99,11 +94,26 @@ export const BloodSugarDataProvider = ({ children }) => {
       // Otherwise update local state
       setLocalDateRange(newRange);
     }
-    // Mark data as needing an update
-    setDataNeedsUpdate(true);
   }, [timeContext]);
 
-  // Filter the estimated blood sugar readings to prevent overcrowding charts
+  // Helper to determine appropriate point interval based on date range
+  const getEstimationInterval = useCallback((startDate, endDate) => {
+    // Calculate time difference in days
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const diffTime = Math.abs(end - start);
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    // Set interval based on time range
+    if (diffDays <= 1) {
+      return { minutes: 30, checkNearbyHours: 1 }; // 30 min for 24h view
+    } else if (diffDays <= 7) {
+      return { minutes: 180, checkNearbyHours: 1 }; // 3 hours for week view
+    } else {
+      return { minutes: 360, checkNearbyHours: 1 }; // 6 hours for month view
+    }
+  }, []);
+
   const getFilteredEstimatedReadings = useCallback((allData = combinedData) => {
     if (!allData || allData.length === 0) return [];
 
@@ -171,6 +181,11 @@ export const BloodSugarDataProvider = ({ children }) => {
       return;
     }
 
+    // Get appropriate interval based on date range
+    const interval = getEstimationInterval(dateRange.start, dateRange.end);
+    const minimumMinutesBetweenPoints = interval.minutes;
+    const checkNearbyReadingsWithinHours = interval.checkNearbyHours;
+
     // Model blood glucose value without meal input
     const modelBloodGlucose = (startReading, elapsedMinutes) => {
       const baseValue = startReading.bloodSugar;
@@ -185,8 +200,16 @@ export const BloodSugarDataProvider = ({ children }) => {
       return targetGlucose;
     };
 
-    // Create estimated points between actual readings
-    const generateEstimatedPoints = (startPoint, endTimeOrPoint, numPoints = 10) => {
+    // Helper function to check if a timestamp is near actual readings
+    const isNearActualReadings = (timestamp, actualReadings, hoursThreshold) => {
+      const thresholdMs = hoursThreshold * 60 * 60 * 1000;
+      return actualReadings.some(reading =>
+        Math.abs(reading.readingTime - timestamp) < thresholdMs
+      );
+    };
+
+    // Create estimated points between actual readings with adaptive interval
+    const generateEstimatedPoints = (startPoint, endTimeOrPoint, actualReadings) => {
       const points = [];
       const startTime = startPoint.readingTime;
 
@@ -203,36 +226,76 @@ export const BloodSugarDataProvider = ({ children }) => {
       const totalGapMinutes = (endTime - startTime) / (60 * 1000);
 
       // Skip if gap is too small
-      if (totalGapMinutes < 5) return points;
+      if (totalGapMinutes < minimumMinutesBetweenPoints/2) return points;
 
-      // Determine number of points to generate
-      const pointsToGenerate = Math.max(2, Math.ceil(totalGapMinutes / 30));
-      const actualPoints = Math.min(pointsToGenerate, numPoints);
-      const timeStep = (endTime - startTime) / (actualPoints + 1);
+      // Use adaptive interval from our configuration
+      const intervalMs = minimumMinutesBetweenPoints * 60 * 1000;
 
-      for (let i = 1; i <= actualPoints; i++) {
-        const pointTime = startTime + (i * timeStep);
-        const elapsedMinutes = (pointTime - startTime) / (60 * 1000);
+      // Calculate points with the adaptive interval
+      let currentTime = startTime + intervalMs; // Start one interval after startPoint
 
-        // Calculate blood glucose based on our model
-        let glucoseValue = modelBloodGlucose(startPoint, elapsedMinutes);
+      // Special handling for the first estimated point after an actual reading
+      if (startPoint.isActualReading) {
+        // Always place first estimated point 30 minutes after actual reading
+        // unless another reading is within 29 minutes
+        const thirtyMinutesAfterActual = startTime + (30 * 60 * 1000);
 
-        // Use TimeManager for date formatting
-        const formattedTime = TimeManager.formatDate(
-          new Date(pointTime),
-          TimeManager.formats.DATETIME_DISPLAY
-        );
-
-        points.push({
-          readingTime: pointTime,
-          bloodSugar: glucoseValue,
-          formattedReadingTime: formattedTime,
-          isActualReading: false,
-          isInterpolated: true,
-          isEstimated: true,
-          dataType: 'estimated',
-          status: getBloodSugarStatus(glucoseValue, targetGlucose)
+        // Check if there's an actual reading within 29 minutes
+        const hasNearbyReading = actualReadings.some(reading => {
+          const timeDiff = reading.readingTime - startTime;
+          return timeDiff > 0 && timeDiff < 29 * 60 * 1000;
         });
+
+        if (!hasNearbyReading && thirtyMinutesAfterActual < endTime) {
+          const elapsedMinutes = 30;
+          let glucoseValue = modelBloodGlucose(startPoint, elapsedMinutes);
+
+          const formattedTime = TimeManager.formatDate(
+            new Date(thirtyMinutesAfterActual),
+            TimeManager.formats.DATETIME_DISPLAY
+          );
+
+          points.push({
+            readingTime: thirtyMinutesAfterActual,
+            bloodSugar: glucoseValue,
+            formattedReadingTime: formattedTime,
+            isActualReading: false,
+            isInterpolated: true,
+            isEstimated: true,
+            dataType: 'estimated',
+            status: getBloodSugarStatus(glucoseValue, targetGlucose)
+          });
+
+          // Update currentTime to next interval after this 30-min point
+          currentTime = Math.ceil((thirtyMinutesAfterActual + intervalMs) / intervalMs) * intervalMs;
+        }
+      }
+
+      // Generate remaining points at regular intervals
+      while (currentTime < endTime) {
+        // Skip points that are too close to actual readings
+        if (!isNearActualReadings(currentTime, actualReadings, checkNearbyReadingsWithinHours)) {
+          const elapsedMinutes = (currentTime - startTime) / (60 * 1000);
+          let glucoseValue = modelBloodGlucose(startPoint, elapsedMinutes);
+
+          const formattedTime = TimeManager.formatDate(
+            new Date(currentTime),
+            TimeManager.formats.DATETIME_DISPLAY
+          );
+
+          points.push({
+            readingTime: currentTime,
+            bloodSugar: glucoseValue,
+            formattedReadingTime: formattedTime,
+            isActualReading: false,
+            isInterpolated: true,
+            isEstimated: true,
+            dataType: 'estimated',
+            status: getBloodSugarStatus(glucoseValue, targetGlucose)
+          });
+        }
+
+        currentTime += intervalMs;
       }
 
       return points;
@@ -247,7 +310,6 @@ export const BloodSugarDataProvider = ({ children }) => {
       if (estimationSettings.fillFromStart && sortedActualReadings.length > 0 &&
           sortedActualReadings[0].readingTime > timeScale.start) {
 
-        // Use TimeManager for date formatting
         const formattedStartTime = TimeManager.formatDate(
           new Date(timeScale.start),
           TimeManager.formats.DATETIME_DISPLAY
@@ -270,7 +332,7 @@ export const BloodSugarDataProvider = ({ children }) => {
         const pointsToFirstReading = generateEstimatedPoints(
           startPoint,
           sortedActualReadings[0],
-          Math.max(5, Math.ceil((sortedActualReadings[0].readingTime - startPoint.readingTime) / (30 * 60 * 1000)))
+          sortedActualReadings
         );
         estimatedPoints = [...estimatedPoints, ...pointsToFirstReading];
       }
@@ -288,7 +350,7 @@ export const BloodSugarDataProvider = ({ children }) => {
           const pointsBetweenReadings = generateEstimatedPoints(
             sortedActualReadings[i],
             sortedActualReadings[i+1],
-            Math.max(5, Math.ceil((sortedActualReadings[i+1].readingTime - sortedActualReadings[i].readingTime) / (30 * 60 * 1000)))
+            sortedActualReadings
           );
           estimatedPoints = [...estimatedPoints, ...pointsBetweenReadings];
         }
@@ -315,12 +377,11 @@ export const BloodSugarDataProvider = ({ children }) => {
           const pointsToEndTime = generateEstimatedPoints(
             sortedActualReadings[i],
             endTime,
-            Math.max(5, Math.ceil((endTime - sortedActualReadings[i].readingTime) / (30 * 60 * 1000)))
+            sortedActualReadings
           );
           estimatedPoints = [...estimatedPoints, ...pointsToEndTime];
 
           // Add final point at the end time showing target glucose
-          // Use TimeManager for date formatting
           const formattedEndTime = TimeManager.formatDate(
             new Date(endTime),
             TimeManager.formats.DATETIME_DISPLAY
@@ -353,19 +414,12 @@ export const BloodSugarDataProvider = ({ children }) => {
       processingData.current = false;
     }
 
-  }, [estimationSettings, targetGlucose, timeScale, filteredData, getBloodSugarStatus]);
+  }, [estimationSettings, targetGlucose, timeScale, filteredData, getBloodSugarStatus, dateRange, getEstimationInterval]);
 
-  // Fetch blood sugar data from API with debounced updates
-  const fetchBloodSugarData = useCallback(async (patientId = null, force = false) => {
+  // Fetch blood sugar data from API
+  const fetchBloodSugarData = useCallback(async (patientId = null) => {
     // Avoid fetch if already loading
-    if (loading && !force) return;
-
-    // Skip if data was recently fetched (within 30 seconds)
-    const now = Date.now();
-    if (!force && lastFetchTime && now - lastFetchTime < 30000) {
-      setDataNeedsUpdate(true); // Mark for later update
-      return;
-    }
+    if (loading) return;
 
     try {
       setLoading(true);
@@ -374,19 +428,9 @@ export const BloodSugarDataProvider = ({ children }) => {
         throw new Error('Authentication token not found');
       }
 
-      // Get time settings from TimeContext if available to ensure consistency
-      const timeSettings = timeContext && timeContext.getAPITimeSettings
-        ? timeContext.getAPITimeSettings()
-        : {
-            startDate: dateRange.start,
-            endDate: moment(dateRange.end).add(includeFutureEffect ? futureHours : 0, 'hours').format('YYYY-MM-DD'),
-            includeFuture: includeFutureEffect,
-            futureHours
-          };
-
       // Build API endpoint - use effective date range
-      const startDate = timeSettings.startDate;
-      const endDate = timeSettings.endDate;
+      const startDate = moment(dateRange.start).format('YYYY-MM-DD');
+      const endDate = moment(dateRange.end).format('YYYY-MM-DD');
 
       let url = `http://localhost:5000/api/blood-sugar?start_date=${startDate}&end_date=${endDate}&unit=${unit}`;
       if (patientId) {
@@ -434,8 +478,7 @@ export const BloodSugarDataProvider = ({ children }) => {
 
       formattedData.sort((a, b) => a.readingTime - b.readingTime);
       setBloodSugarData(formattedData);
-      setLastFetchTime(now);
-      setDataNeedsUpdate(false);
+
       setError('');
     } catch (err) {
       console.error('Error fetching blood sugar data:', err);
@@ -443,7 +486,7 @@ export const BloodSugarDataProvider = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  }, [dateRange, unit, targetGlucose, getBloodSugarStatus, loading, lastFetchTime, includeFutureEffect, futureHours, timeContext]);
+  }, [dateRange, unit, targetGlucose, getBloodSugarStatus, loading]);
 
   // Apply an insulin effect to the estimated blood glucose data
   const applyInsulinEffect = useCallback((insulinData, bloodSugarDataToModify = combinedData) => {
@@ -539,28 +582,6 @@ export const BloodSugarDataProvider = ({ children }) => {
     return sortedByProximity[0];
   }, [combinedData]);
 
-  // Set up debounced data updates
-  useEffect(() => {
-    if (dataNeedsUpdate && !loading) {
-      // Clear any existing timer
-      if (dataUpdateTimer.current) {
-        clearTimeout(dataUpdateTimer.current);
-      }
-
-      // Set a new timer to update after a short delay
-      dataUpdateTimer.current = setTimeout(() => {
-        fetchBloodSugarData(null, true);
-      }, 500); // 500ms debounce
-    }
-
-    // Clean up timer on unmount
-    return () => {
-      if (dataUpdateTimer.current) {
-        clearTimeout(dataUpdateTimer.current);
-      }
-    };
-  }, [dataNeedsUpdate, loading, fetchBloodSugarData]);
-
   // Update estimated data when filteredData changes
   useEffect(() => {
     // Skip initial render
@@ -586,13 +607,6 @@ export const BloodSugarDataProvider = ({ children }) => {
     }
   }, [fetchBloodSugarData]);
 
-  // React to TimeContext future projection changes
-  useEffect(() => {
-    if (timeContext && didInitialFetch.current) {
-      setDataNeedsUpdate(true);
-    }
-  }, [timeContext?.includeFutureEffect, timeContext?.futureHours]);
-
   // Value to be provided by the context - define this AFTER all functions are defined
   const contextValue = {
     // Data
@@ -608,7 +622,7 @@ export const BloodSugarDataProvider = ({ children }) => {
     unit,
     estimationSettings,
 
-    // System info from TimeContext
+    // System info from TimeManager
     systemDateTime,
     currentUserLogin,
 
@@ -624,25 +638,12 @@ export const BloodSugarDataProvider = ({ children }) => {
     getFilteredData,
     applyInsulinEffect,
     getBloodSugarAtTime,
-    refreshData: () => fetchBloodSugarData(null, true),
 
     // TimeManager utilities
     TimeManager,
 
     // Access to TimeContext if available
-    timeContext,
-
-    // Future projection settings from TimeContext
-    includeFutureEffect: timeContext ? timeContext.includeFutureEffect : includeFutureEffect,
-    futureHours: timeContext ? timeContext.futureHours : futureHours,
-    toggleFutureEffect: timeContext ? timeContext.toggleFutureEffect : () => {
-      // Fallback if TimeContext not available
-      console.warn('No TimeContext available for toggleFutureEffect');
-    },
-    setFutureHours: timeContext ? timeContext.setFutureHours : () => {
-      // Fallback if TimeContext not available
-      console.warn('No TimeContext available for setFutureHours');
-    }
+    timeContext
   };
 
   return (
