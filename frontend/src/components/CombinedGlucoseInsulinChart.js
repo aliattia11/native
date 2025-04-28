@@ -23,26 +23,29 @@ import TimeInput from '../components/TimeInput';
 import './InsulinVisualization.css';
 
 const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => {
-  // Use TimeContext for date range management
+  // Use TimeContext for date range and future projection management
   const timeContext = useContext(TimeContext);
 
   // Use constants context for patient-specific insulin parameters
   const { patientConstants } = useConstants();
 
-  // Use blood sugar data from the shared context
+  // Use blood sugar data from the shared context, including future projection settings
   const {
     filteredData: bloodSugarData,
     combinedData: allBloodSugarData,
     filteredEstimatedReadings,
     targetGlucose,
-    dateRange,
-    setDateRange,
+    refreshData,
     applyInsulinEffect,
     timeScale,
     unit,
     getBloodSugarStatus,
     systemDateTime,
-    currentUserLogin
+    currentUserLogin,
+    includeFutureEffect,
+    futureHours,
+    toggleFutureEffect,
+    setFutureHours
   } = useBloodSugarData();
 
   // State management
@@ -56,16 +59,12 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
   const [showExpectedEffect, setShowExpectedEffect] = useState(true);
   const [activeView, setActiveView] = useState('chart'); // 'chart' or 'table'
   const [viewMode, setViewMode] = useState('combined'); // 'combined', 'doses', or 'effect'
-  const [userTimeZone, setUserTimeZone] = useState('');
   const [dataFetched, setDataFetched] = useState(false);
-  const [includeFutureEffect, setIncludeFutureEffect] = useState(true);
-  const [futureHours, setFutureHours] = useState(7); // Hours to project into future
   const [showSystemInfo, setShowSystemInfo] = useState(true);
+  const [lastFetchTime, setLastFetchTime] = useState(null);
 
-  // Get user's time zone on component mount
-  useEffect(() => {
-    setUserTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
-  }, []);
+  // Get user's time zone from TimeManager for consistency
+  const userTimeZone = useMemo(() => TimeManager.getUserTimeZone(), []);
 
   // Helper function to get insulin parameters from patient constants
   const getInsulinParameters = useCallback((insulinType) => {
@@ -127,7 +126,7 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
       let allTimestamps = [
         ...insulinData.map(d => d.administrationTime),
         ...bloodGlucoseData.map(d => d.readingTime)
-      ];
+      ].filter(Boolean);
 
       if (allTimestamps.length === 0) {
         return [];
@@ -138,7 +137,7 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
 
       // If including future effects, extend the timeline by the specified number of hours
       if (includeFutureEffect) {
-        const futureTime = moment().add(futureHours, 'hours').valueOf();
+        const futureTime = TimeManager.getFutureProjectionTime(futureHours);
         maxTime = Math.max(maxTime, futureTime);
       }
 
@@ -214,8 +213,17 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
     }
   }, [calculateInsulinEffect, getInsulinParameters, includeFutureEffect, futureHours]);
 
-  // Fetch insulin data
-  const fetchInsulinData = useCallback(async () => {
+  // Fetch insulin data with optimized handling
+  const fetchInsulinData = useCallback(async (force = false) => {
+    // Avoid fetch if already loading
+    if (loading && !force) return;
+
+    // Skip if data was recently fetched (within 30 seconds) and not forcing
+    const now = Date.now();
+    if (!force && lastFetchTime && now - lastFetchTime < 30000) {
+      return;
+    }
+
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
@@ -223,12 +231,19 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
         throw new Error('Authentication token not found');
       }
 
-      // Calculate the date range including future hours
-      const endDate = moment(dateRange.end).add(includeFutureEffect ? futureHours : 0, 'hours').format('YYYY-MM-DD');
+      // Get time settings from TimeContext if available
+      const timeSettings = timeContext && timeContext.getAPITimeSettings
+        ? timeContext.getAPITimeSettings()
+        : {
+            startDate: timeContext ? timeContext.dateRange.start : null,
+            endDate: moment(timeContext ? timeContext.dateRange.end : null)
+              .add(includeFutureEffect ? futureHours : 0, 'hours')
+              .format('YYYY-MM-DD')
+          };
 
       // Use the correct endpoint for comprehensive insulin data
       const insulinResponse = await axios.get(
-        `http://localhost:5000/api/insulin-data?days=30&end_date=${endDate}${patientId ? `&patient_id=${patientId}` : ''}`,
+        `http://localhost:5000/api/insulin-data?days=30&end_date=${timeSettings.endDate}${patientId ? `&patient_id=${patientId}` : ''}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
@@ -265,24 +280,26 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
       });
 
       // Filter insulin data based on date range
-      const startDate = moment(dateRange.start).startOf('day').valueOf();
+      const startDate = moment(timeSettings.startDate).startOf('day').valueOf();
       const filteredInsulinData = processedInsulinData.filter(insulin => {
         return insulin.administrationTime >= startDate;
       });
 
       // Save the processed data
       setInsulinData(filteredInsulinData);
+      setLastFetchTime(now);
 
       // Generate combined data using the bloodSugarData from context with insulin effects applied
-let processedData;
-if (allBloodSugarData && allBloodSugarData.length > 0) {
-  console.log("Using blood sugar data from context:", allBloodSugarData.length, "readings");
-  processedData = applyInsulinEffect(filteredInsulinData, allBloodSugarData);
-} else {
-  console.log("No blood sugar data available in context");
-  processedData = [];
-}
-const combinedResult = generateCombinedData(filteredInsulinData, processedData);
+      let processedData;
+      if (allBloodSugarData && allBloodSugarData.length > 0) {
+        console.log("Using blood sugar data from context:", allBloodSugarData.length, "readings");
+        processedData = applyInsulinEffect(filteredInsulinData, allBloodSugarData);
+      } else {
+        console.log("No blood sugar data available in context");
+        processedData = [];
+      }
+
+      const combinedResult = generateCombinedData(filteredInsulinData, processedData);
       setCombinedData(combinedResult);
 
       setError('');
@@ -293,34 +310,33 @@ const combinedResult = generateCombinedData(filteredInsulinData, processedData);
     } finally {
       setLoading(false);
     }
-  }, [dateRange, includeFutureEffect, futureHours, patientId, selectedInsulinTypes.length, getInsulinParameters, allBloodSugarData, applyInsulinEffect, generateCombinedData]);
+  }, [timeContext, includeFutureEffect, futureHours, patientId, selectedInsulinTypes.length,
+      getInsulinParameters, allBloodSugarData, applyInsulinEffect, generateCombinedData,
+      loading, lastFetchTime]);
 
-  // Add this useEffect to trigger a re-render when blood sugar data changes
-useEffect(() => {
-  if (dataFetched && allBloodSugarData && allBloodSugarData.length > 0) {
-    // Regenerate combined data with the latest blood sugar data
-    const processedData = applyInsulinEffect(insulinData, allBloodSugarData);
-    const combinedResult = generateCombinedData(insulinData, processedData);
-    setCombinedData(combinedResult);
-  }
-}, [allBloodSugarData, applyInsulinEffect, dataFetched, generateCombinedData, insulinData]);
-
-
-
-  // Effect to fetch data once when component mounts and when necessary params change
+  // Regenerate combined data when blood sugar data changes
   useEffect(() => {
-    // Only fetch if we haven't fetched yet or if date range changes
-    if (!dataFetched || dateRange) {
+    if (dataFetched && allBloodSugarData && allBloodSugarData.length > 0) {
+      // Regenerate combined data with the latest blood sugar data
+      const processedData = applyInsulinEffect(insulinData, allBloodSugarData);
+      const combinedResult = generateCombinedData(insulinData, processedData);
+      setCombinedData(combinedResult);
+    }
+  }, [allBloodSugarData, applyInsulinEffect, dataFetched, generateCombinedData, insulinData]);
+
+  // Effect to fetch data when component mounts or date range changes
+  useEffect(() => {
+    if (!dataFetched || timeContext?.dateRange) {
       fetchInsulinData();
     }
-  }, [fetchInsulinData, dataFetched, dateRange]);
+  }, [fetchInsulinData, dataFetched, timeContext?.dateRange]);
 
-  // Re-fetch data when blood sugar data changes significantly
+  // React to future projection setting changes
   useEffect(() => {
-    if (dataFetched && bloodSugarData.length > 0) {
-      fetchInsulinData();
+    if (dataFetched && (includeFutureEffect !== undefined)) {
+      fetchInsulinData(true);
     }
-  }, [bloodSugarData, fetchInsulinData, dataFetched]);
+  }, [includeFutureEffect, futureHours, fetchInsulinData, dataFetched]);
 
   // Filter function for insulin types
   const handleInsulinTypeToggle = useCallback((insulinType) => {
@@ -332,15 +348,6 @@ useEffect(() => {
       }
     });
   }, []);
-
-  // Date range change handler - Uses TimeContext when available
-  const handleDateRangeChange = useCallback((newRange) => {
-    if (timeContext) {
-      timeContext.setDateRange(newRange);
-    } else {
-      setDateRange(newRange);
-    }
-  }, [timeContext, setDateRange]);
 
   // Custom tooltip for the chart
   const CustomTooltip = useCallback(({ active, payload }) => {
@@ -505,11 +512,6 @@ useEffect(() => {
     return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
   }
 
-  // Toggle future effects projection
-  const toggleFutureEffect = useCallback(() => {
-    setIncludeFutureEffect(!includeFutureEffect);
-  }, [includeFutureEffect]);
-
   // Toggle system info display
   const toggleSystemInfo = useCallback(() => {
     setShowSystemInfo(!showSystemInfo);
@@ -517,8 +519,12 @@ useEffect(() => {
 
   // Force update the data
   const handleForceUpdate = useCallback(() => {
-    fetchInsulinData();
-  }, [fetchInsulinData]);
+    // Also refresh blood sugar data from context to ensure consistency
+    if (refreshData) {
+      refreshData();
+    }
+    fetchInsulinData(true);
+  }, [fetchInsulinData, refreshData]);
 
   // Determine which Y-axis ID to use for the current time reference line
   const currentTimeYAxisId = useMemo(() => {
@@ -611,11 +617,9 @@ useEffect(() => {
       )}
 
       <div className="controls">
-        {/* Use TimeInput component in daterange mode */}
+        {/* Use TimeInput component in daterange mode with TimeContext */}
         <TimeInput
           mode="daterange"
-          value={dateRange}
-          onChange={handleDateRangeChange}
           useTimeContext={!!timeContext}
           label="Date Range"
           className="date-range-control"

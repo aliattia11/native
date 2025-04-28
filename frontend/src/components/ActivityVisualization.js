@@ -24,7 +24,7 @@ import { ACTIVITY_LEVELS } from '../constants';
 import './ActivityVisualization.css';
 
 const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
-  // Use TimeContext for date range management
+  // Use TimeContext for date range and future projection management
   const timeContext = useContext(TimeContext);
 
   // Use contexts for activity coefficients and blood sugar data
@@ -35,7 +35,12 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
     targetGlucose,
     timeScale,
     systemDateTime,
-    currentUserLogin
+    currentUserLogin,
+    // Use future projection settings from BloodSugarDataContext
+    includeFutureEffect,
+    futureHours,
+    toggleFutureEffect,
+    setFutureHours
   } = useBloodSugarData();
 
   // State management
@@ -43,32 +48,18 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
   const [combinedData, setCombinedData] = useState([]);
   const [activityLevels, setActivityLevels] = useState([]);
   const [selectedActivityLevels, setSelectedActivityLevels] = useState([]);
-  const [localDateRange, setLocalDateRange] = useState({
-    start: moment().subtract(3, 'days').format('YYYY-MM-DD'),
-    end: moment().format('YYYY-MM-DD')
-  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showActualBloodSugar, setShowActualBloodSugar] = useState(true);
   const [showActivityEffect, setShowActivityEffect] = useState(true);
   const [activeView, setActiveView] = useState('chart'); // 'chart' or 'table'
   const [viewMode, setViewMode] = useState('combined'); // 'combined', 'activities', or 'effect'
-  const [userTimeZone, setUserTimeZone] = useState('');
   const [dataFetched, setDataFetched] = useState(false);
   const [effectDurationHours, setEffectDurationHours] = useState(5); // Hours activity affects blood sugar
   const [showSystemInfo, setShowSystemInfo] = useState(true);
 
-  // Add state for future effect projection
-  const [includeFutureEffect, setIncludeFutureEffect] = useState(true);
-  const [futureHours, setFutureHours] = useState(7); // Hours to project into future
-
-  // Use TimeContext values if available, otherwise use local state
-  const dateRange = timeContext ? timeContext.dateRange : localDateRange;
-
-  // Get user's time zone on component mount
-  useEffect(() => {
-    setUserTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
-  }, []);
+  // Get user's time zone from TimeManager
+  const userTimeZone = useMemo(() => TimeManager.getUserTimeZone(), []);
 
   // Helper function to get activity parameters from patient constants
   const getActivityParameters = useCallback((activityLevel) => {
@@ -132,11 +123,7 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
   const getActivityBarValue = useCallback((level) => {
     // Convert level to number if it's a string
     const numLevel = Number(level);
-
-    // Invert the value:
-    // High activity (1,2) -> negative values (-1,-2)
-    // Low activity (-1,-2) -> positive values (1,2)
-    // Normal activity (0) -> stays at 0
+    // Invert the value: high activity (positive) -> negative, low activity (negative) -> positive
     return -numLevel;
   }, []);
 
@@ -158,7 +145,7 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
 
       // If including future effects, extend the timeline by the specified number of hours
       if (includeFutureEffect) {
-        const futureTime = moment().add(futureHours, 'hours').valueOf();
+        const futureTime = TimeManager.getFutureProjectionTime(futureHours);
         maxTime = Math.max(maxTime, futureTime);
       }
 
@@ -271,8 +258,15 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
         throw new Error('Authentication token not found');
       }
 
-      // Calculate the date range including future hours
-      const endDate = moment(dateRange.end).add(includeFutureEffect ? futureHours : 0, 'hours').format('YYYY-MM-DD');
+      // Get time settings from BloodSugarDataContext or TimeContext
+      const timeSettings = timeContext && timeContext.getAPITimeSettings
+        ? timeContext.getAPITimeSettings()
+        : {
+            startDate: timeContext ? timeContext.dateRange.start : null,
+            endDate: moment(timeContext ? timeContext.dateRange.end : null)
+              .add(includeFutureEffect ? futureHours : 0, 'hours')
+              .format('YYYY-MM-DD')
+          };
 
       // Use the activity API endpoint
       const endpoint = patientId
@@ -280,7 +274,7 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
         : 'http://localhost:5000/api/activity';
 
       const activityResponse = await axios.get(
-        `${endpoint}?start_date=${dateRange.start}&end_date=${endDate}`,
+        `${endpoint}?start_date=${timeSettings.startDate}&end_date=${timeSettings.endDate}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
@@ -299,7 +293,7 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
           endTime,
           formattedStartTime: startTime ? TimeManager.formatDate(startTime, TimeManager.formats.DATETIME_DISPLAY) : 'N/A',
           formattedEndTime: endTime ? TimeManager.formatDate(endTime, TimeManager.formats.DATETIME_DISPLAY) : 'N/A',
-          duration: calculateDuration(startTime, endTime),
+          duration: TimeManager.calculateDuration(startTime, endTime).formatted,
           type: activity.type || 'unknown',
           notes: activity.notes || ''
         };
@@ -318,16 +312,15 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
       setActivityData(processedActivityData);
 
       // Filter blood sugar data to match our date range
-     let filteredBloodSugar = [];
-if (bloodSugarData && bloodSugarData.length > 0) {
-  console.log("Using blood sugar data from context:", bloodSugarData.length, "readings");
-  filteredBloodSugar = getFilteredData(bloodSugarData);
-  console.log("Filtered to:", filteredBloodSugar.length, "readings for date range");
-} else {
-  console.log("No blood sugar data available in context");
-  filteredBloodSugar = [];
-}
-
+      let filteredBloodSugar = [];
+      if (bloodSugarData && bloodSugarData.length > 0) {
+        console.log("Using blood sugar data from context:", bloodSugarData.length, "readings");
+        filteredBloodSugar = getFilteredData(bloodSugarData);
+        console.log("Filtered to:", filteredBloodSugar.length, "readings for date range");
+      } else {
+        console.log("No blood sugar data available in context");
+        filteredBloodSugar = [];
+      }
 
       // Generate combined data
       const combinedResult = generateCombinedData(processedActivityData, filteredBloodSugar);
@@ -341,7 +334,8 @@ if (bloodSugarData && bloodSugarData.length > 0) {
     } finally {
       setLoading(false);
     }
-  }, [dateRange, generateCombinedData, patientId, selectedActivityLevels.length, bloodSugarData, includeFutureEffect, futureHours]);
+  }, [timeContext, includeFutureEffect, futureHours, patientId, selectedActivityLevels.length,
+      bloodSugarData, getFilteredData, generateCombinedData]);
 
   // Helper function to get activity level label
   const getActivityLevelLabel = useCallback((level) => {
@@ -355,34 +349,24 @@ if (bloodSugarData && bloodSugarData.length > 0) {
     return activityCoefficients[level] || 1.0;
   }, [patientConstants]);
 
-  // Helper function to calculate duration string
-  const calculateDuration = useCallback((startTime, endTime) => {
-    if (!startTime || !endTime) return 'N/A';
-
-    const durationMs = endTime - startTime;
-    const hours = Math.floor(durationMs / (1000 * 60 * 60));
-    const minutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
-
-    return `${hours}h ${minutes}min`;
-  }, []);
-
   // Effect to fetch data once when component mounts and when necessary params change
   useEffect(() => {
-    if (!dataFetched || dateRange) {
+    if (!dataFetched || timeContext?.dateRange) {
       fetchData();
     }
-  }, [fetchData, dataFetched, dateRange]);
+  }, [fetchData, dataFetched, timeContext?.dateRange]);
 
+  // Regenerate combined data when blood sugar data changes
   useEffect(() => {
-  if (dataFetched && bloodSugarData && bloodSugarData.length > 0 && activityData.length > 0) {
-    const filteredData = getFilteredData(bloodSugarData);
-    if (filteredData.length > 0) {
-      console.log("Regenerating combined data with updated blood sugar data");
-      const combinedResult = generateCombinedData(activityData, filteredData);
-      setCombinedData(combinedResult);
+    if (dataFetched && bloodSugarData && bloodSugarData.length > 0 && activityData.length > 0) {
+      const filteredData = getFilteredData(bloodSugarData);
+      if (filteredData.length > 0) {
+        console.log("Regenerating combined data with updated blood sugar data");
+        const combinedResult = generateCombinedData(activityData, filteredData);
+        setCombinedData(combinedResult);
+      }
     }
-  }
-}, [bloodSugarData, getFilteredData, dataFetched, generateCombinedData, activityData]);
+  }, [bloodSugarData, getFilteredData, dataFetched, generateCombinedData, activityData]);
 
   // Handler for activity level filter toggling
   const handleActivityLevelToggle = useCallback((level) => {
@@ -395,24 +379,10 @@ if (bloodSugarData && bloodSugarData.length > 0) {
     });
   }, []);
 
-  // Date range change handler - Uses TimeContext when available
-  const handleDateRangeChange = useCallback((newRange) => {
-    if (timeContext) {
-      timeContext.setDateRange(newRange);
-    } else {
-      setLocalDateRange(newRange);
-    }
-  }, [timeContext]);
-
   // Toggle system info display
   const toggleSystemInfo = useCallback(() => {
     setShowSystemInfo(!showSystemInfo);
   }, [showSystemInfo]);
-
-  // Toggle future effects projection
-  const toggleFutureEffect = useCallback(() => {
-    setIncludeFutureEffect(!includeFutureEffect);
-  }, [includeFutureEffect]);
 
   // Force update the data
   const handleForceUpdate = useCallback(() => {
@@ -642,7 +612,7 @@ if (bloodSugarData && bloodSugarData.length > 0) {
 
       {showSystemInfo && (
         <div className="system-info">
-          <span className="time-label">Current Date and Time (UTC - YYYY-MM-DD HH:MM:SS formatted): {systemDateTime} | </span>
+          <span className="time-label">Current Date and Time (UTC): {systemDateTime} | </span>
           <span className="user-label">User: {currentUserLogin}</span>
           <button
             onClick={toggleSystemInfo}
@@ -706,8 +676,8 @@ if (bloodSugarData && bloodSugarData.length > 0) {
         {/* Use TimeInput component in daterange mode */}
         <TimeInput
           mode="daterange"
-          value={dateRange}
-          onChange={handleDateRangeChange}
+          value={timeContext ? timeContext.dateRange : null}
+          onChange={timeContext ? timeContext.handleDateRangeChange : null}
           useTimeContext={!!timeContext}
           label="Date Range"
           className="date-range-control"

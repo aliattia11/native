@@ -29,6 +29,8 @@ export const BloodSugarDataProvider = ({ children }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [targetGlucose, setTargetGlucose] = useState(120);
+  const [lastFetchTime, setLastFetchTime] = useState(null);
+  const [dataNeedsUpdate, setDataNeedsUpdate] = useState(true);
 
   // Configuration state - use TimeContext if available, otherwise use local state
   const [localDateRange, setLocalDateRange] = useState({
@@ -55,14 +57,17 @@ export const BloodSugarDataProvider = ({ children }) => {
   // Use TimeContext values if available, otherwise use local state
   const dateRange = timeContext ? timeContext.dateRange : localDateRange;
   const timeScale = timeContext ? timeContext.timeScale : localTimeScale;
+  const includeFutureEffect = timeContext ? timeContext.includeFutureEffect : true;
+  const futureHours = timeContext ? timeContext.futureHours : 7;
 
-  // System information
-  const systemDateTime = TimeManager.getSystemDateTime();
-  const currentUserLogin = TimeManager.getCurrentUserLogin();
+  // System information - use TimeContext for consistency
+  const systemDateTime = timeContext ? timeContext.systemDateTime : TimeManager.getSystemDateTime();
+  const currentUserLogin = timeContext ? timeContext.currentUserLogin : TimeManager.getCurrentUserLogin();
 
   // Prevent initial render issues with refs
   const didInitialFetch = useRef(false);
   const processingData = useRef(false);
+  const dataUpdateTimer = useRef(null);
 
   // Helper function to determine blood sugar status
   const getBloodSugarStatus = useCallback((bloodSugar, target) => {
@@ -94,8 +99,11 @@ export const BloodSugarDataProvider = ({ children }) => {
       // Otherwise update local state
       setLocalDateRange(newRange);
     }
+    // Mark data as needing an update
+    setDataNeedsUpdate(true);
   }, [timeContext]);
 
+  // Filter the estimated blood sugar readings to prevent overcrowding charts
   const getFilteredEstimatedReadings = useCallback((allData = combinedData) => {
     if (!allData || allData.length === 0) return [];
 
@@ -132,7 +140,6 @@ export const BloodSugarDataProvider = ({ children }) => {
 
     return filteredEstimates;
   }, [combinedData]);
-
 
   // Filter data based on time scale
   const getFilteredData = useCallback((dataToFilter) => {
@@ -348,10 +355,17 @@ export const BloodSugarDataProvider = ({ children }) => {
 
   }, [estimationSettings, targetGlucose, timeScale, filteredData, getBloodSugarStatus]);
 
-  // Fetch blood sugar data from API
-  const fetchBloodSugarData = useCallback(async (patientId = null) => {
+  // Fetch blood sugar data from API with debounced updates
+  const fetchBloodSugarData = useCallback(async (patientId = null, force = false) => {
     // Avoid fetch if already loading
-    if (loading) return;
+    if (loading && !force) return;
+
+    // Skip if data was recently fetched (within 30 seconds)
+    const now = Date.now();
+    if (!force && lastFetchTime && now - lastFetchTime < 30000) {
+      setDataNeedsUpdate(true); // Mark for later update
+      return;
+    }
 
     try {
       setLoading(true);
@@ -360,9 +374,19 @@ export const BloodSugarDataProvider = ({ children }) => {
         throw new Error('Authentication token not found');
       }
 
+      // Get time settings from TimeContext if available to ensure consistency
+      const timeSettings = timeContext && timeContext.getAPITimeSettings
+        ? timeContext.getAPITimeSettings()
+        : {
+            startDate: dateRange.start,
+            endDate: moment(dateRange.end).add(includeFutureEffect ? futureHours : 0, 'hours').format('YYYY-MM-DD'),
+            includeFuture: includeFutureEffect,
+            futureHours
+          };
+
       // Build API endpoint - use effective date range
-      const startDate = moment(dateRange.start).format('YYYY-MM-DD');
-      const endDate = moment(dateRange.end).format('YYYY-MM-DD');
+      const startDate = timeSettings.startDate;
+      const endDate = timeSettings.endDate;
 
       let url = `http://localhost:5000/api/blood-sugar?start_date=${startDate}&end_date=${endDate}&unit=${unit}`;
       if (patientId) {
@@ -410,7 +434,8 @@ export const BloodSugarDataProvider = ({ children }) => {
 
       formattedData.sort((a, b) => a.readingTime - b.readingTime);
       setBloodSugarData(formattedData);
-
+      setLastFetchTime(now);
+      setDataNeedsUpdate(false);
       setError('');
     } catch (err) {
       console.error('Error fetching blood sugar data:', err);
@@ -418,7 +443,7 @@ export const BloodSugarDataProvider = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  }, [dateRange, unit, targetGlucose, getBloodSugarStatus, loading]);
+  }, [dateRange, unit, targetGlucose, getBloodSugarStatus, loading, lastFetchTime, includeFutureEffect, futureHours, timeContext]);
 
   // Apply an insulin effect to the estimated blood glucose data
   const applyInsulinEffect = useCallback((insulinData, bloodSugarDataToModify = combinedData) => {
@@ -514,6 +539,28 @@ export const BloodSugarDataProvider = ({ children }) => {
     return sortedByProximity[0];
   }, [combinedData]);
 
+  // Set up debounced data updates
+  useEffect(() => {
+    if (dataNeedsUpdate && !loading) {
+      // Clear any existing timer
+      if (dataUpdateTimer.current) {
+        clearTimeout(dataUpdateTimer.current);
+      }
+
+      // Set a new timer to update after a short delay
+      dataUpdateTimer.current = setTimeout(() => {
+        fetchBloodSugarData(null, true);
+      }, 500); // 500ms debounce
+    }
+
+    // Clean up timer on unmount
+    return () => {
+      if (dataUpdateTimer.current) {
+        clearTimeout(dataUpdateTimer.current);
+      }
+    };
+  }, [dataNeedsUpdate, loading, fetchBloodSugarData]);
+
   // Update estimated data when filteredData changes
   useEffect(() => {
     // Skip initial render
@@ -539,6 +586,13 @@ export const BloodSugarDataProvider = ({ children }) => {
     }
   }, [fetchBloodSugarData]);
 
+  // React to TimeContext future projection changes
+  useEffect(() => {
+    if (timeContext && didInitialFetch.current) {
+      setDataNeedsUpdate(true);
+    }
+  }, [timeContext?.includeFutureEffect, timeContext?.futureHours]);
+
   // Value to be provided by the context - define this AFTER all functions are defined
   const contextValue = {
     // Data
@@ -554,7 +608,7 @@ export const BloodSugarDataProvider = ({ children }) => {
     unit,
     estimationSettings,
 
-    // System info from TimeManager
+    // System info from TimeContext
     systemDateTime,
     currentUserLogin,
 
@@ -570,12 +624,25 @@ export const BloodSugarDataProvider = ({ children }) => {
     getFilteredData,
     applyInsulinEffect,
     getBloodSugarAtTime,
+    refreshData: () => fetchBloodSugarData(null, true),
 
     // TimeManager utilities
     TimeManager,
 
     // Access to TimeContext if available
-    timeContext
+    timeContext,
+
+    // Future projection settings from TimeContext
+    includeFutureEffect: timeContext ? timeContext.includeFutureEffect : includeFutureEffect,
+    futureHours: timeContext ? timeContext.futureHours : futureHours,
+    toggleFutureEffect: timeContext ? timeContext.toggleFutureEffect : () => {
+      // Fallback if TimeContext not available
+      console.warn('No TimeContext available for toggleFutureEffect');
+    },
+    setFutureHours: timeContext ? timeContext.setFutureHours : () => {
+      // Fallback if TimeContext not available
+      console.warn('No TimeContext available for setFutureHours');
+    }
   };
 
   return (

@@ -22,23 +22,22 @@ export const TimeProvider = ({ children }) => {
     end: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0]  // Tomorrow
   });
   const [timeScale, setTimeScale] = useState({});
-  const [userTimeZone, setUserTimeZone] = useState('');
+  const [userTimeZone, setUserTimeZone] = useState(TimeManager.getUserTimeZone());
 
-  // Future projection settings
+  // Future projection settings - centralized here to avoid duplication
   const [includeFutureEffect, setIncludeFutureEffect] = useState(true);
   const [futureHours, setFutureHours] = useState(7);
 
-  // System info (using the specific values provided)
-  const [systemDateTime, setSystemDateTime] = useState("2025-04-28 00:01:48");
-  const [currentUserLogin, setCurrentUserLogin] = useState("aliattia02ok");
+  // System info (using TimeManager for consistency)
+  const [systemDateTime, setSystemDateTime] = useState(
+    TimeManager.getSystemDateTime(TimeManager.formats.SYSTEM_TIME)
+  );
+  const [currentUserLogin, setCurrentUserLogin] = useState(
+    TimeManager.getCurrentUserLogin()
+  );
 
   // Timer ref to prevent memory leaks
   const timerRef = useRef(null);
-
-  // Get user's timezone on component mount
-  useEffect(() => {
-    setUserTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
-  }, []);
 
   // Update current time at regular intervals
   useEffect(() => {
@@ -64,15 +63,23 @@ export const TimeProvider = ({ children }) => {
   // Helper to update current time
   const updateCurrentTime = useCallback(() => {
     setCurrentDateTime(new Date());
+    // Also update system time if needed for real-time applications
+    setSystemDateTime(TimeManager.getSystemDateTime(TimeManager.formats.SYSTEM_TIME));
   }, []);
 
   // Date range change handler
   const handleDateRangeChange = useCallback((e) => {
-    const { name, value } = e.target;
-    setDateRange(prev => {
-      const newRange = { ...prev, [name]: value };
-      return newRange;
-    });
+    // Handle both event-style inputs and direct object updates
+    if (e && e.target) {
+      const { name, value } = e.target;
+      setDateRange(prev => {
+        const newRange = { ...prev, [name]: value };
+        return newRange;
+      });
+    } else if (typeof e === 'object') {
+      // Direct object update (e.g., {start: '2023-01-01', end: '2023-01-31'})
+      setDateRange(e);
+    }
   }, []);
 
   // Quick date range presets
@@ -113,6 +120,13 @@ export const TimeProvider = ({ children }) => {
     setIncludeFutureEffect(prev => !prev);
   }, []);
 
+  // Update future hours projection
+  const setFutureHoursValue = useCallback((hours) => {
+    // Ensure hours is a valid number between 1 and 24
+    const validHours = Math.min(Math.max(1, Number(hours) || 7), 24);
+    setFutureHours(validHours);
+  }, []);
+
   // Generate ticks for x-axis based on time scale
   const generateTimeTicks = useCallback(() => {
     return TimeManager.generateTimeTicks(timeScale.start, timeScale.end, timeScale.tickInterval);
@@ -136,11 +150,23 @@ export const TimeProvider = ({ children }) => {
   // Get future projection end time
   const getFutureProjectionEndTime = useCallback(() => {
     if (!includeFutureEffect) return Date.now();
-    const now = new Date();
-    const future = new Date(now);
-    future.setHours(future.getHours() + futureHours);
-    return future.getTime();
+    return TimeManager.getFutureProjectionTime(futureHours);
   }, [includeFutureEffect, futureHours]);
+
+  // Calculate time settings for API requests with future data
+  const getAPITimeSettings = useCallback(() => {
+    // Calculate the date range including future hours if needed
+    const endDate = includeFutureEffect
+      ? TimeManager.addHours(new Date(dateRange.end), futureHours)
+      : new Date(dateRange.end);
+
+    return {
+      startDate: dateRange.start,
+      endDate: TimeManager.formatDate(endDate, TimeManager.formats.DATE),
+      includeFuture: includeFutureEffect,
+      futureHours
+    };
+  }, [dateRange, includeFutureEffect, futureHours]);
 
   // Value to be provided by the context
   const contextValue = {
@@ -150,8 +176,12 @@ export const TimeProvider = ({ children }) => {
     dateRange,
     timeScale,
     userTimeZone,
+
+    // Future projection settings - centralized
     includeFutureEffect,
     futureHours,
+
+    // System info
     systemDateTime,
     currentUserLogin,
 
@@ -162,13 +192,14 @@ export const TimeProvider = ({ children }) => {
     setDateRange,
     handleDateRangeChange,
     applyDatePreset,
-    setFutureHours,
+    setFutureHours: setFutureHoursValue,
     toggleFutureEffect,
     generateTimeTicks,
     formatXAxis,
     isTimeInRange,
     formatDateTime,
     getFutureProjectionEndTime,
+    getAPITimeSettings,
 
     // Direct access to TimeManager for advanced usage
     TimeManager

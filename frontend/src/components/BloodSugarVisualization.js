@@ -1,9 +1,12 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo, useContext } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { useTable, useSortBy, usePagination } from 'react-table';
 import moment from 'moment';
 import { useConstants } from '../contexts/ConstantsContext';
 import { useBloodSugarData } from '../contexts/BloodSugarDataContext';
+import TimeContext from '../contexts/TimeContext';
+import TimeManager from '../utils/TimeManager';
+import TimeInput from '../components/TimeInput';
 import './BloodSugarVisualization.css';
 
 /**
@@ -29,6 +32,9 @@ const BloodSugarVisualization = ({
   customApiEndpoint = null,
   chartConfig = {}
 }) => {
+  // Access time context for centralized time management
+  const timeContext = useContext(TimeContext);
+
   // Access patient constants from context
   const { patientConstants, loading: constantsLoading } = useConstants();
 
@@ -52,18 +58,21 @@ const BloodSugarVisualization = ({
     setTargetGlucose,
     setEstimationSettings,
     getBloodSugarStatus,
-    currentDateTime,
-    currentUserLogin
+    systemDateTime,
+    currentUserLogin,
+    refreshData
   } = useBloodSugarData();
 
   // Local state for UI
   const [activeView, setActiveView] = useState(defaultView);
-  const [userTimeZone, setUserTimeZone] = useState('');
-  const [currentTime, setCurrentTime] = useState(moment().valueOf());
+  const [showSystemInfo, setShowSystemInfo] = useState(true);
 
   // Reference for chart container and tracking fetch state
   const chartRef = useRef(null);
   const didFetchRef = useRef(false);
+
+  // Get timezone from TimeManager for consistency
+  const userTimeZone = useMemo(() => TimeManager.getUserTimeZone(), []);
 
   // Process readings for connection logic based on maxConnectGapMinutes
   const processedReadings = useMemo(() => {
@@ -95,21 +104,6 @@ const BloodSugarVisualization = ({
       setTargetGlucose(patientConstants.target_glucose);
     }
   }, [patientConstants, setTargetGlucose]);
-
-  // Get user's time zone info on component mount
-  useEffect(() => {
-    setUserTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
-  }, []);
-
-  // Update current time every minute
-  useEffect(() => {
-    const timer = setInterval(() => {
-      const now = moment();
-      setCurrentTime(now.valueOf());
-    }, 60000); // Update every minute
-
-    return () => clearInterval(timer);
-  }, []);
 
   // Fetch data when component mounts or when date range changes
   useEffect(() => {
@@ -153,143 +147,68 @@ const BloodSugarVisualization = ({
     }));
   }, [fillGaps, gapThresholdHours, setEstimationSettings]);
 
-  // Date range change handler
-  const handleDateChange = (e) => {
-    const { name, value } = e.target;
-    // Update date range and trigger a refetch when date changes
-    setDateRange(prev => {
-      const newRange = { ...prev, [name]: value };
-      // Refetch data with the new date range after state is updated
-      setTimeout(() => fetchBloodSugarData(patientId), 0);
-      return newRange;
-    });
-  };
+  // Toggle system info display
+  const toggleSystemInfo = useCallback(() => {
+    setShowSystemInfo(!showSystemInfo);
+  }, [showSystemInfo]);
 
   // Unit change handler
-  const handleUnitChange = (e) => {
+  const handleUnitChange = useCallback((e) => {
     setUnit(e.target.value);
-  };
+  }, [setUnit]);
 
-  // Gap fill toggle handler
-  const handleGapFillToggle = () => {
-    setEstimationSettings(prev => ({
-      ...prev,
-      enabled: !prev.enabled
-    }));
-  };
+  // Gap fill settings handlers
+  const handleGapFillToggle = useCallback(() => {
+    setEstimationSettings(prev => ({ ...prev, enabled: !prev.enabled }));
+  }, [setEstimationSettings]);
 
-  // Connection time gap handler
-  const handleConnectMaxTimeChange = (e) => {
+  const handleConnectMaxTimeChange = useCallback((e) => {
     const value = parseInt(e.target.value, 10);
     if (!isNaN(value) && value > 0) {
-      setEstimationSettings(prev => ({
-        ...prev,
-        maxConnectGapMinutes: value
-      }));
+      setEstimationSettings(prev => ({ ...prev, maxConnectGapMinutes: value }));
     }
-  };
+  }, [setEstimationSettings]);
 
-  // Stabilization hours handler
-  const handleStabilizationHoursChange = (e) => {
+  const handleStabilizationHoursChange = useCallback((e) => {
     const value = parseFloat(e.target.value);
     if (!isNaN(value) && value >= 0) {
-      setEstimationSettings(prev => ({
-        ...prev,
-        stabilizationHours: value
-      }));
+      setEstimationSettings(prev => ({ ...prev, stabilizationHours: value }));
     }
-  };
+  }, [setEstimationSettings]);
 
-  // Fill from start toggle handler
-  const handleFillFromStartToggle = () => {
+  // Toggle handlers for estimation settings
+  const handleSettingToggle = useCallback((settingName) => {
     setEstimationSettings(prev => ({
       ...prev,
-      fillFromStart: !prev.fillFromStart
+      [settingName]: !prev[settingName]
     }));
-  };
+  }, [setEstimationSettings]);
 
-  // Extend to current toggle handler
-  const handleExtendToCurrentToggle = () => {
-    setEstimationSettings(prev => ({
-      ...prev,
-      extendToCurrent: !prev.extendToCurrent
-    }));
-  };
+  // Force update the data
+  const handleForceUpdate = useCallback(() => {
+    refreshData();
+  }, [refreshData]);
 
-  // Fill entire graph toggle handler
-  const handleFillEntireGraphToggle = () => {
-    setEstimationSettings(prev => ({
-      ...prev,
-      fillEntireGraph: !prev.fillEntireGraph
-    }));
-  };
-
-  // Return to target toggle handler
-  const handleReturnToTargetToggle = () => {
-    setEstimationSettings(prev => ({
-      ...prev,
-      returnToTarget: !prev.returnToTarget
-    }));
-  };
-
-  // Quick date range presets
-  const applyDatePreset = (days) => {
-    const start = moment().subtract(days, 'days').format('YYYY-MM-DD');
-
-    // Set the end date based on the preset type with specific requirements
-    let end;
-    if (days === 1) {
-      // For "Last 24h": past day plus 12 hours
-      end = moment().add(12, 'hours').format('YYYY-MM-DD');
-    } else if (days === 7) {
-      // For "Last Week": past 7 days plus one future day
-      end = moment().add(1, 'day').format('YYYY-MM-DD');
-    } else if (days === 30) {
-      // For "Last Month": past 30 days plus 4 future days
-      end = moment().add(4, 'days').format('YYYY-MM-DD');
-    } else {
-      // Default case
-      end = moment().format('YYYY-MM-DD');
-    }
-
-    // Set the new date range
-    setDateRange({
-      start: start,
-      end: end
-    });
-
-    // Fetch data with the new range
-    setTimeout(() => fetchBloodSugarData(patientId), 0);
-  };
-
-  // Format X-axis labels
-  const formatXAxis = (tickItem) => {
-    // Format the timestamp using the user's local timezone
-    return moment(tickItem).format(timeScale.tickFormat || 'MM/DD HH:mm');
-  };
+  // Format X-axis labels - use TimeManager for consistent formatting
+  const formatXAxis = useCallback((tickItem) => {
+    return TimeManager.formatAxisTick(tickItem, timeScale.tickFormat || 'CHART_TICKS_MEDIUM');
+  }, [timeScale]);
 
   // Format Y-axis labels
-  const formatYAxis = (value) => {
+  const formatYAxis = useCallback((value) => {
     return `${value} ${unit}`;
-  };
+  }, [unit]);
 
   // Check if current time is within chart range
-  const currentTimeInRange = currentTime >= timeScale.start && currentTime <= timeScale.end;
+  const currentTimeInRange = TimeManager.isTimeInRange(
+    new Date().getTime(),
+    timeScale.start,
+    timeScale.end
+  );
 
-  // Generate ticks for the x-axis based on time scale
+  // Generate ticks for the x-axis based on time scale - use TimeManager
   const ticks = useMemo(() => {
-    const ticksArray = [];
-    let current = moment(timeScale.start).startOf('hour');
-    const end = moment(timeScale.end);
-    const tickInterval = timeScale.tickInterval || 12; // Default to 12 hours if not specified
-
-    // Align ticks to exact hour boundaries for consistent grid alignment
-    while (current.isBefore(end)) {
-      ticksArray.push(current.valueOf());
-      current = current.add(tickInterval, 'hours');
-    }
-
-    return ticksArray;
+    return TimeManager.generateTimeTicks(timeScale.start, timeScale.end, timeScale.tickInterval || 12);
   }, [timeScale]);
 
   // Custom dot renderer that changes appearance based on data type
@@ -338,15 +257,22 @@ const BloodSugarVisualization = ({
     return null;
   }, []);
 
+  // Custom tooltip component
   const CustomTooltip = useCallback(({ active, payload, label }) => {
     if (active && payload && payload.length) {
       // Find the actual data point from the payload
       const dataItem = payload[0]?.payload;
       if (!dataItem) return null;
 
+      // Format time using TimeManager for consistency
+      const formattedTime = TimeManager.formatDate(
+        dataItem.readingTime,
+        TimeManager.formats.DATETIME_DISPLAY
+      );
+
       return (
         <div className="custom-tooltip">
-          <p className="tooltip-time">{`Reading Time: ${moment(dataItem.readingTime).format('MM/DD/YYYY, HH:mm')}`}</p>
+          <p className="tooltip-time">{`Reading Time: ${formattedTime}`}</p>
           <p className="tooltip-value" style={{ color: dataItem.status.color }}>
             {`Blood Sugar: ${Math.round(dataItem.bloodSugar * 10) / 10} ${unit}`}
           </p>
@@ -542,12 +468,32 @@ const BloodSugarVisualization = ({
       <div className="target-info">
         <span className="target-label">Patient Target Blood Glucose: </span>
         <span className="target-value">{targetGlucose} {unit}</span>
-        {/* Display current date and login info */}
-        <div className="system-info">
-          <span className="time-label">Current: {currentDateTime} UTC | </span>
-          <span className="user-label">User: {currentUserLogin}</span>
-        </div>
       </div>
+
+      {/* Display system information */}
+      {showSystemInfo && (
+        <div className="system-info">
+          <span className="time-label">Current Date and Time (UTC): {systemDateTime} | </span>
+          <span className="user-label">User: {currentUserLogin}</span>
+          <button
+            onClick={toggleSystemInfo}
+            className="system-info-toggle"
+            aria-label="Hide system information"
+          >
+            Hide
+          </button>
+        </div>
+      )}
+
+      {!showSystemInfo && (
+        <button
+          onClick={toggleSystemInfo}
+          className="system-info-toggle show-btn"
+          aria-label="Show system information"
+        >
+          Show System Info
+        </button>
+      )}
 
       {/* Add timezone info display */}
       {!embedded && (
@@ -576,34 +522,15 @@ const BloodSugarVisualization = ({
 
       {showControls && (
         <div className="controls">
-          <div className="date-controls">
-            <div className="date-input-group">
-              <label htmlFor="start-date">From:</label>
-              <input
-                id="start-date"
-                type="date"
-                name="start"
-                value={dateRange.start}
-                onChange={handleDateChange}
-              />
-            </div>
-            <div className="date-input-group">
-              <label htmlFor="end-date">To:</label>
-              <input
-                id="end-date"
-                type="date"
-                name="end"
-                value={dateRange.end}
-                onChange={handleDateChange}
-              />
-            </div>
-          </div>
-
-          <div className="quick-ranges">
-            <button onClick={() => applyDatePreset(1)}>Last 24h</button>
-            <button onClick={() => applyDatePreset(7)}>Last Week</button>
-            <button onClick={() => applyDatePreset(30)}>Last Month</button>
-          </div>
+          {/* Use TimeInput component in daterange mode with TimeContext */}
+          <TimeInput
+            mode="daterange"
+            value={dateRange}
+            onChange={setDateRange}
+            useTimeContext={!!timeContext}
+            label="Date Range"
+            className="date-range-control"
+          />
 
           <div className="unit-selector">
             <label htmlFor="unit-select">Unit:</label>
@@ -654,7 +581,7 @@ const BloodSugarVisualization = ({
                   <input
                     type="checkbox"
                     checked={estimationSettings.fillEntireGraph}
-                    onChange={handleFillEntireGraphToggle}
+                    onChange={() => handleSettingToggle('fillEntireGraph')}
                   />
                   Fill entire graph
                 </label>
@@ -663,15 +590,33 @@ const BloodSugarVisualization = ({
                   <input
                     type="checkbox"
                     checked={estimationSettings.fillFromStart}
-                    onChange={handleFillFromStartToggle}
+                    onChange={() => handleSettingToggle('fillFromStart')}
                   />
                   Fill from range start
+                </label>
+
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={estimationSettings.extendToCurrent}
+                    onChange={() => handleSettingToggle('extendToCurrent')}
+                  />
+                  Extend to current time
+                </label>
+
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={estimationSettings.returnToTarget}
+                    onChange={() => handleSettingToggle('returnToTarget')}
+                  />
+                  Return to target glucose
                 </label>
               </>
             )}
           </div>
 
-          <button className="update-btn" onClick={() => fetchBloodSugarData(patientId)}>Update Data</button>
+          <button className="update-btn" onClick={handleForceUpdate}>Update Data</button>
         </div>
       )}
 
@@ -729,7 +674,7 @@ const BloodSugarVisualization = ({
                   {/* Current time reference line */}
                   {currentTimeInRange && (
                     <ReferenceLine
-                      x={currentTime}
+                      x={new Date().getTime()}
                       stroke="#ff0000"
                       strokeWidth={2}
                       label={{
