@@ -810,7 +810,7 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
                     <YAxis
                       yAxisId="activityEffect"
                       orientation="right"
-                      domain={[-1, 1]}
+                      domain={[-2, 1]}
                       label={{ value: 'Activity Effect', angle: -90, position: 'insideRight' }}
                     />
                   )}
