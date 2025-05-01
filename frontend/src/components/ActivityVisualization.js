@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useContext } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useContext, useRef } from 'react';
 import axios from 'axios';
 import moment from 'moment';
 import {
@@ -26,6 +26,7 @@ import './ActivityVisualization.css';
 const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
   // Use TimeContext for date range and future projection management
   const timeContext = useContext(TimeContext);
+  const lastFetchedDateRange = useRef({ start: null, end: null });
 
   // Use contexts for activity coefficients and blood sugar data
   const { patientConstants } = useConstants();
@@ -331,92 +332,98 @@ const effect = params.direction === 'decrease' ? -effectStrength :
   }
 }, [calculateActivityEffect, targetGlucose, getActivityBarValue, includeFutureEffect, futureHours, showActualBloodSugar, getBloodSugarStatus]);
   // Fetch activity and blood sugar data
-  const fetchData = useCallback(async () => {
-    try {
-      setLoading(true);
-      const token = localStorage.getItem('token');
-      if (!token) {
-        throw new Error('Authentication token not found');
-      }
-
-      // Get time settings from TimeContext
-      const timeSettings = timeContext && timeContext.getAPITimeSettings
-        ? timeContext.getAPITimeSettings()
-        : {
-            startDate: timeContext ? timeContext.dateRange.start : null,
-            endDate: moment(timeContext ? timeContext.dateRange.end : null)
-              .add(includeFutureEffect ? futureHours : 0, 'hours')
-              .format('YYYY-MM-DD')
-          };
-
-      // Use the activity API endpoint
-      const endpoint = patientId
-        ? `http://localhost:5000/api/patient/${patientId}/activity-history`
-        : 'http://localhost:5000/api/activity';
-
-      const activityResponse = await axios.get(
-        `${endpoint}?start_date=${timeSettings.startDate}&end_date=${timeSettings.endDate}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      // Process activity data
-      const processedActivityData = activityResponse.data.map(activity => {
-        // Parse times
-        const startTime = activity.startTime ? new Date(activity.startTime).getTime() : null;
-        const endTime = activity.endTime ? new Date(activity.endTime).getTime() : null;
-
-        return {
-          id: activity.id || activity._id,
-          level: activity.level,
-          levelLabel: activity.levelLabel || getActivityLevelLabel(activity.level),
-          impact: activity.impact || getActivityImpactCoefficient(activity.level),
-          startTime,
-          endTime,
-          formattedStartTime: startTime ? TimeManager.formatDate(startTime, TimeManager.formats.DATETIME_DISPLAY) : 'N/A',
-          formattedEndTime: endTime ? TimeManager.formatDate(endTime, TimeManager.formats.DATETIME_DISPLAY) : 'N/A',
-          duration: TimeManager.calculateDuration(startTime, endTime).formatted,
-          type: activity.type || 'unknown',
-          notes: activity.notes || ''
-        };
-      });
-
-      // Extract unique activity levels
-      const levels = [...new Set(processedActivityData.map(a => a.level))];
-      setActivityLevels(levels);
-
-      // Only set selectedActivityLevels if it's empty and we have levels
-      if (selectedActivityLevels.length === 0 && levels.length > 0) {
-        setSelectedActivityLevels(levels);
-      }
-
-      // Save processed data
-      setActivityData(processedActivityData);
-
-      // Filter blood sugar data to match our date range
-      let filteredBloodSugar = [];
-      if (bloodSugarData && bloodSugarData.length > 0) {
-        console.log("Using blood sugar data from context:", bloodSugarData.length, "readings");
-        filteredBloodSugar = getFilteredData(bloodSugarData);
-        console.log("Filtered to:", filteredBloodSugar.length, "readings for date range");
-      } else {
-        console.log("No blood sugar data available in context");
-        filteredBloodSugar = [];
-      }
-
-      // Generate combined data
-      const combinedResult = generateCombinedData(processedActivityData, filteredBloodSugar);
-      setCombinedData(combinedResult);
-
-      setError('');
-      setDataFetched(true);
-    } catch (error) {
-      console.error('Error fetching activity data:', error);
-      setError('Failed to load activity data. Please try again.');
-    } finally {
-      setLoading(false);
+const fetchData = useCallback(async () => {
+  try {
+    setLoading(true);
+    const token = localStorage.getItem('token');
+    if (!token) {
+      throw new Error('Authentication token not found');
     }
-  }, [timeContext, includeFutureEffect, futureHours, patientId, selectedActivityLevels.length,
-      bloodSugarData, getFilteredData, generateCombinedData]);
+
+    // Get time settings from TimeContext
+    const timeSettings = timeContext && timeContext.getAPITimeSettings
+      ? timeContext.getAPITimeSettings()
+      : {
+          startDate: timeContext ? timeContext.dateRange.start : null,
+          endDate: moment(timeContext ? timeContext.dateRange.end : null)
+            .add(includeFutureEffect ? futureHours : 0, 'hours')
+            .format('YYYY-MM-DD')
+        };
+
+    // Update lastFetchedDateRange ref to prevent redundant fetches
+    lastFetchedDateRange.current = {
+      start: timeSettings.startDate,
+      end: timeSettings.endDate
+    };
+
+    // Use the activity API endpoint
+    const endpoint = patientId
+      ? `http://localhost:5000/api/patient/${patientId}/activity-history`
+      : 'http://localhost:5000/api/activity';
+
+    const activityResponse = await axios.get(
+      `${endpoint}?start_date=${timeSettings.startDate}&end_date=${timeSettings.endDate}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+
+    // Process activity data
+    const processedActivityData = activityResponse.data.map(activity => {
+      // Parse times
+      const startTime = activity.startTime ? new Date(activity.startTime).getTime() : null;
+      const endTime = activity.endTime ? new Date(activity.endTime).getTime() : null;
+
+      return {
+        id: activity.id || activity._id,
+        level: activity.level,
+        levelLabel: activity.levelLabel || getActivityLevelLabel(activity.level),
+        impact: activity.impact || getActivityImpactCoefficient(activity.level),
+        startTime,
+        endTime,
+        formattedStartTime: startTime ? TimeManager.formatDate(startTime, TimeManager.formats.DATETIME_DISPLAY) : 'N/A',
+        formattedEndTime: endTime ? TimeManager.formatDate(endTime, TimeManager.formats.DATETIME_DISPLAY) : 'N/A',
+        duration: TimeManager.calculateDuration(startTime, endTime).formatted,
+        type: activity.type || 'unknown',
+        notes: activity.notes || ''
+      };
+    });
+
+    // Extract unique activity levels
+    const levels = [...new Set(processedActivityData.map(a => a.level))];
+    setActivityLevels(levels);
+
+    // Only set selectedActivityLevels if it's empty and we have levels
+    if (selectedActivityLevels.length === 0 && levels.length > 0) {
+      setSelectedActivityLevels(levels);
+    }
+
+    // Save processed data
+    setActivityData(processedActivityData);
+
+    // Filter blood sugar data to match our date range
+    let filteredBloodSugar = [];
+    if (bloodSugarData && bloodSugarData.length > 0) {
+      console.log("Using blood sugar data from context:", bloodSugarData.length, "readings");
+      filteredBloodSugar = getFilteredData(bloodSugarData);
+      console.log("Filtered to:", filteredBloodSugar.length, "readings for date range");
+    } else {
+      console.log("No blood sugar data available in context");
+      filteredBloodSugar = [];
+    }
+
+    // Generate combined data
+    const combinedResult = generateCombinedData(processedActivityData, filteredBloodSugar);
+    setCombinedData(combinedResult);
+
+    setError('');
+    setDataFetched(true);
+  } catch (error) {
+    console.error('Error fetching activity data:', error);
+    setError('Failed to load activity data. Please try again.');
+  } finally {
+    setLoading(false);
+  }
+}, [timeContext, includeFutureEffect, futureHours, patientId, selectedActivityLevels.length,
+    bloodSugarData, getFilteredData, generateCombinedData]);
 
   // Helper function to get activity level label
   const getActivityLevelLabel = useCallback((level) => {
@@ -486,11 +493,18 @@ const effect = params.direction === 'decrease' ? -effectStrength :
   }, [targetGlucose]);
 
   // Force update the data
-  const handleForceUpdate = useCallback(() => {
+    const handleForceUpdate = useCallback(() => {
     console.log('Forcing data update...');
-    setDataFetched(false); // Reset dataFetched flag to trigger fetch
+    // No need to reset dataFetched flag since we're explicitly fetching
     fetchData();
   }, [fetchData]);
+
+     // Handler for when date range changes
+  const handleDateRangeChange = useCallback(() => {
+    // Don't automatically fetch - just mark that we need to update
+    // This allows the user to make multiple changes before clicking Update
+    console.log('Date range changed, click Update to refresh data');
+  }, []);
 
   // Custom tooltip for the chart
   const CustomTooltip = useCallback(({ active, payload }) => {
@@ -771,26 +785,29 @@ const effect = params.direction === 'decrease' ? -effectStrength :
       <div className="controls">
         {/* Use TimeInput component in daterange mode */}
         <TimeInput
-          mode="daterange"
-          value={timeContext ? timeContext.dateRange : null}
-          onChange={timeContext ? timeContext.handleDateRangeChange : null}
-          useTimeContext={!!timeContext}
-          label="Date Range"
-          className="date-range-control"
+            mode="daterange"
+            value={timeContext ? timeContext.dateRange : null}
+            onChange={timeContext ? (e) => {
+              timeContext.handleDateRangeChange(e);
+              handleDateRangeChange();
+            } : null}
+            useTimeContext={!!timeContext}
+            label="Date Range"
+            className="date-range-control"
         />
 
         <div className="activity-level-filters">
           <div className="filter-header">Activity Levels:</div>
           <div className="filter-options">
             {activityLevels.map((level, idx) => (
-              <label key={`${level}_${idx}`} className="filter-option">
-                <input
-                  type="checkbox"
-                  checked={selectedActivityLevels.includes(level)}
-                  onChange={() => handleActivityLevelToggle(level)}
-                />
-                {getActivityLevelLabel(level)}
-              </label>
+                <label key={`${level}_${idx}`} className="filter-option">
+                  <input
+                      type="checkbox"
+                      checked={selectedActivityLevels.includes(level)}
+                      onChange={() => handleActivityLevelToggle(level)}
+                  />
+                  {getActivityLevelLabel(level)}
+                </label>
             ))}
           </div>
         </div>
@@ -798,48 +815,48 @@ const effect = params.direction === 'decrease' ? -effectStrength :
         <div className="display-options">
           <label className="display-option">
             <input
-              type="checkbox"
-              checked={showActualBloodSugar}
-              onChange={() => setShowActualBloodSugar(!showActualBloodSugar)}
+                type="checkbox"
+                checked={showActualBloodSugar}
+                onChange={() => setShowActualBloodSugar(!showActualBloodSugar)}
             />
             Show Blood Sugar
           </label>
           <label className="display-option">
             <input
-              type="checkbox"
-              checked={showActivityEffect}
-              onChange={() => setShowActivityEffect(!showActivityEffect)}
+                type="checkbox"
+                checked={showActivityEffect}
+                onChange={() => setShowActivityEffect(!showActivityEffect)}
             />
             Show Activity Effect
           </label>
           <label className="display-option">
             <input
-              type="checkbox"
-              checked={includeFutureEffect}
-              onChange={toggleFutureEffect}
+                type="checkbox"
+                checked={includeFutureEffect}
+                onChange={toggleFutureEffect}
             />
             Project Future Effect
           </label>
           {includeFutureEffect && (
-            <div className="future-hours">
-              <label>Future Hours:</label>
-              <input
-                type="number"
-                min="1"
-                max="24"
-                value={futureHours}
-                onChange={(e) => setFutureHours(parseInt(e.target.value) || 7)}
-              />
-            </div>
+              <div className="future-hours">
+                <label>Future Hours:</label>
+                <input
+                    type="number"
+                    min="1"
+                    max="24"
+                    value={futureHours}
+                    onChange={(e) => setFutureHours(parseInt(e.target.value) || 7)}
+                />
+              </div>
           )}
           <div className="effect-duration">
             <label>Effect Duration (hours):</label>
             <input
-              type="number"
-              min="1"
-              max="24"
-              value={effectDurationHours}
-              onChange={(e) => setEffectDurationHours(parseInt(e.target.value) || 5)}
+                type="number"
+                min="1"
+                max="24"
+                value={effectDurationHours}
+                onChange={(e) => setEffectDurationHours(parseInt(e.target.value) || 5)}
             />
           </div>
         </div>
@@ -850,14 +867,14 @@ const effect = params.direction === 'decrease' ? -effectStrength :
       {error && <div className="error-message">{error}</div>}
 
       {loading ? (
-        <div className="loading">Loading activity data...</div>
+          <div className="loading">Loading activity data...</div>
       ) : combinedData.length === 0 ? (
-        <div className="no-data">No activity data found for the selected date range.</div>
+          <div className="no-data">No activity data found for the selected date range.</div>
       ) : (
-        <div className="content-container">
-          {activeView === 'chart' && (
-            <div className="chart-container">
-              <ResponsiveContainer width="100%" height={500}>
+          <div className="content-container">
+            {activeView === 'chart' && (
+                <div className="chart-container">
+                  <ResponsiveContainer width="100%" height={500}>
                 <ComposedChart
                   data={combinedData}
                   margin={{ top: 5, right: 30, left: 20, bottom: 25 }}
