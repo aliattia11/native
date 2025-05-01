@@ -216,48 +216,60 @@ class TimeManager {
    * @param {string} endDate - End date in YYYY-MM-DD format
    * @returns {object} Time scale settings with start, end, tickInterval, and tickFormat
    */
-  static getTimeScaleForRange(startDate, endDate) {
-    if (!startDate || !endDate) {
-      console.warn('Invalid date range for time scale', { startDate, endDate });
-      // Provide reasonable defaults
-      const now = new Date();
-      const weekAgo = new Date(now.getTime() - 7 * this.constants.MILLISECONDS_PER_DAY);
+ static getTimeScaleForRange(startDate, endDate) {
+  if (!startDate || !endDate) {
+    console.warn('Invalid date range for time scale', { startDate, endDate });
+    // Provide reasonable defaults
+    const now = new Date();
+    const weekAgo = new Date(now.getTime() - 7 * this.constants.MILLISECONDS_PER_DAY);
 
-      return this.getTimeScaleForRange(
-        this.formatDate(weekAgo, this.formats.DATE),
-        this.formatDate(now, this.formats.DATE)
-      );
-    }
-
-    const start = new Date(startDate);
-    start.setHours(0, 0, 0, 0);
-
-    const end = new Date(endDate);
-    end.setHours(23, 59, 59, 999);
-
-    const diffDays = (end - start) / this.constants.MILLISECONDS_PER_DAY;
-
-    let tickInterval, tickFormat;
-
-    // Determine scale based on range duration
-    if (diffDays <= 1) {
-      tickInterval = 2;  // 2 hour intervals
-      tickFormat = this.formats.CHART_TICKS_SHORT;
-    } else if (diffDays <= 7) {
-      tickInterval = 12; // 12 hour intervals
-      tickFormat = this.formats.CHART_TICKS_MEDIUM;
-    } else {
-      tickInterval = 24; // 1 day intervals
-      tickFormat = this.formats.CHART_TICKS_LONG;
-    }
-
-    return {
-      start: start.getTime(),
-      end: end.getTime(),
-      tickInterval,
-      tickFormat
-    };
+    return this.getTimeScaleForRange(
+      this.formatDate(weekAgo, this.formats.DATE),
+      this.formatDate(now, this.formats.DATE)
+    );
   }
+
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+
+  // Calculate the time difference in days
+  const diffTime = Math.abs(end - start);
+  const diffDays = Math.ceil(diffTime / this.constants.MILLISECONDS_PER_DAY);
+
+  // For exactly 1-day difference, preserve the exact hours for 24h view
+  if (diffDays === 1 &&
+      (end.getTime() - start.getTime()) <= this.constants.MILLISECONDS_PER_DAY * 1.5) {
+    // Don't adjust the hour boundaries for 24h view
+    console.log("Using exact time boundaries for 24h view");
+  } else {
+    // For multi-day views, set standard day boundaries
+    start.setHours(0, 0, 0, 0);
+    end.setHours(23, 59, 59, 999);
+  }
+
+  const diffDaysRounded = (end - start) / this.constants.MILLISECONDS_PER_DAY;
+
+  let tickInterval, tickFormat;
+
+  // Determine scale based on range duration
+  if (diffDaysRounded <= 1) {
+    tickInterval = 2;  // 2 hour intervals
+    tickFormat = this.formats.CHART_TICKS_SHORT;
+  } else if (diffDaysRounded <= 7) {
+    tickInterval = 12; // 12 hour intervals
+    tickFormat = this.formats.CHART_TICKS_MEDIUM;
+  } else {
+    tickInterval = 24; // 1 day intervals
+    tickFormat = this.formats.CHART_TICKS_LONG;
+  }
+
+  return {
+    start: start.getTime(),
+    end: end.getTime(),
+    tickInterval,
+    tickFormat
+  };
+}
 
   /**
    * Check if a timestamp is within a given range
