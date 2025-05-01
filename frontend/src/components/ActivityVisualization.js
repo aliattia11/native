@@ -67,7 +67,9 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
     const coefficient = activityCoefficients[activityLevel] || 1.0;
 
     // Determine if activity increases or decreases blood sugar
-    const direction = coefficient > 1.0 ? 'increase' : (coefficient < 1.0 ? 'decrease' : 'neutral');
+   const activityLevel_num = Number(activityLevel);
+const direction = activityLevel_num > 0 ? 'decrease' :
+                 activityLevel_num < 0 ? 'increase' : 'neutral';
 
     // Calculate strength (magnitude of effect)
     const strength = Math.abs(coefficient - 1.0);
@@ -110,8 +112,8 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
     // Convert effect strength to blood sugar impact
     // For coefficient > 1, positive effect (increases insulin need, decreases blood sugar)
     // For coefficient < 1, negative effect (decreases insulin need, increases blood sugar)
-    const effect = params.direction === 'increase' ? effectStrength : -effectStrength;
-
+const effect = params.direction === 'decrease' ? -effectStrength :
+              params.direction === 'increase' ? effectStrength : 0;
     return effect;
   }, [getActivityParameters]);
 
@@ -245,7 +247,7 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
         // Add simulated blood sugar effect if we have an activity effect
         if (timePoint.totalActivityEffect !== 0) {
           const baseValue = targetGlucose || 120;
-          const activityImpact = -50 * timePoint.totalActivityEffect;
+          const activityImpact = 50 * timePoint.totalActivityEffect;
 
           // Always calculate the estimated blood sugar impact
           timePoint.estimatedBloodSugar = baseValue + activityImpact;

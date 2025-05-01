@@ -187,18 +187,29 @@ export const BloodSugarDataProvider = ({ children }) => {
     const checkNearbyReadingsWithinHours = interval.checkNearbyHours;
 
     // Model blood glucose value without meal input
-    const modelBloodGlucose = (startReading, elapsedMinutes) => {
-      const baseValue = startReading.bloodSugar;
-      const stabilizationMinutes = estimationSettings.stabilizationHours * 60;
+  const modelBloodGlucose = (startReading, elapsedMinutes) => {
+  const baseValue = startReading.bloodSugar;
+  const stabilizationMinutes = estimationSettings.stabilizationHours * 60;
 
-      if (elapsedMinutes < stabilizationMinutes) {
-        const stabilizationRatio = elapsedMinutes / stabilizationMinutes;
-        const exponentialReturn = 1 - Math.exp(-3 * stabilizationRatio);
-        return targetGlucose + (baseValue - targetGlucose) * (1 - exponentialReturn);
-      }
+  // Prevent exact hour timepoints (00:00, 03:00, etc.) from snapping exactly to target
+  const timestamp = new Date(startReading.readingTime + elapsedMinutes * 60 * 1000);
+  const isExactHour = timestamp.getMinutes() === 0 && timestamp.getSeconds() === 0;
 
-      return targetGlucose;
-    };
+  // If exactly at stabilization time and at exact hour, add slight variation
+  if (elapsedMinutes === stabilizationMinutes && isExactHour) {
+    // Add a small offset (±2 mg/dL) to prevent exact target alignment
+    return targetGlucose + (Math.random() > 0.5 ? 2 : -2);
+  }
+
+  if (elapsedMinutes < stabilizationMinutes) {
+    const stabilizationRatio = elapsedMinutes / stabilizationMinutes;
+    const exponentialReturn = 1 - Math.exp(-3 * stabilizationRatio);
+    return targetGlucose + (baseValue - targetGlucose) * (1 - exponentialReturn);
+  }
+
+  // Add a tiny variation to prevent exact target values
+  return targetGlucose + (Math.random() * 0.8 - 0.4); // Small ±0.4 variation
+};
 
     // Helper function to check if a timestamp is near actual readings
     const isNearActualReadings = (timestamp, actualReadings, hoursThreshold) => {
