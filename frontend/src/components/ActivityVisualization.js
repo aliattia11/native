@@ -12,7 +12,8 @@ import {
   Tooltip,
   Legend,
   Area,
-  ReferenceLine
+  ReferenceLine,
+  Scatter
 } from 'recharts';
 import { useTable, useSortBy, usePagination } from 'react-table';
 import { useConstants } from '../contexts/ConstantsContext';
@@ -58,39 +59,57 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
   const [effectDurationHours, setEffectDurationHours] = useState(5); // Hours activity affects blood sugar
   const [showSystemInfo, setShowSystemInfo] = useState(true);
 
+  // Activity blood sugar effects configuration
+  const [activityBloodSugarEffects, setActivityBloodSugarEffects] = useState({
+    "-2": 20,    // mode 1: increases blood sugar by ~20 mg/dL
+    "-1": 10,    // mode 2: increases blood sugar by ~10 mg/dL
+    "0": 0,      // Normal: negligible effect
+    "1": -15,    // High: decreases blood sugar by ~15 mg/dL
+    "2": -30     // Vigorous: decreases blood sugar by ~30 mg/dL
+  });
+
   // Get user's time zone from TimeManager
   const userTimeZone = useMemo(() => TimeManager.getUserTimeZone(), []);
 
-  // Helper function to get activity parameters from patient constants
-  const getActivityParameters = useCallback((activityLevel) => {
-    // Get activity coefficients from patient constants
-    const activityCoefficients = patientConstants.activity_coefficients || {};
+  // Helper function to calculate direct blood glucose impact from activity
+  const calculateActivityBloodSugarEffect = useCallback((activity) => {
+    // Get basic information
+    const level = activity.level;
 
-    // Get coefficient for this level (default to 1.0 for neutral effect)
-    const coefficient = activityCoefficients[activityLevel] || 1.0;
+    // Get base impact in mg/dL for this level
+    const baseImpact = activityBloodSugarEffects[level] || 0;
 
-    // Determine if activity increases or decreases blood sugar
-    const direction = coefficient > 1.0 ? 'increase' : (coefficient < 1.0 ? 'decrease' : 'neutral');
+    // Calculate duration in hours
+    const duration = activity.startTime && activity.endTime ?
+      TimeManager.calculateDuration(activity.startTime, activity.endTime).totalHours : 1;
 
-    // Calculate strength (magnitude of effect)
-    const strength = Math.abs(coefficient - 1.0);
+    // Scale impact by duration (capped at 2 hours for full effect)
+    const durationFactor = Math.min(duration / 2, 1);
+
+    // Calculate immediate impact during activity
+    const immediateImpact = baseImpact * durationFactor;
+
+    // Calculate recovery curve (how long effects last after activity)
+    const recoveryHours = level > 0 ? effectDurationHours : Math.max(2, effectDurationHours / 2);
 
     return {
-      coefficient,
-      direction,
-      strength,
-      maxEffectHours: 1.5, // Time to peak effect
-      totalDurationHours: effectDurationHours // Total duration of effect
+      baseImpact,
+      immediateImpact,
+      recoveryHours,
+      peakEffect: immediateImpact,
+      direction: baseImpact > 0 ? 'increase' : baseImpact < 0 ? 'decrease' : 'neutral'
     };
-  }, [patientConstants, effectDurationHours]);
+  }, [activityBloodSugarEffects, effectDurationHours]);
 
   // Calculate activity effect at a given time point
   const calculateActivityEffect = useCallback((hoursSinceActivity, duration, activityLevel) => {
-    // Get parameters for this activity level
-    const params = getActivityParameters(activityLevel);
+    // Get direct blood sugar effect parameters
+    const baseEffect = activityBloodSugarEffects[activityLevel] || 0;
 
-    // Early return if outside the duration window
-    const totalEffectHours = params.totalDurationHours + (duration || 1); // Add activity duration to effect duration
+    // Early return if no effect or outside the duration window
+    if (baseEffect === 0) return 0;
+
+    const totalEffectHours = effectDurationHours + (duration || 1); // Add activity duration to effect duration
     if (hoursSinceActivity < 0 || hoursSinceActivity > totalEffectHours) {
       return 0;
     }
@@ -100,30 +119,25 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
     // Calculate effect strength based on time elapsed
     if (hoursSinceActivity <= duration) {
       // Full effect during activity
-      effectStrength = params.strength;
+      effectStrength = baseEffect;
     } else {
       // Tapering effect after activity ends
       const timeAfterActivity = hoursSinceActivity - duration;
       const totalAfterEffectTime = totalEffectHours - duration;
 
       // Apply decay curve to effect strength
-      effectStrength = params.strength * Math.exp(-2 * timeAfterActivity / totalAfterEffectTime);
+      effectStrength = baseEffect * Math.exp(-2 * timeAfterActivity / totalAfterEffectTime);
     }
 
-    // Convert effect strength to blood sugar impact
-    // For coefficient > 1, positive effect (increases insulin need, decreases blood sugar)
-    // For coefficient < 1, negative effect (decreases insulin need, increases blood sugar)
-    const effect = params.direction === 'increase' ? effectStrength : -effectStrength;
-
-    return effect;
-  }, [getActivityParameters]);
+    return effectStrength; // Return direct mg/dL effect on blood sugar
+  }, [activityBloodSugarEffects, effectDurationHours]);
 
   // Helper function to convert activity level to bidirectional bar value
-  // Inverts the values: high activity (1,2) becomes negative, low activity (-1,-2) becomes positive
+  // Keeps the original values for proper visualization: high activity (1,2) is negative, low activity (-1,-2) is positive
   const getActivityBarValue = useCallback((level) => {
     // Convert level to number if it's a string
     const numLevel = Number(level);
-    // Invert the value: high activity (positive) -> negative, low activity (negative) -> positive
+    // Keep the value as is: positive levels are shown below zero line, negative levels above
     return -numLevel;
   }, []);
 
@@ -222,12 +236,12 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
             levelLabel: activity.levelLabel,
             startTime: activity.startTime,
             endTime: activity.endTime,
-            impact: activity.impact,
+            impact: activityBloodSugarEffects[activity.level] || 0,
             notes: activity.notes
           });
         }
 
-        // Calculate expected effect from each activity at current time
+        // Calculate direct blood sugar effect from each activity at current time
         const activityStartTime = activity.startTime;
         if (activityStartTime) {
           const hoursSinceActivityStart = (thisMoment - activityStartTime) / (60 * 60 * 1000);
@@ -235,6 +249,7 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
                              (activity.endTime - activity.startTime) / (60 * 60 * 1000) : 1;
 
           if (hoursSinceActivityStart >= 0 || includeFutureEffect) {
+            // Calculate direct blood sugar effect (in mg/dL)
             const effect = calculateActivityEffect(hoursSinceActivityStart, durationHours, activity.level);
             if (effect !== 0) {
               const activityKey = `level_${activity.level}`;
@@ -245,19 +260,27 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
         }
       });
 
-      // Add simulated blood sugar effect if we have an activity effect but no reading
-      if (timePoint.totalActivityEffect !== 0 && !timePoint.bloodSugar) {
+      // Add adjusted blood sugar based on activity effects
+      if (timePoint.bloodSugar) {
+        // Don't modify actual readings
+        timePoint.adjustedBloodSugar = timePoint.bloodSugar;
+      } else if (timePoint.totalActivityEffect !== 0) {
+        // Use target glucose as baseline and add activity effects
         const baseValue = targetGlucose || 120;
-        const activityImpact = -50 * timePoint.totalActivityEffect;
-        timePoint.estimatedBloodSugar = baseValue + activityImpact;
+        timePoint.estimatedBloodSugar = baseValue + timePoint.totalActivityEffect;
         timePoint.isActualReading = false;
         timePoint.dataType = 'estimated';
         timePoint.isInterpolated = true;
         timePoint.isEstimated = true;
       }
 
+      // Store the deviation from target for activity effect visualization
+      if (timePoint.bloodSugar) {
+        timePoint.bloodSugarDeviation = timePoint.bloodSugar - targetGlucose;
+      }
+
       if (timePoint.totalActivityEffect) {
-        timePoint.totalActivityEffect = Math.round(timePoint.totalActivityEffect * 100) / 100;
+        timePoint.totalActivityEffect = Math.round(timePoint.totalActivityEffect * 10) / 10;
       }
 
       timelineData.push(timePoint);
@@ -278,6 +301,7 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
           formattedTime: TimeManager.formatDate(reading.readingTime, TimeManager.formats.DATETIME_DISPLAY),
           formattedReadingTime: TimeManager.formatDate(reading.readingTime, TimeManager.formats.DATETIME_DISPLAY),
           bloodSugar: reading.bloodSugar,
+          bloodSugarDeviation: reading.bloodSugar - targetGlucose,
           bloodSugarStatus: reading.status,
           isActualReading: true,
           dataType: 'actual',
@@ -299,7 +323,7 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
     console.error('Error generating combined data:', error);
     return [];
   }
-}, [calculateActivityEffect, targetGlucose, getActivityBarValue, includeFutureEffect, futureHours]);
+}, [calculateActivityEffect, targetGlucose, getActivityBarValue, includeFutureEffect, futureHours, activityBloodSugarEffects]);
 
   // Fetch activity and blood sugar data
   const fetchData = useCallback(async () => {
@@ -340,7 +364,7 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
           id: activity.id || activity._id,
           level: activity.level,
           levelLabel: activity.levelLabel || getActivityLevelLabel(activity.level),
-          impact: activity.impact || getActivityImpactCoefficient(activity.level),
+          impact: activityBloodSugarEffects[activity.level] || 0,
           startTime,
           endTime,
           formattedStartTime: startTime ? TimeManager.formatDate(startTime, TimeManager.formats.DATETIME_DISPLAY) : 'N/A',
@@ -387,19 +411,13 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
       setLoading(false);
     }
   }, [timeContext, includeFutureEffect, futureHours, patientId, selectedActivityLevels.length,
-      bloodSugarData, getFilteredData, generateCombinedData]);
+      bloodSugarData, getFilteredData, generateCombinedData, activityBloodSugarEffects]);
 
   // Helper function to get activity level label
   const getActivityLevelLabel = useCallback((level) => {
     const matchingLevel = ACTIVITY_LEVELS.find(a => a.value === Number(level));
     return matchingLevel ? matchingLevel.label : `Level ${level}`;
   }, []);
-
-  // Helper function to get activity impact coefficient
-  const getActivityImpactCoefficient = useCallback((level) => {
-    const activityCoefficients = patientConstants.activity_coefficients || {};
-    return activityCoefficients[level] || 1.0;
-  }, [patientConstants]);
 
   // Effect to fetch data once when component mounts and when necessary params change
   useEffect(() => {
@@ -430,28 +448,38 @@ const ActivityVisualization = ({ isDoctor = false, patientId = null }) => {
       }
     });
   }, []);
-const CustomBloodSugarDot = useCallback((props) => {
-  const { cx, cy, stroke, payload } = props;
 
-  // Only render visible dots for actual readings
-  if (!payload.isActualReading) return null;
+  // Handler for updating activity blood sugar effects
+  const updateActivityEffect = useCallback((level, value) => {
+    setActivityBloodSugarEffects(prev => ({
+      ...prev,
+      [level]: value
+    }));
+  }, []);
 
-  // Get color from status or use a default
-  const dotColor = payload.bloodSugarStatus ?
-    payload.bloodSugarStatus.color :
-    (payload.bloodSugar > targetGlucose ? '#ff8800' : '#00C851');
+  // Custom dot component for blood sugar visualization
+  const CustomBloodSugarDot = useCallback((props) => {
+    const { cx, cy, stroke, payload } = props;
 
-  return (
-    <circle
-      cx={cx}
-      cy={cy}
-      r={4}
-      stroke={dotColor}
-      strokeWidth={2}
-      fill="#ffffff"
-    />
-  );
-}, [targetGlucose]);
+    // Only render visible dots for actual readings
+    if (!payload.isActualReading) return null;
+
+    // Get color from status or use a default
+    const dotColor = payload.bloodSugarStatus ?
+      payload.bloodSugarStatus.color :
+      (payload.bloodSugar > targetGlucose ? '#ff8800' : '#00C851');
+
+    return (
+      <circle
+        cx={cx}
+        cy={cy}
+        r={4}
+        stroke={dotColor}
+        strokeWidth={2}
+        fill="#ffffff"
+      />
+    );
+  }, [targetGlucose]);
 
   // Toggle system info display
   const toggleSystemInfo = useCallback(() => {
@@ -465,66 +493,83 @@ const CustomBloodSugarDot = useCallback((props) => {
 
   // Custom tooltip for the chart
   const CustomTooltip = useCallback(({ active, payload }) => {
-    if (active && payload && payload.length) {
-      const data = payload[0].payload;
+  if (active && payload && payload.length) {
+    // Find the time point data from any of the payload items
+    const timePointData = payload[0].payload;
 
-      return (
-        <div className="activity-tooltip">
-          <p className="tooltip-time">{data.formattedTime}</p>
+    // Look for estimated blood sugar value in the payload
+    let estimatedValue = null;
+    payload.forEach(item => {
+      if (item.dataKey === 'estimatedBloodSugar' && item.value) {
+        estimatedValue = item.value;
+      }
+    });
 
-          {/* Display activities */}
-          {data.activityDetails && data.activityDetails.length > 0 && (
-            <div className="tooltip-section">
-              <p className="tooltip-header">Activities:</p>
-              {data.activityDetails.map((activity, idx) => (
-                <p key={idx} className="tooltip-activity">
-                  {activity.levelLabel} - Impact: {Math.round((activity.impact - 1) * 100)}%
-                  <span className="tooltip-direction">
-                    {activity.level > 0 ? ' (Decreases blood sugar)' :
-                     activity.level < 0 ? ' (Increases blood sugar)' :
-                     ' (Neutral)'}
-                  </span>
-                </p>
-              ))}
-            </div>
-          )}
+    return (
+      <div className="activity-tooltip">
+        <p className="tooltip-time">{timePointData.formattedTime}</p>
 
-          {/* Display activity effect */}
-          {data.totalActivityEffect !== 0 && (
-            <div className="tooltip-section">
-              <p className="tooltip-header">Activity Effect:</p>
-              <p className="tooltip-effect">
-                Total Effect: {Math.abs(data.totalActivityEffect).toFixed(2)} units
-                ({data.totalActivityEffect > 0 ? 'Decreases' : 'Increases'} blood sugar)
+        {/* Display activities */}
+        {timePointData.activityDetails && timePointData.activityDetails.length > 0 && (
+          <div className="tooltip-section">
+            <p className="tooltip-header">Activities:</p>
+            {timePointData.activityDetails.map((activity, idx) => (
+              <p key={idx} className="tooltip-activity">
+                {activity.levelLabel} - Effect: {activity.impact} mg/dL
+                <span className="tooltip-direction">
+                  {activity.impact > 0 ? ' (Increases blood sugar)' :
+                   activity.impact < 0 ? ' (Decreases blood sugar)' :
+                   ' (Neutral)'}
+                </span>
               </p>
-            </div>
-          )}
+            ))}
+          </div>
+        )}
 
-          {/* Display blood sugar if available */}
-          {data.bloodSugar && (
-            <div className="tooltip-section">
-              <p className="tooltip-header">Blood Sugar:</p>
-              <p className="tooltip-blood-sugar">
-                {data.bloodSugar} mg/dL
-                {data.bloodSugarStatus && ` (${data.bloodSugarStatus.label})`}
-              </p>
-            </div>
-          )}
+        {/* Display activity effect */}
+        {timePointData.totalActivityEffect !== 0 && (
+          <div className="tooltip-section">
+            <p className="tooltip-header">Activity Effect:</p>
+            <p className="tooltip-effect">
+              Total Effect: {Math.abs(timePointData.totalActivityEffect)} mg/dL
+              ({timePointData.totalActivityEffect > 0 ? 'Increases' : 'Decreases'} blood sugar)
+            </p>
+          </div>
+        )}
 
-          {/* Display estimated blood sugar if available */}
-          {data.estimatedBloodSugar && !data.bloodSugar && (
-            <div className="tooltip-section">
-              <p className="tooltip-header">Estimated Blood Sugar:</p>
-              <p className="tooltip-estimated-bg">
-                ~{Math.round(data.estimatedBloodSugar)} mg/dL (estimated)
-              </p>
-            </div>
-          )}
-        </div>
-      );
-    }
-    return null;
-  }, []);
+        {/* Display blood sugar if available */}
+        {timePointData.bloodSugar && (
+          <div className="tooltip-section">
+            <p className="tooltip-header">Blood Sugar:</p>
+            <p className="tooltip-blood-sugar">
+              {timePointData.bloodSugar} mg/dL
+              {timePointData.bloodSugarStatus && ` (${timePointData.bloodSugarStatus.label})`}
+            </p>
+            <p className="tooltip-deviation">
+              {Math.abs(timePointData.bloodSugarDeviation)} mg/dL {timePointData.bloodSugarDeviation > 0 ? 'above' : 'below'} target
+              ({targetGlucose} mg/dL)
+            </p>
+          </div>
+        )}
+
+        {/* Display estimated blood sugar if available */}
+        {(estimatedValue || timePointData.estimatedBloodSugar) && !timePointData.bloodSugar && (
+          <div className="tooltip-section">
+            <p className="tooltip-header">Estimated Blood Sugar:</p>
+            <p className="tooltip-estimated-bg">
+              ~{Math.round(estimatedValue || timePointData.estimatedBloodSugar)} mg/dL (estimated)
+            </p>
+            <p className="tooltip-deviation">
+              {Math.abs((estimatedValue || timePointData.estimatedBloodSugar) - targetGlucose)} mg/dL
+              {(estimatedValue || timePointData.estimatedBloodSugar) > targetGlucose ? ' above' : ' below'} target
+            </p>
+          </div>
+        )}
+      </div>
+    );
+  }
+  return null;
+}, [targetGlucose]);
 
   // Table columns definition
   const columns = useMemo(() => [
@@ -548,21 +593,20 @@ const CustomBloodSugarDot = useCallback((props) => {
       accessor: 'levelLabel'
     },
     {
-      Header: 'Impact',
+      Header: 'Blood Sugar Effect',
       accessor: 'impact',
       Cell: ({ value }) => {
-        // Round to nearest integer
-        const percent = Math.round((value - 1) * 100);
-        const direction = value > 1 ? 'increase' : value < 1 ? 'decrease' : 'none';
+        const effectDirection = value > 0 ? 'increase' : value < 0 ? 'decrease' : 'neutral';
         return (
-          <span className={`impact-${direction}`}>
-            {direction === 'none' ? 'Neutral' : `${Math.abs(percent)}% ${direction}`}
+          <span className={`effect-${effectDirection}`}>
+            {value === 0 ? 'Neutral' :
+             `${Math.abs(value)} mg/dL ${effectDirection}`}
           </span>
         );
       }
     },
     {
-      Header: 'Blood Sugar Effect',
+      Header: 'Direction',
       accessor: row => row.level,
       Cell: ({ value }) => {
         const level = Number(value);
@@ -851,6 +895,28 @@ const CustomBloodSugarDot = useCallback((props) => {
         <div className="content-container">
           {activeView === 'chart' && (
             <div className="chart-container">
+              <div className="activity-configuration">
+                <h4>Activity Blood Sugar Impact (mg/dL)</h4>
+                <div className="activity-impact-controls">
+                  {Object.entries(activityBloodSugarEffects).map(([level, value]) => (
+                    <div key={level} className="activity-impact-control">
+                      <label>{getActivityLevelLabel(level)}:</label>
+                      <input
+                        type="range"
+                        min="-50"
+                        max="50"
+                        step="5"
+                        value={value}
+                        onChange={(e) => updateActivityEffect(level, parseInt(e.target.value))}
+                      />
+                      <span className={value > 0 ? 'positive-effect' : value < 0 ? 'negative-effect' : ''}>
+                        {value > 0 ? '+' : ''}{value} mg/dL
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               <ResponsiveContainer width="100%" height={500}>
                 <ComposedChart
                   data={combinedData}
@@ -895,13 +961,13 @@ const CustomBloodSugarDot = useCallback((props) => {
                     />
                   )}
 
-                  {/* Y-axis for activity effect */}
+                  {/* Y-axis for activity effect - now shows direct mg/dL effect */}
                   {(viewMode === 'combined' || viewMode === 'effect') && showActivityEffect && (
                     <YAxis
                       yAxisId="activityEffect"
                       orientation="right"
-                      domain={[-2, 1]}
-                      label={{ value: 'Activity Effect', angle: -90, position: 'insideRight' }}
+                      domain={[-50, 50]}
+                      label={{ value: 'Activity Effect (mg/dL)', angle: -90, position: 'insideRight' }}
                     />
                   )}
 
@@ -918,6 +984,17 @@ const CustomBloodSugarDot = useCallback((props) => {
                     />
                   )}
 
+                  {/* Zero line for activity effect axis - represents no change to BG */}
+                  {(viewMode === 'combined' || viewMode === 'effect') && showActivityEffect && (
+                    <ReferenceLine
+                      y={0}
+                      yAxisId="activityEffect"
+                      stroke="#888888"
+                      strokeWidth={1}
+                      strokeDasharray="3 3"
+                    />
+                  )}
+
                   {/* Target glucose reference line */}
                   {showActualBloodSugar && (
                     <ReferenceLine
@@ -930,32 +1007,50 @@ const CustomBloodSugarDot = useCallback((props) => {
                   )}
 
                   {/* Blood Sugar Line */}
-                  {showActualBloodSugar && (
-                    <Line
-                      yAxisId="bloodSugar"
-                      type="monotone"
-                      dataKey="bloodSugar"
-                      name="Blood Sugar"
-                      stroke="#8884d8"
-                      dot={{ r: 4 }}
-                      activeDot={{ r: 8 }}
-                      connectNulls
-                    />
-                  )}
+              {/* Blood Sugar Dots - No connecting lines */}
+{showActualBloodSugar && (
+  <>
+    {/* Actual readings as dots only */}
+    <Scatter
+      yAxisId="bloodSugar"
+      dataKey="bloodSugar"
+      name="Blood Sugar"
+      fill="#8884d8"
+      data={combinedData.filter(d => d.isActualReading)}
+      shape={(props) => {
+        const { cx, cy, payload } = props;
+        // Only render if it's an actual reading
+        if (!payload.isActualReading) return null;
 
-                  {/* Estimated Blood Sugar Line */}
-                  {showActualBloodSugar && (
-                    <Line
-                      yAxisId="bloodSugar"
-                      type="monotone"
-                      dataKey="estimatedBloodSugar"
-                      name="Estimated Blood Sugar"
-                      stroke="#8884d8"
-                      strokeDasharray="5 5"
-                      dot={{ r: 2 }}
-                      connectNulls
-                    />
-                  )}
+        // Get color from status or use default
+        const dotColor = payload.bloodSugarStatus ?
+          payload.bloodSugarStatus.color :
+          (payload.bloodSugar > targetGlucose ? '#ff8800' : '#00C851');
+
+        return (
+          <circle
+            cx={cx}
+            cy={cy}
+            r={4}
+            stroke={dotColor}
+            strokeWidth={2}
+            fill="#ffffff"
+          />
+        );
+      }}
+    />
+
+    {/* Estimated readings as simple dots */}
+    <Scatter
+      yAxisId="bloodSugar"
+      dataKey="estimatedBloodSugar"
+      name="Estimated Blood Sugar"
+      data={combinedData.filter(d => !d.isActualReading)}
+      fill="#8884d8"
+    />
+  </>
+)}
+
 
                   {/* Activity Level Bars */}
                   {(viewMode === 'combined' || viewMode === 'activities') && selectedActivityLevels.map((level, idx) => (
@@ -969,13 +1064,13 @@ const CustomBloodSugarDot = useCallback((props) => {
                     />
                   ))}
 
-                  {/* Activity Effect Area */}
+                  {/* Activity Effect Area - now shows direct mg/dL effect */}
                   {(viewMode === 'combined' || viewMode === 'effect') && showActivityEffect && (
                     <Area
                       yAxisId="activityEffect"
                       type="monotone"
                       dataKey="totalActivityEffect"
-                      name="Activity Effect"
+                      name="Activity Effect (mg/dL)"
                       fill="#82ca9d"
                       stroke="#82ca9d"
                       fillOpacity={0.3}
@@ -1017,62 +1112,33 @@ const CustomBloodSugarDot = useCallback((props) => {
                   <div className="activity-scale-item">
                     <span className="scale-color" style={{ backgroundColor: getActivityColor('2') }}></span>
                     <span className="scale-label">Vigorous Activity (Level 2)</span>
-                    <span className="scale-direction">Decreases Blood Sugar</span>
+                    <span className="scale-direction">Effect: {activityBloodSugarEffects['2']} mg/dL</span>
+                    <span className="scale-chart-position">Chart Position: Below zero line</span>
                   </div>
                   <div className="activity-scale-item">
                     <span className="scale-color" style={{ backgroundColor: getActivityColor('1') }}></span>
                     <span className="scale-label">High Activity (Level 1)</span>
-                    <span className="scale-direction">Decreases Blood Sugar</span>
+                    <span className="scale-direction">Effect: {activityBloodSugarEffects['1']} mg/dL</span>
+                    <span className="scale-chart-position">Chart Position: Below zero line</span>
                   </div>
                   <div className="activity-scale-item">
                     <span className="scale-color" style={{ backgroundColor: getActivityColor('0') }}></span>
                     <span className="scale-label">Normal Activity (Level 0)</span>
-                    <span className="scale-direction">Neutral Effect</span>
+                    <span className="scale-direction">Effect: {activityBloodSugarEffects['0']} mg/dL</span>
+                    <span className="scale-chart-position">Chart Position: At zero line</span>
                   </div>
                   <div className="activity-scale-item">
                     <span className="scale-color" style={{ backgroundColor: getActivityColor('-1') }}></span>
-                    <span className="scale-label">Low Activity (Level -1)</span>
-                    <span className="scale-direction">Increases Blood Sugar</span>
+                    <span className="scale-label">Mode 2 Activity (Level -1)</span>
+                    <span className="scale-direction">Effect: {activityBloodSugarEffects['-1']} mg/dL</span>
+                    <span className="scale-chart-position">Chart Position: Above zero line</span>
                   </div>
                   <div className="activity-scale-item">
                     <span className="scale-color" style={{ backgroundColor: getActivityColor('-2') }}></span>
-                    <span className="scale-label">Very Low Activity (Level -2)</span>
-                    <span className="scale-direction">Increases Blood Sugar</span>
+                    <span className="scale-label">Mode 1 Activity (Level -2)</span>
+                    <span className="scale-direction">Effect: {activityBloodSugarEffects['-2']} mg/dL</span>
+                    <span className="scale-chart-position">Chart Position: Above zero line</span>
                   </div>
-                </div>
-              </div>
-
-              <div className="chart-legend">
-                <h4>Activity Level Details</h4>
-                <div className="activity-levels-grid">
-                  {activityLevels.filter(level => selectedActivityLevels.includes(level)).map((level, idx) => {
-                    const coefficient = getActivityImpactCoefficient(level);
-                    // Round to nearest integer
-                    const percentEffect = Math.round((coefficient - 1) * 100);
-                    const direction = coefficient > 1 ? 'increase' : coefficient < 1 ? 'decrease' : 'neutral';
-
-                    return (
-                      <div key={`legend-${level}-${idx}`} className="activity-level-details">
-                        <div className="activity-level-header">
-                          <span
-                            className="activity-color-box"
-                            style={{ backgroundColor: getActivityColor(level) }}
-                          ></span>
-                          <span className="activity-level-name">
-                            {getActivityLevelLabel(level)}
-                          </span>
-                        </div>
-                        <div className="activity-impact">
-                          <span>Effect: {direction === 'neutral' ? 'Neutral' :
-                                          `${Math.abs(percentEffect)}% ${direction} in insulin needs`}</span>
-                          <span>Blood Sugar: {direction === 'increase' ? 'Decrease' :
-                                              direction === 'decrease' ? 'Increase' : 'No change'}</span>
-                          <span>Chart Position: {Number(level) > 0 ? 'Below zero line' :
-                                                 Number(level) < 0 ? 'Above zero line' : 'At zero line'}</span>
-                        </div>
-                      </div>
-                    );
-                  })}
                 </div>
               </div>
             </div>
