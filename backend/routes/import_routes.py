@@ -530,126 +530,87 @@ def import_blood_sugar(records, user_id):
 
 
 def import_meals(records, user_id):
-    """
-    Import meal records
-    """
-    result = {'imported': 0, 'errors': []}
+    """Import meal records"""
+    try:
+        # Add user_id to each meal record if not present
+        for record in records:
+            # Ensure user_id is set to the current user
+            record['user_id'] = user_id
 
-    for i, record in enumerate(records):
-        try:
-            # Normalize timestamp
-            timestamp = standardize_timestamp(record.get('timestamp'))
-            if not timestamp:
-                result['errors'].append(f"Record #{i + 1}: Missing or invalid timestamp")
-                continue
-
-            # Get meal type
-            meal_type = record.get('mealType', record.get('meal_type', 'normal'))
-
-            # Process food items
-            food_items = []
-            raw_food_items = record.get('foodItems', record.get('food_items', []))
-
-            if isinstance(raw_food_items, str):
-                # Try to parse a JSON string
+            # Ensure timestamps are proper datetime objects or ISO strings
+            if 'timestamp' not in record:
+                record['timestamp'] = datetime.utcnow()
+            elif isinstance(record['timestamp'], str):
                 try:
-                    raw_food_items = json.loads(raw_food_items)
-                except json.JSONDecodeError:
-                    # If not valid JSON, split by commas as simple food names
-                    food_names = [name.strip() for name in raw_food_items.split(',')]
-                    raw_food_items = [{'name': name} for name in food_names if name]
+                    # Handle Z timezone indicator in ISO format
+                    if record['timestamp'].endswith('Z'):
+                        record['timestamp'] = record['timestamp'][:-1] + '+00:00'
+                    record['timestamp'] = datetime.fromisoformat(record['timestamp'])
+                except ValueError:
+                    # If parsing fails, use current time
+                    logger.warning(f"Invalid timestamp format: {record['timestamp']}, using current time")
+                    record['timestamp'] = datetime.utcnow()
 
-            # Process each food item
-            for food_item in raw_food_items:
-                if isinstance(food_item, str):
-                    # Simple food name
-                    food_items.append({
-                        'name': food_item,
-                        'portion': {
-                            'amount': 1,
-                            'unit': 'serving',
-                            'measurement_type': 'volume'
-                        },
-                        'details': {
-                            'carbs': 0,
-                            'protein': 0,
-                            'fat': 0,
-                            'absorption_type': 'medium'
-                        }
-                    })
+            # Same for bloodSugarTimestamp if present
+            if 'bloodSugarTimestamp' in record and isinstance(record['bloodSugarTimestamp'], str):
+                try:
+                    if record['bloodSugarTimestamp'].endswith('Z'):
+                        record['bloodSugarTimestamp'] = record['bloodSugarTimestamp'][:-1] + '+00:00'
+                    record['bloodSugarTimestamp'] = datetime.fromisoformat(record['bloodSugarTimestamp'])
+                except ValueError:
+                    # If parsing fails, use the same as timestamp
+                    logger.warning(
+                        f"Invalid bloodSugarTimestamp format: {record['bloodSugarTimestamp']}, using timestamp")
+                    record['bloodSugarTimestamp'] = record.get('timestamp', datetime.utcnow())
+
+            # Set default values for required fields if missing
+            if 'suggestedInsulin' not in record:
+                record['suggestedInsulin'] = 0.0
+
+            # Initialize empty arrays if missing
+            for field in ['foodItems', 'activities']:
+                if field not in record:
+                    record[field] = []
+
+            # Ensure mealType is present
+            if 'mealType' not in record:
+                record['mealType'] = 'unknown'
+
+            # Ensure nutrition data is present
+            if 'nutrition' not in record:
+                # Calculate basic nutrition if we have carbs, protein, and fat
+                if all(key in record for key in ['carbs', 'protein', 'fat']):
+                    carbs = float(record.get('carbs', 0))
+                    protein = float(record.get('protein', 0))
+                    fat = float(record.get('fat', 0))
+                    calories = (carbs * 4) + (protein * 4) + (fat * 9)
+
+                    record['nutrition'] = {
+                        'calories': round(calories, 1),
+                        'carbs': round(carbs, 1),
+                        'protein': round(protein, 1),
+                        'fat': round(fat, 1),
+                        'absorption_factor': 1.0
+                    }
                 else:
-                    # Full food item object
-                    food_items.append({
-                        'name': food_item.get('name', 'Unknown Food'),
-                        'portion': food_item.get('portion', {
-                            'amount': 1,
-                            'unit': 'serving',
-                            'measurement_type': 'volume'
-                        }),
-                        'details': food_item.get('details', {
-                            'carbs': float(food_item.get('carbs', 0)),
-                            'protein': float(food_item.get('protein', 0)),
-                            'fat': float(food_item.get('fat', 0)),
-                            'absorption_type': food_item.get('absorption_type', 'medium')
-                        })
-                    })
+                    # Default empty nutrition
+                    record['nutrition'] = {
+                        'calories': 0,
+                        'carbs': 0,
+                        'protein': 0,
+                        'fat': 0,
+                        'absorption_factor': 1.0
+                    }
 
-            # Calculate nutrition totals
-            total_carbs = sum(float(item.get('details', {}).get('carbs', 0)) for item in food_items)
-            total_protein = sum(float(item.get('details', {}).get('protein', 0)) for item in food_items)
-            total_fat = sum(float(item.get('details', {}).get('fat', 0)) for item in food_items)
-            total_calories = (total_carbs * 4) + (total_protein * 4) + (total_fat * 9)
-
-            # Get blood sugar info if available
-            blood_sugar = None
-            blood_sugar_timestamp = None
-            if 'bloodSugar' in record or 'blood_sugar' in record:
-                blood_sugar = float(record.get('bloodSugar', record.get('blood_sugar')))
-                blood_sugar_timestamp = standardize_timestamp(
-                    record.get('bloodSugarTimestamp', record.get('blood_sugar_timestamp', timestamp))
-                )
-
-            # Create meal document
-            meal_doc = {
-                'user_id': str(user_id),
-                'timestamp': timestamp,
-                'mealType': meal_type,
-                'foodItems': food_items,
-                'nutrition': {
-                    'calories': round(total_calories, 1),
-                    'carbs': round(total_carbs, 1),
-                    'protein': round(total_protein, 1),
-                    'fat': round(total_fat, 1),
-                    'absorption_factor': 1.0  # Default
-                },
-                'activities': [],  # No activities by default for imports
-                'notes': record.get('notes', ''),
-                'imported_at': datetime.now(timezone.utc),
-                'suggestedInsulin': 0,  # Default
-                'suggestedInsulinType': 'regular_insulin'  # Default
-            }
-
-            # Add blood sugar if available
-            if blood_sugar is not None:
-                meal_doc['bloodSugar'] = blood_sugar
-                meal_doc['bloodSugarTimestamp'] = blood_sugar_timestamp
-                meal_doc['bloodSugarSource'] = 'imported'
-
-            # Add insulin info if available
-            if 'intendedInsulin' in record or 'insulin_dose' in record:
-                meal_doc['intendedInsulin'] = float(record.get('intendedInsulin', record.get('insulin_dose')))
-                meal_doc['intendedInsulinType'] = record.get('intendedInsulinType',
-                                                             record.get('insulin_type', 'regular_insulin'))
-
-            # Insert into meals collection
-            meal_result = mongo.db.meals.insert_one(meal_doc)
-            result['imported'] += 1
-
-        except Exception as e:
-            logger.error(f"Error importing meal record #{i + 1}: {str(e)}")
-            result['errors'].append(f"Record #{i + 1}: {str(e)}")
-
-    return result
+        # Insert the records into the database
+        if records:
+            result = mongo.db.meals.insert_many(records)
+            logger.info(f"Successfully imported {len(result.inserted_ids)} meal records for user {user_id}")
+            return len(result.inserted_ids)
+        return 0
+    except Exception as e:
+        logger.error(f"Error importing meals: {e}")
+        raise
 
 
 def import_activities(records, user_id):

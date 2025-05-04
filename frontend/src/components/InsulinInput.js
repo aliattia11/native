@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { useConstants } from '../contexts/ConstantsContext';
 import {
@@ -7,7 +7,7 @@ import {
   getInsulinTypesByCategory
 } from '../utils/insulinUtils';
 import styles from './InsulinInput.module.css';
-import { FaInfoCircle, FaChevronDown, FaChevronUp, FaClock } from 'react-icons/fa';
+import { FaInfoCircle, FaChevronDown, FaChevronUp, FaClock, FaFileImport, FaSync, FaHistory } from 'react-icons/fa';
 import TimeInput from './TimeInput';
 import TimeManager from '../utils/TimeManager';
 
@@ -33,6 +33,12 @@ const InsulinInput = ({
   const [detailsExpanded, setDetailsExpanded] = useState(false);
   const [insulinsByCategory, setInsulinsByCategory] = useState({});
   const [isLoadingDoses, setIsLoadingDoses] = useState(false);
+  const [showRecentDoses, setShowRecentDoses] = useState(false);
+  // New state for import functionality
+  const [importStatus, setImportStatus] = useState(null);
+
+  // Create a ref for the file input element
+  const fileInputRef = useRef(null);
 
   // Use effect to get and categorize insulin types
   useEffect(() => {
@@ -173,6 +179,113 @@ const InsulinInput = ({
     setExpanded(!expanded);
   };
 
+  // Toggle recent doses view
+  const toggleRecentDoses = () => {
+    setShowRecentDoses(prev => !prev);
+    if (!showRecentDoses) {
+      fetchRecentDoses();
+    }
+  };
+
+  // New function for handling import button click
+  const handleImportClick = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
+
+  // New function for handling file upload for import
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Check file extension
+    const fileExt = file.name.split('.').pop().toLowerCase();
+    if (fileExt !== 'csv' && fileExt !== 'json') {
+      setImportStatus({
+        type: 'error',
+        message: 'Invalid file format. Please select a CSV or JSON file.'
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+    setImportStatus({ type: 'info', message: 'Validating file...' });
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', 'insulin');
+
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('Authentication token not found');
+      }
+
+      // First validate the file
+      const validationResponse = await axios.post(
+        'http://localhost:5000/api/import/validate',
+        formData,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'multipart/form-data'
+          }
+        }
+      );
+
+      if (!validationResponse.data.valid) {
+        setImportStatus({
+          type: 'error',
+          message: 'File validation failed',
+          details: validationResponse.data.errors?.join('\n')
+        });
+        setIsSubmitting(false);
+        return;
+      }
+
+      // If validation passes, proceed with import
+      setImportStatus({ type: 'info', message: 'Importing data...' });
+
+      const importResponse = await axios.post(
+        'http://localhost:5000/api/import',
+        formData,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'multipart/form-data'
+          }
+        }
+      );
+
+      const results = importResponse.data.results;
+
+      setImportStatus({
+        type: 'success',
+        message: `Successfully imported ${results.insulin_imported || 0} insulin doses`,
+      });
+
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+
+      // Refresh the recent doses list and constants
+      await fetchRecentDoses();
+      await refreshConstants();
+
+    } catch (error) {
+      console.error('Error importing data:', error);
+      setImportStatus({
+        type: 'error',
+        message: 'Failed to import data',
+        details: error.response?.data?.error || error.message || 'Unknown error occurred'
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     if (e) e.preventDefault();
 
@@ -292,7 +405,60 @@ const InsulinInput = ({
 
   return (
     <div className={`${styles.insulinInputContainer} ${isStandalone ? styles.standalone : ''} ${className}`}>
-      {isStandalone && <h3 className={styles.title}>Record Insulin</h3>}
+      {isStandalone && (
+        <div className={styles.insulinHeader}>
+          <h3 className={styles.title}>Record Insulin</h3>
+          <div className={styles.actionButtons}>
+            <button
+              type="button"
+              className={`${styles.iconButton} ${styles.refreshButton}`}
+              onClick={fetchRecentDoses}
+              title="Refresh insulin doses"
+              disabled={isSubmitting}
+            >
+              <FaSync className={isLoadingDoses ? styles.spin : ""} />
+            </button>
+            <button
+              type="button"
+              className={`${styles.iconButton} ${styles.historyButton}`}
+              onClick={toggleRecentDoses}
+              title={showRecentDoses ? "Hide recent doses" : "Show recent doses"}
+            >
+              <FaHistory />
+            </button>
+            <button
+              type="button"
+              className={`${styles.iconButton} ${styles.importButton}`}
+              onClick={handleImportClick}
+              title="Import insulin doses"
+              disabled={isSubmitting}
+            >
+              <FaFileImport />
+            </button>
+            {/* Hidden file input triggered by the import button */}
+            <input
+              type="file"
+              ref={fileInputRef}
+              style={{ display: 'none' }}
+              accept=".csv,.json"
+              onChange={handleFileUpload}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Import Status Message */}
+      {importStatus && (
+        <div className={`${styles.message} ${styles[importStatus.type]}`}>
+          <FaInfoCircle className={styles.messageIcon} />
+          <div className={styles.messageContent}>
+            <h4>{importStatus.message}</h4>
+            {importStatus.details && (
+              <pre className={styles.details}>{importStatus.details}</pre>
+            )}
+          </div>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit}>
         {/* Display suggested insulin if provided */}
@@ -480,7 +646,7 @@ const InsulinInput = ({
       </form>
 
       {/* Show recent doses only in standalone mode */}
-      {isStandalone && (
+      {isStandalone && showRecentDoses && (
         <div className={styles.recentDoses}>
           <h4>Recent Insulin Doses</h4>
           {isLoadingDoses ? (
@@ -511,6 +677,11 @@ const InsulinInput = ({
           ) : (
             <p className={styles.noDoses}>No recent insulin doses found</p>
           )}
+          <div className={styles.dosesFooter}>
+            <span className={styles.importNote}>
+              Need to import multiple doses? Click the <FaFileImport className={styles.inlineIcon} /> import button above.
+            </span>
+          </div>
         </div>
       )}
     </div>

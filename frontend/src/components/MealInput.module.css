@@ -814,3 +814,233 @@
     background: #2d3748;
   }
 }
+
+/* Add these styles to your existing MealInput.module.css */
+
+.mealHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.actionButtons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.iconButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background-color: #f5f5f5;
+  border: 1px solid #ddd;
+  border-radius: 50%;
+  color: #555;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.iconButton:hover {
+  background-color: #e0e0e0;
+  color: #333;
+}
+
+.iconButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.refreshButton:hover {
+  color: #2196F3;
+}
+
+.historyButton:hover {
+  color: #9C27B0;
+}
+
+.importButton:hover {
+  color: #4CAF50;
+}
+
+.spin {
+  animation: spin 1s infinite linear;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.message {
+  margin: 1rem 0;
+  padding: 0.75rem;
+  border-radius: 4px;
+  display: flex;
+  align-items: flex-start;
+}
+
+.messageIcon {
+  margin-right: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+.messageContent {
+  flex: 1;
+}
+
+.messageContent h4 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+}
+
+.details {
+  font-family: monospace;
+  font-size: 0.85rem;
+  background-color: rgba(0, 0, 0, 0.05);
+  padding: 0.5rem;
+  border-radius: 3px;
+  margin: 0.5rem 0 0 0;
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+
+.info {
+  background-color: #e3f2fd;
+  border: 1px solid #bbdefb;
+  color: #0d47a1;
+}
+
+.success {
+  background-color: #e8f5e9;
+  border: 1px solid #c8e6c9;
+  color: #1b5e20;
+}
+
+.error {
+  background-color: #ffebee;
+  border: 1px solid #ffcdd2;
+  color: #b71c1c;
+}
+
+.recentMeals {
+  margin-bottom: 2rem;
+  background-color: #f9f9f9;
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.recentMeals h3 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  font-weight: 600;
+  color: #444;
+}
+
+.mealsList {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.mealItem {
+  background-color: #ffffff;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  padding: 1rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.mealHeader {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.mealType {
+  font-weight: 600;
+  color: #333;
+}
+
+.mealTimestamp {
+  font-size: 0.85rem;
+  color: #666;
+}
+
+.mealDetails {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.foodItems {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.foodItem {
+  background-color: #f0f0f0;
+  border-radius: 12px;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.85rem;
+  color: #444;
+}
+
+.moreFoods {
+  font-size: 0.85rem;
+  color: #888;
+  font-style: italic;
+}
+
+.noFoods {
+  font-size: 0.85rem;
+  color: #888;
+  font-style: italic;
+}
+
+.mealNutrition {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.9rem;
+  color: #555;
+}
+
+.mealBloodSugar, .mealInsulin {
+  font-size: 0.9rem;
+  color: #444;
+}
+
+.loadingMeals {
+  text-align: center;
+  padding: 1rem;
+  color: #666;
+}
+
+.noMeals {
+  text-align: center;
+  padding: 1.5rem 0;
+  color: #888;
+  font-style: italic;
+}
+
+.mealsFooter {
+  margin-top: 1rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #eee;
+  font-size: 0.85rem;
+  color: #666;
+}
+
+.importNote {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.inlineIcon {
+  font-size: 0.9em;
+}

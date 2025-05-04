@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useConstants } from '../contexts/ConstantsContext';
 import axios from 'axios';
-import { FaInfoCircle, FaChevronDown, FaChevronUp } from 'react-icons/fa';
+import { FaInfoCircle, FaChevronDown, FaChevronUp, FaFileImport, FaSync, FaHistory } from 'react-icons/fa';
 import FoodSection from './FoodSection';
 import {
   calculateTotalNutrients,
@@ -41,6 +41,14 @@ const MealInput = () => {
   const [expandedCard, setExpandedCard] = useState(null);
   const [bloodSugarSource, setBloodSugarSource] = useState('direct');
   const [userTimeZone, setUserTimeZone] = useState('');
+  // New state for import functionality
+  const [importStatus, setImportStatus] = useState(null);
+  const [showRecentMeals, setShowRecentMeals] = useState(false);
+  const [recentMeals, setRecentMeals] = useState([]);
+  const [isLoadingMeals, setIsLoadingMeals] = useState(false);
+
+  // Create a ref for the file input element
+  const fileInputRef = useRef(null);
 
   // Get user's time zone on component mount
   useEffect(() => {
@@ -128,6 +136,160 @@ const MealInput = () => {
       window.removeEventListener('patientConstantsUpdated', handleConstantsUpdate);
     };
   }, [refreshConstants]);
+
+  // Fetch recent meals
+  const fetchRecentMeals = useCallback(async () => {
+    try {
+      setIsLoadingMeals(true);
+      const token = localStorage.getItem('token');
+      if (!token) {
+        console.warn('No authentication token found');
+        return;
+      }
+
+      const response = await axios.get(
+        'http://localhost:5000/api/meals',
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          params: {
+            limit: 5
+          }
+        }
+      );
+
+      if (response.data && response.data.meals) {
+        setRecentMeals(response.data.meals);
+      }
+    } catch (error) {
+      console.error('Error fetching recent meals:', error);
+      setMessage('Failed to load recent meals');
+    } finally {
+      setIsLoadingMeals(false);
+    }
+  }, []);
+
+  // Toggle recent meals view
+  const toggleRecentMeals = () => {
+    setShowRecentMeals(prev => !prev);
+    if (!showRecentMeals) {
+      fetchRecentMeals();
+    }
+  };
+
+  // Handle import button click
+  const handleImportClick = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
+
+  // Handle file upload for import
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Check file extension
+    const fileExt = file.name.split('.').pop().toLowerCase();
+    if (fileExt !== 'csv' && fileExt !== 'json') {
+      setImportStatus({
+        type: 'error',
+        message: 'Invalid file format. Please select a CSV or JSON file.'
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+    setImportStatus({ type: 'info', message: 'Validating file...' });
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', 'meals');
+
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('Authentication token not found');
+      }
+
+      // First validate the file
+      const validationResponse = await axios.post(
+        'http://localhost:5000/api/import/validate',
+        formData,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'multipart/form-data'
+          }
+        }
+      );
+
+      if (!validationResponse.data.valid) {
+        setImportStatus({
+          type: 'error',
+          message: 'File validation failed',
+          details: validationResponse.data.errors?.join('\n')
+        });
+        setIsSubmitting(false);
+        return;
+      }
+
+      // If validation passes, proceed with import
+      setImportStatus({ type: 'info', message: 'Importing data...' });
+
+      const importResponse = await axios.post(
+        'http://localhost:5000/api/import',
+        formData,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'multipart/form-data'
+          }
+        }
+      );
+
+      const results = importResponse.data.results;
+
+      setImportStatus({
+        type: 'success',
+        message: `Successfully imported ${results.meals_imported || 0} meals`,
+      });
+
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+
+      // Refresh the recent meals list and constants
+      await fetchRecentMeals();
+      await refreshConstants();
+
+      // Reset form states
+      setMealType('');
+      setSelectedFoods([]);
+      setActivitiesFromRecording([]);
+      setBloodSugar('');
+      setSuggestedInsulin('');
+      setInsulinBreakdown(null);
+      setInsulinData({
+        type: '',
+        dose: '',
+        notes: ''
+      });
+      setSuggestedInsulinType('');
+
+    } catch (error) {
+      console.error('Error importing data:', error);
+      setImportStatus({
+        type: 'error',
+        message: 'Failed to import data',
+        details: error.response?.data?.error || error.message || 'Unknown error occurred'
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   // Prevent accidental form submissions
   const preventFormSubmission = (e) => {
@@ -337,6 +499,9 @@ const MealInput = () => {
         await refreshConstants();
       }
 
+      // Refresh recent meals
+      await fetchRecentMeals();
+
     } catch (error) {
       console.error('Error submitting meal:', error);
       const errorMessage = error.response?.data?.error || error.message;
@@ -356,7 +521,45 @@ const MealInput = () => {
 
   return (
     <div className={styles.container}>
-      <h2 className={styles.title}>Log Your Meal</h2>
+      <div className={styles.mealHeader}>
+        <h2 className={styles.title}>Log Your Meal</h2>
+        <div className={styles.actionButtons}>
+          <button
+            type="button"
+            className={`${styles.iconButton} ${styles.refreshButton}`}
+            onClick={fetchRecentMeals}
+            title="Refresh meals"
+            disabled={isSubmitting}
+          >
+            <FaSync className={isLoadingMeals ? styles.spin : ""} />
+          </button>
+          <button
+            type="button"
+            className={`${styles.iconButton} ${styles.historyButton}`}
+            onClick={toggleRecentMeals}
+            title={showRecentMeals ? "Hide recent meals" : "Show recent meals"}
+          >
+            <FaHistory />
+          </button>
+          <button
+            type="button"
+            className={`${styles.iconButton} ${styles.importButton}`}
+            onClick={handleImportClick}
+            title="Import meals"
+            disabled={isSubmitting}
+          >
+            <FaFileImport />
+          </button>
+          {/* Hidden file input triggered by the import button */}
+          <input
+            type="file"
+            ref={fileInputRef}
+            style={{ display: 'none' }}
+            accept=".csv,.json"
+            onChange={handleFileUpload}
+          />
+        </div>
+      </div>
 
       {/* Add timezone info display */}
       <div className="timezone-info">
@@ -364,7 +567,86 @@ const MealInput = () => {
         <span className="timezone-note"> (all times stored in UTC but displayed in your local timezone)</span>
       </div>
 
-      <form className={styles.form} onSubmit={handleSubmit} onKeyDown={preventFormSubmission}>
+      {/* Import Status Message */}
+      {importStatus && (
+        <div className={`${styles.message} ${styles[importStatus.type]}`}>
+          <FaInfoCircle className={styles.messageIcon} />
+          <div className={styles.messageContent}>
+            <h4>{importStatus.message}</h4>
+            {importStatus.details && (
+              <pre className={styles.details}>{importStatus.details}</pre>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Recent Meals Section */}
+      {showRecentMeals && (
+        <div className={styles.recentMeals}>
+          <h3>Recent Meals</h3>
+          {isLoadingMeals ? (
+            <div className={styles.loadingMeals}>Loading recent meals...</div>
+          ) : recentMeals.length > 0 ? (
+            <div className={styles.mealsList}>
+              {recentMeals.map((meal) => (
+                <div key={meal.id} className={styles.mealItem}>
+                  <div className={styles.mealHeader}>
+                    <span className={styles.mealType}>
+                      {meal.mealType.charAt(0).toUpperCase() + meal.mealType.slice(1)}
+                    </span>
+                    <span className={styles.mealTimestamp}>
+                      {new Date(meal.timestamp).toLocaleString()}
+                    </span>
+                  </div>
+                  <div className={styles.mealDetails}>
+                    <div className={styles.foodItems}>
+                      {meal.foodItems.length > 0 ? (
+                        <div>
+                          {meal.foodItems.slice(0, 3).map((food, idx) => (
+                            <span key={idx} className={styles.foodItem}>
+                              {food.name}
+                            </span>
+                          ))}
+                          {meal.foodItems.length > 3 && (
+                            <span className={styles.moreFoods}>
+                              +{meal.foodItems.length - 3} more
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className={styles.noFoods}>No food items</span>
+                      )}
+                    </div>
+                    <div className={styles.mealNutrition}>
+                      <span>{meal.nutrition?.carbs || 0}g carbs</span>
+                      <span>{meal.nutrition?.protein || 0}g protein</span>
+                      <span>{meal.nutrition?.fat || 0}g fat</span>
+                    </div>
+                    {meal.bloodSugar && (
+                      <div className={styles.mealBloodSugar}>
+                        Blood sugar: {meal.bloodSugar} mg/dL
+                      </div>
+                    )}
+                    {meal.intendedInsulin && (
+                      <div className={styles.mealInsulin}>
+                        Insulin: {meal.intendedInsulin} units {meal.intendedInsulinType?.replace(/_/g, ' ')}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className={styles.noMeals}>No recent meals found</p>
+          )}
+          <div className={styles.mealsFooter}>
+            <span className={styles.importNote}>
+              Need to import multiple meals? Click the <FaFileImport className={styles.inlineIcon} /> import button above.
+            </span>
+          </div>
+        </div>
+      )}
+            <form className={styles.form} onSubmit={handleSubmit} onKeyDown={preventFormSubmission}>
         <div className={styles.formField}>
           <label htmlFor="mealType">Meal Type</label>
           <select
@@ -541,45 +823,45 @@ const MealInput = () => {
 
                 {expandedCard === 'adjustment' && (
                   <div className={styles.expandedContent}>
-  <ul>
-    <li>Absorption rate: <span className={styles.valueHighlight}>
-      {((insulinBreakdown.absorptionFactor - 1) * 100).toFixed(1)}%
-      {insulinBreakdown.absorptionFactor > 1
-        ? ` (+${((insulinBreakdown.absorptionFactor - 1) * 100).toFixed(1)}% increase)`
-        : insulinBreakdown.absorptionFactor < 1
-          ? ` (${((insulinBreakdown.absorptionFactor - 1) * 100).toFixed(1)}% decrease)`
-          : ' (no adjustment)'}
-    </span></li>
-    <li>Meal timing: <span className={styles.valueHighlight}>
-      {((insulinBreakdown.mealTimingFactor - 1) * 100).toFixed(1)}%
-      {insulinBreakdown.mealTimingFactor > 1
-        ? ` (+${((insulinBreakdown.mealTimingFactor - 1) * 100).toFixed(1)}% increase)`
-        : insulinBreakdown.mealTimingFactor < 1
-          ? ` (${((insulinBreakdown.mealTimingFactor - 1) * 100).toFixed(1)}% decrease)`
-          : ' (no adjustment)'}
-    </span></li>
-    {/* Removed the Time of day factor */}
-    <li>Activity impact: <span className={styles.valueHighlight}>
-      {((insulinBreakdown.activityImpact - 1) * 100).toFixed(1)}%
-      {insulinBreakdown.activityImpact > 1
-        ? ` (+${((insulinBreakdown.activityImpact - 1) * 100).toFixed(1)}% increase)`
-        : insulinBreakdown.activityImpact < 1
-          ? ` (${((insulinBreakdown.activityImpact - 1) * 100).toFixed(1)}% decrease)`
-          : ' (no adjustment)'}
-    </span></li>
-    <li className={styles.summaryLine}>
-      Adjusted Insulin: <span className={styles.valueHighlight}>
-        {insulinBreakdown.adjustedInsulin.toFixed(1)}
-      </span> units
-      <div className={styles.formulaExplanation}>
-        <small>
-          (Base insulin × Absorption × Meal timing × Activity factor)
-          {/* Removed Time of day from the formula explanation */}
-        </small>
-      </div>
-    </li>
-  </ul>
-</div>
+                    <ul>
+                      <li>Absorption rate: <span className={styles.valueHighlight}>
+                      {((insulinBreakdown.absorptionFactor - 1) * 100).toFixed(1)}%
+                      {insulinBreakdown.absorptionFactor > 1
+                        ? ` (+${((insulinBreakdown.absorptionFactor - 1) * 100).toFixed(1)}% increase)`
+                        : insulinBreakdown.absorptionFactor < 1
+                          ? ` (${((insulinBreakdown.absorptionFactor - 1) * 100).toFixed(1)}% decrease)`
+                          : ' (no adjustment)'}
+                    </span></li>
+                      <li>Meal timing: <span className={styles.valueHighlight}>
+                      {((insulinBreakdown.mealTimingFactor - 1) * 100).toFixed(1)}%
+                      {insulinBreakdown.mealTimingFactor > 1
+                        ? ` (+${((insulinBreakdown.mealTimingFactor - 1) * 100).toFixed(1)}% increase)`
+                        : insulinBreakdown.mealTimingFactor < 1
+                          ? ` (${((insulinBreakdown.mealTimingFactor - 1) * 100).toFixed(1)}% decrease)`
+                          : ' (no adjustment)'}
+                    </span></li>
+                      {/* Removed the Time of day factor */}
+                      <li>Activity impact: <span className={styles.valueHighlight}>
+                      {((insulinBreakdown.activityImpact - 1) * 100).toFixed(1)}%
+                      {insulinBreakdown.activityImpact > 1
+                        ? ` (+${((insulinBreakdown.activityImpact - 1) * 100).toFixed(1)}% increase)`
+                        : insulinBreakdown.activityImpact < 1
+                          ? ` (${((insulinBreakdown.activityImpact - 1) * 100).toFixed(1)}% decrease)`
+                          : ' (no adjustment)'}
+                    </span></li>
+                      <li className={styles.summaryLine}>
+                        Adjusted Insulin: <span className={styles.valueHighlight}>
+                      {insulinBreakdown.adjustedInsulin.toFixed(1)}
+                    </span> units
+                        <div className={styles.formulaExplanation}>
+                          <small>
+                            (Base insulin × Absorption × Meal timing × Activity factor)
+                            {/* Removed Time of day from the formula explanation */}
+                          </small>
+                        </div>
+                      </li>
+                    </ul>
+                  </div>
                 )}
               </div>
 
@@ -783,7 +1065,7 @@ const MealInput = () => {
           </div>
         )}
 
-            <button
+        <button
           className={styles.submitButton}
           type="submit"
           disabled={loading || !patientConstants || isSubmitting}

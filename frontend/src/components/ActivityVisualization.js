@@ -120,38 +120,36 @@ const direction = activityLevel_num > 0 ? 'decrease' :
 
   // Calculate activity effect at a given time point
   const calculateActivityEffect = useCallback((hoursSinceActivity, duration, activityLevel) => {
-    // Get parameters for this activity level
-    const params = getActivityParameters(activityLevel);
+  // Get parameters for this activity level
+  const params = getActivityParameters(activityLevel);
 
-    // Early return if outside the duration window
-    const totalEffectHours = params.totalDurationHours + (duration || 1); // Add activity duration to effect duration
-    if (hoursSinceActivity < 0 || hoursSinceActivity > totalEffectHours) {
-      return 0;
-    }
+  // Early return if outside the duration window
+  const totalEffectHours = params.totalDurationHours + (duration || 1);
+  if (hoursSinceActivity < 0 || hoursSinceActivity > totalEffectHours) {
+    return 0;
+  }
 
-    let effectStrength = 0;
+  // Calculate effect strength with a clear physiological model
+  let effectStrength = 0;
 
-    // Calculate effect strength based on time elapsed
-    if (hoursSinceActivity <= duration) {
-      // Full effect during activity
-      effectStrength = params.strength;
-    } else {
-      // Tapering effect after activity ends
-      const timeAfterActivity = hoursSinceActivity - duration;
-      const totalAfterEffectTime = totalEffectHours - duration;
+  if (hoursSinceActivity <= duration) {
+    // Full effect during activity
+    effectStrength = params.strength;
+  } else {
+    // Exponential decay after activity ends (more physiologically accurate)
+    const timeAfterActivity = hoursSinceActivity - duration;
+    const halfLife = totalEffectHours / 3; // Effect half-life
+    effectStrength = params.strength * Math.exp(-Math.log(2) * timeAfterActivity / halfLife);
+  }
 
-      // Apply decay curve to effect strength
-      effectStrength = params.strength * Math.exp(-2 * timeAfterActivity / totalAfterEffectTime);
-    }
+  // Clear direction based on activity level
+  // Positive activity levels (1,2) -> negative effect (lowers blood sugar)
+  // Negative activity levels (-1,-2) -> positive effect (raises blood sugar)
+  const effect = params.direction === 'decrease' ? -effectStrength :
+                params.direction === 'increase' ? effectStrength : 0;
 
-
-    // Convert effect strength to blood sugar impact
-    // For coefficient > 1, positive effect (increases insulin need, decreases blood sugar)
-    // For coefficient < 1, negative effect (decreases insulin need, increases blood sugar)
-const effect = params.direction === 'decrease' ? -effectStrength :
-              params.direction === 'increase' ? effectStrength : 0;
-    return effect;
-  }, [getActivityParameters]);
+  return effect;
+}, [getActivityParameters]);
 
   // Helper function to convert activity level to bidirectional bar value
   // Inverts the values: high activity (1,2) becomes negative, low activity (-1,-2) becomes positive
@@ -163,7 +161,7 @@ const effect = params.direction === 'decrease' ? -effectStrength :
   }, []);
 
   // Generate combined data for timeline visualization
-  const generateCombinedData = useCallback((activityData, bloodGlucoseData) => {
+const generateCombinedData = useCallback((activityData, bloodGlucoseData) => {
   try {
     // Find the earliest and latest timestamps
     const allTimestamps = [
@@ -175,76 +173,229 @@ const effect = params.direction === 'decrease' ? -effectStrength :
       return [];
     }
 
+    // Define physiological constants for better modeling
+    const MIN_SAFE_BLOOD_GLUCOSE = 70; // Minimum safe blood glucose level (mg/dL)
+    const ACTIVITY_IMPACT_FACTOR = 35; // More realistic impact factor (was 50)
+    const MAX_REASONABLE_BG_CHANGE = 40; // Maximum reasonable change in 15 minutes (mg/dL)
+
     const minTime = Math.min(...allTimestamps);
     let maxTime = Math.max(...allTimestamps);
 
-    // If including future effects, extend the timeline by the specified number of hours
+    // If including future effects, extend the timeline
     if (includeFutureEffect) {
       const futureTime = TimeManager.getFutureProjectionTime(futureHours);
       maxTime = Math.max(maxTime, futureTime);
     }
 
-    // Generate timeline with 15-minute intervals
+    // Create maps for quick lookups
+    const actualReadingsMap = new Map();
+    const estimatedReadingsMap = new Map();
+
+    // Separate actual and estimated readings into maps for efficient lookups
+    bloodGlucoseData.forEach(reading => {
+      if (reading.isActualReading) {
+        actualReadingsMap.set(reading.readingTime, reading);
+      } else if (reading.isInterpolated || reading.isEstimated) {
+        estimatedReadingsMap.set(reading.readingTime, reading);
+      }
+    });
+
+    // Create a timeline using 15-minute intervals
     const timelineData = [];
     let currentTime = minTime;
     const interval = 15 * 60 * 1000; // 15 minutes in milliseconds
 
-    // First, create a map of all exact blood sugar readings for quick lookup
-    const exactBloodSugarMap = new Map();
-    bloodGlucoseData.forEach(reading => {
-      if (reading.isActualReading) {
-        exactBloodSugarMap.set(reading.readingTime, reading);
-      }
-    });
+    // Get the ordered readings for better interpolation
+    const orderedReadings = [...bloodGlucoseData]
+      .sort((a, b) => a.readingTime - b.readingTime);
 
-    // Track which readings we've already included
-    const includedReadings = new Set();
+    // Helper function to find nearby readings
+    const findNearbyReadings = (timestamp) => {
+      let before = null;
+      let after = null;
 
-    while (currentTime <= maxTime) {
-      const timePoint = {
-        timestamp: currentTime,
-        formattedTime: TimeManager.formatDate(currentTime, TimeManager.formats.DATETIME_DISPLAY),
-        activities: {},
-        activityEffects: {},
-        totalActivityEffect: 0,
-        // Default to not being an actual reading
-        isActualReading: false,
-        dataType: 'estimated'
-      };
-
-      // Check if there's an exact blood sugar reading at this time
-      const exactBSReading = exactBloodSugarMap.get(currentTime);
-      if (exactBSReading) {
-        timePoint.bloodSugar = exactBSReading.bloodSugar;
-        timePoint.bloodSugarStatus = exactBSReading.status;
-        timePoint.isActualReading = true;
-        timePoint.dataType = 'actual';
-        includedReadings.add(currentTime);
-      } else {
-        // If no exact match, look for the closest reading within the interval window
-        const searchTime = currentTime;
-        const closestBloodSugar = bloodGlucoseData.find(bs =>
-          !includedReadings.has(bs.readingTime) &&
-          Math.abs(bs.readingTime - searchTime) < 15 * 60 * 1000 // Within 15 minutes
-        );
-
-        if (closestBloodSugar) {
-          timePoint.bloodSugar = closestBloodSugar.bloodSugar;
-          timePoint.bloodSugarStatus = closestBloodSugar.status;
-          timePoint.readingTime = closestBloodSugar.readingTime; // Keep original reading time
-          timePoint.isActualReading = closestBloodSugar.isActualReading;
-          timePoint.dataType = closestBloodSugar.dataType || (closestBloodSugar.isActualReading ? 'actual' : 'estimated');
-          timePoint.isInterpolated = closestBloodSugar.isInterpolated;
-          timePoint.isEstimated = closestBloodSugar.isEstimated;
-          includedReadings.add(closestBloodSugar.readingTime);
+      // Find closest reading before timestamp
+      for (let i = orderedReadings.length - 1; i >= 0; i--) {
+        if (orderedReadings[i].readingTime <= timestamp) {
+          before = orderedReadings[i];
+          break;
         }
       }
 
-      // Calculate activities and effects at this time
-      const thisMoment = currentTime;
+      // Find closest reading after timestamp
+      for (let i = 0; i < orderedReadings.length; i++) {
+        if (orderedReadings[i].readingTime > timestamp) {
+          after = orderedReadings[i];
+          break;
+        }
+      }
+
+      return { before, after };
+    };
+
+    // Helper function to determine blood sugar at a given time
+    const getBloodSugarAtTime = (timestamp) => {
+      // First check if we have an exact actual reading at this time
+      if (actualReadingsMap.has(timestamp)) {
+        return actualReadingsMap.get(timestamp);
+      }
+
+      // Then check if we have an estimated reading from the context
+      if (estimatedReadingsMap.has(timestamp)) {
+        return estimatedReadingsMap.get(timestamp);
+      }
+
+      // Find closest actual readings within 15 minutes
+      const closestActual = [...actualReadingsMap.entries()]
+        .filter(([time, _]) => Math.abs(time - timestamp) < 15 * 60 * 1000)
+        .sort(([timeA, _a], [timeB, _b]) => Math.abs(timeA - timestamp) - Math.abs(timeB - timestamp))[0];
+
+      if (closestActual) {
+        return closestActual[1];
+      }
+
+      // Find closest estimated reading within 15 minutes
+      const closestEstimated = [...estimatedReadingsMap.entries()]
+        .filter(([time, _]) => Math.abs(time - timestamp) < 15 * 60 * 1000)
+        .sort(([timeA, _a], [timeB, _b]) => Math.abs(timeA - timestamp) - Math.abs(timeB - timestamp))[0];
+
+      if (closestEstimated) {
+        return closestEstimated[1];
+      }
+
+      // If no close readings found, interpolate between available readings
+      const { before, after } = findNearbyReadings(timestamp);
+
+      if (before && after) {
+        // Interpolate between known readings
+        const timeRange = after.readingTime - before.readingTime;
+        const timeElapsed = timestamp - before.readingTime;
+        const ratio = timeRange > 0 ? timeElapsed / timeRange : 0;
+
+        const interpolatedValue = Number(
+          (before.bloodSugar + ratio * (after.bloodSugar - before.bloodSugar)).toFixed(2)
+        );
+
+        return {
+          readingTime: timestamp,
+          bloodSugar: interpolatedValue,
+          isActualReading: false,
+          isInterpolated: true,
+          isEstimated: true,
+          dataType: 'estimated',
+          status: getBloodSugarStatus(interpolatedValue, targetGlucose)
+        };
+      } else if (before) {
+        // Gradual return to target after last reading
+        const hoursElapsed = (timestamp - before.readingTime) / (60 * 60 * 1000);
+        const stabilizationHours = 2; // Hours to stabilize to target
+
+        if (hoursElapsed <= stabilizationHours) {
+          const ratio = hoursElapsed / stabilizationHours;
+          const stabilizedValue = Number(
+            (before.bloodSugar + ratio * (targetGlucose - before.bloodSugar)).toFixed(2)
+          );
+
+          return {
+            readingTime: timestamp,
+            bloodSugar: stabilizedValue,
+            isActualReading: false,
+            isInterpolated: true,
+            isEstimated: true,
+            dataType: 'estimated',
+            status: getBloodSugarStatus(stabilizedValue, targetGlucose)
+          };
+        } else {
+          // Beyond stabilization time, use target glucose
+          return {
+            readingTime: timestamp,
+            bloodSugar: targetGlucose,
+            isActualReading: false,
+            isInterpolated: true,
+            isEstimated: false,
+            dataType: 'target',
+            status: getBloodSugarStatus(targetGlucose, targetGlucose)
+          };
+        }
+      } else if (after) {
+        // Start from target, moving toward the first reading
+        const hoursUntil = (after.readingTime - timestamp) / (60 * 60 * 1000);
+        const approachHours = 2; // Hours to approach from target
+
+        if (hoursUntil <= approachHours) {
+          const ratio = (approachHours - hoursUntil) / approachHours;
+          const approachedValue = Number(
+            (targetGlucose + ratio * (after.bloodSugar - targetGlucose)).toFixed(2)
+          );
+
+          return {
+            readingTime: timestamp,
+            bloodSugar: approachedValue,
+            isActualReading: false,
+            isInterpolated: true,
+            isEstimated: true,
+            dataType: 'estimated',
+            status: getBloodSugarStatus(approachedValue, targetGlucose)
+          };
+        } else {
+          // Beyond approach window, use target glucose
+          return {
+            readingTime: timestamp,
+            bloodSugar: targetGlucose,
+            isActualReading: false,
+            isInterpolated: true,
+            isEstimated: false,
+            dataType: 'target',
+            status: getBloodSugarStatus(targetGlucose, targetGlucose)
+          };
+        }
+      } else {
+        // No readings, return target glucose
+        return {
+          readingTime: timestamp,
+          bloodSugar: targetGlucose,
+          isActualReading: false,
+          isInterpolated: false,
+          isEstimated: false,
+          dataType: 'target',
+          status: getBloodSugarStatus(targetGlucose, targetGlucose)
+        };
+      }
+    };
+
+    // Set to track which readings we've included
+    const includedReadings = new Set();
+
+    // Generate the timeline
+    while (currentTime <= maxTime) {
+      // Get blood sugar data for this time point
+      const bsData = getBloodSugarAtTime(currentTime);
+
+      const timePoint = {
+        timestamp: currentTime,
+        formattedTime: TimeManager.formatDate(currentTime, TimeManager.formats.DATETIME_DISPLAY),
+        readingTime: bsData.readingTime,
+        formattedReadingTime: TimeManager.formatDate(bsData.readingTime || currentTime, TimeManager.formats.DATETIME_DISPLAY),
+        bloodSugar: bsData.bloodSugar,
+        bloodSugarStatus: bsData.status,
+        isActualReading: bsData.isActualReading || false,
+        dataType: bsData.dataType || 'estimated',
+        isInterpolated: bsData.isInterpolated || false,
+        isEstimated: bsData.isEstimated || false,
+        originalBloodSugar: bsData.bloodSugar, // Store original value before any modifications
+        activities: {},
+        activityEffects: {},
+        totalActivityEffect: 0
+      };
+
+      if (bsData.isActualReading) {
+        includedReadings.add(bsData.readingTime);
+      }
+
+      // Calculate activity effects at this time
       activityData.forEach(activity => {
         // Record ongoing activities at this time
-        if (activity.startTime <= thisMoment && activity.endTime >= thisMoment) {
+        if (activity.startTime <= currentTime && activity.endTime >= currentTime) {
           const activityKey = `level_${activity.level}`;
           const activityBarValue = getActivityBarValue(activity.level);
           timePoint.activities[activityKey] = activityBarValue;
@@ -262,10 +413,10 @@ const effect = params.direction === 'decrease' ? -effectStrength :
           });
         }
 
-        // Calculate expected effect from each activity at current time
+        // Calculate effect from each activity
         const activityStartTime = activity.startTime;
         if (activityStartTime) {
-          const hoursSinceActivityStart = (thisMoment - activityStartTime) / (60 * 60 * 1000);
+          const hoursSinceActivityStart = (currentTime - activityStartTime) / (60 * 60 * 1000);
           const durationHours = activity.endTime && activity.startTime ?
                            (activity.endTime - activity.startTime) / (60 * 60 * 1000) : 1;
 
@@ -280,73 +431,78 @@ const effect = params.direction === 'decrease' ? -effectStrength :
         }
       });
 
-      // Add simulated blood sugar effect if we have an activity effect
+      // Apply activity effect to blood sugar if present and point is not an actual reading
       if (timePoint.totalActivityEffect !== 0) {
-        // *** FIX: Use existing blood sugar as base when available, or target glucose when not ***
-        const baseValue = timePoint.isActualReading ?
-                          timePoint.bloodSugar : // Use actual reading value if it exists
-                          (timePoint.bloodSugar || targetGlucose || 120); // Otherwise use interpolated value or target
+        // Calculate activity impact with more reasonable factor
+        const activityImpact = ACTIVITY_IMPACT_FACTOR * timePoint.totalActivityEffect;
 
-        // *** FIX: We need to negate the effect because negative effects increase blood sugar ***
-        const activityImpact = 50 * timePoint.totalActivityEffect; // Note the negative sign for correct direction
+        // Store the estimated blood sugar before activity effect
+        timePoint.estimatedBloodSugar = timePoint.bloodSugar;
 
-        // Always calculate the estimated impact
-        timePoint.estimatedBloodSugar = baseValue + activityImpact;
+        // Store the raw activity impact in mg/dL for the tooltip
+        timePoint.activityImpactMgdL = Number(activityImpact.toFixed(2));
 
-        // *** FIX: Apply to bloodSugar for all non-actual readings (not just when bloodSugar is undefined) ***
+        // Only modify non-actual readings
         if (!timePoint.isActualReading) {
-          timePoint.bloodSugar = timePoint.estimatedBloodSugar;
-          timePoint.dataType = 'estimated';
-          timePoint.isInterpolated = true;
-          timePoint.isEstimated = true;
-          // Update the status based on the new value
-          if (timePoint.bloodSugar !== undefined) {
-            timePoint.bloodSugarStatus = getBloodSugarStatus(timePoint.bloodSugar, targetGlucose);
+          // Apply the activity effect with physiological limits
+          const potentialValue = timePoint.bloodSugar + activityImpact;
+
+          // Ensure value doesn't go below safe minimum and round to 2 decimal places
+          timePoint.bloodSugar = Number(Math.max(MIN_SAFE_BLOOD_GLUCOSE, potentialValue).toFixed(2));
+          timePoint.bloodSugarStatus = getBloodSugarStatus(timePoint.bloodSugar, targetGlucose);
+          timePoint.activityModified = true;
+
+          // Indicate if value was adjusted due to physiological constraints
+          if (potentialValue < MIN_SAFE_BLOOD_GLUCOSE) {
+            timePoint.limitAdjusted = true;
+            timePoint.originalEstimate = Number(potentialValue.toFixed(2)); // Store what it would have been
           }
         }
-      } else if (!timePoint.bloodSugar && showActualBloodSugar) {
-        // When no activity effect and no reading, show target line
-        timePoint.estimatedBloodSugar = targetGlucose;
-        // Also set the primary value in this case
+      } else if (showActualBloodSugar && !timePoint.bloodSugar) {
+        // When no activity effect and no blood sugar value, use target
         timePoint.bloodSugar = targetGlucose;
+        timePoint.estimatedBloodSugar = targetGlucose; // Keep consistent
+        timePoint.bloodSugarStatus = getBloodSugarStatus(targetGlucose, targetGlucose);
+      } else {
+        // No activity effect but we still store the estimated blood sugar
+        timePoint.estimatedBloodSugar = timePoint.bloodSugar;
       }
 
+      // Format total activity effect for display - round to 2 decimal places
       if (timePoint.totalActivityEffect) {
-        timePoint.totalActivityEffect = Math.round(timePoint.totalActivityEffect * 100) / 100;
+        timePoint.totalActivityEffect = Number(timePoint.totalActivityEffect.toFixed(2));
       }
 
       timelineData.push(timePoint);
       currentTime += interval;
     }
 
-    // Make a final pass to ensure all actual readings are included
-    bloodGlucoseData.forEach(reading => {
-      if (reading.isActualReading && !includedReadings.has(reading.readingTime)) {
-        // Find the closest timeline point
-        const timeIndex = timelineData.findIndex(p => p.timestamp > reading.readingTime) - 1;
-        const insertIndex = timeIndex >= 0 ? timeIndex : timelineData.length;
+    // Post-process to smooth out any remaining unrealistic transitions
+    for (let i = 1; i < timelineData.length - 1; i++) {
+      const current = timelineData[i];
+      const prev = timelineData[i-1];
+      const next = timelineData[i+1];
 
-        // Create a new point with the exact actual reading
-        const newPoint = {
-          timestamp: reading.readingTime,
-          readingTime: reading.readingTime,
-          formattedTime: TimeManager.formatDate(reading.readingTime, TimeManager.formats.DATETIME_DISPLAY),
-          formattedReadingTime: TimeManager.formatDate(reading.readingTime, TimeManager.formats.DATETIME_DISPLAY),
-          bloodSugar: reading.bloodSugar,
-          bloodSugarStatus: reading.status,
-          isActualReading: true,
-          dataType: 'actual',
-          activities: {},
-          activityEffects: {},
-          totalActivityEffect: 0
-        };
+      // Skip actual readings
+      if (current.isActualReading) continue;
 
-        timelineData.splice(insertIndex + 1, 0, newPoint);
-        includedReadings.add(reading.readingTime);
+      // Check for unrealistic changes in 15-minute periods
+      const prevDiff = Math.abs(current.bloodSugar - prev.bloodSugar);
+      const nextDiff = Math.abs(next.bloodSugar - current.bloodSugar);
+
+      if (prevDiff > MAX_REASONABLE_BG_CHANGE && nextDiff > MAX_REASONABLE_BG_CHANGE) {
+        // This point is likely an unrealistic spike or drop
+        // Smooth it using a weighted average with neighbors
+        const neighborAvg = (prev.bloodSugar + next.bloodSugar) / 2;
+        // Weight toward original value slightly to preserve trends and round to 2 decimal places
+        current.bloodSugar = Number((0.3 * current.bloodSugar + 0.7 * neighborAvg).toFixed(2));
+        current.estimatedBloodSugar = current.bloodSugar; // Keep consistent
+        current.bloodSugarStatus = getBloodSugarStatus(current.bloodSugar, targetGlucose);
+        current.wasSmoothed = true;
       }
-    });
+    }
 
-    // Sort by timestamp
+    // Sort by timestamp for proper rendering
     timelineData.sort((a, b) => a.timestamp - b.timestamp);
 
     return timelineData;
@@ -546,68 +702,98 @@ useEffect(() => {
     console.log('Date range changed, click Update to refresh data');
   }, []);
 
-  // Custom tooltip for the chart
-  const CustomTooltip = useCallback(({ active, payload }) => {
-    if (active && payload && payload.length) {
-      const data = payload[0].payload;
+// Custom tooltip for the chart - SIMPLIFIED
+const CustomTooltip = useCallback(({ active, payload }) => {
+  if (active && payload && payload.length) {
+    const data = payload[0].payload;
 
-      return (
-        <div className="activity-tooltip">
-          <p className="tooltip-time">{data.formattedTime}</p>
+    return (
+      <div className="activity-tooltip">
+        <p className="tooltip-time">{data.formattedTime}</p>
 
-          {/* Display activities */}
-          {data.activityDetails && data.activityDetails.length > 0 && (
-            <div className="tooltip-section">
-              <p className="tooltip-header">Activities:</p>
-              {data.activityDetails.map((activity, idx) => (
+        {/* Display activities without impact percentages */}
+        {data.activityDetails && data.activityDetails.length > 0 && (
+          <div className="tooltip-section">
+            <p className="tooltip-header">Activities:</p>
+            {data.activityDetails.map((activity, idx) => {
+              // Determine direction text
+              const direction = activity.level === 0 ? 'Neutral' :
+                              (activity.level > 0) ? 'Decreases blood sugar' :
+                              'Increases blood sugar';
+
+              return (
                 <p key={idx} className="tooltip-activity">
-                  {activity.levelLabel} - Impact: {Math.round((activity.impact - 1) * 100)}%
-                  <span className="tooltip-direction">
-                    {activity.level > 0 ? ' (Decreases blood sugar)' :
-                     activity.level < 0 ? ' (Increases blood sugar)' :
-                     ' (Neutral)'}
-                  </span>
+                  {activity.levelLabel}
+                  <span className="tooltip-direction"> ({direction})</span>
                 </p>
-              ))}
-            </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Blood sugar information */}
+        <div className="tooltip-section">
+          <p className="tooltip-header">Blood Sugar:</p>
+
+          {/* For actual readings */}
+          {data.isActualReading && (
+            <p className="tooltip-blood-sugar">
+              <strong>{Math.round(data.bloodSugar)} mg/dL</strong> (Actual Reading)
+              {data.bloodSugarStatus && ` - ${data.bloodSugarStatus.label}`}
+            </p>
           )}
 
-          {/* Display activity effect */}
-          {data.totalActivityEffect !== 0 && (
-            <div className="tooltip-section">
-              <p className="tooltip-header">Activity Effect:</p>
-              <p className="tooltip-effect">
-                Total Effect: {Math.abs(data.totalActivityEffect).toFixed(2)} units
-                ({data.totalActivityEffect > 0 ? 'Decreases' : 'Increases'} blood sugar)
-              </p>
-            </div>
-          )}
-
-          {/* Display blood sugar if available */}
-          {data.bloodSugar && (
-            <div className="tooltip-section">
-              <p className="tooltip-header">Blood Sugar:</p>
+          {/* For estimated readings */}
+          {!data.isActualReading && (
+            <>
+              {/* Show baseline estimate */}
               <p className="tooltip-blood-sugar">
-                {data.bloodSugar} mg/dL
-                {data.bloodSugarStatus && ` (${data.bloodSugarStatus.label})`}
+                <span className="tooltip-label">Baseline estimate:</span>
+                <strong>{Math.round(data.originalBloodSugar)} mg/dL</strong>
               </p>
-            </div>
-          )}
 
-          {/* Display estimated blood sugar if available */}
-          {data.estimatedBloodSugar && !data.bloodSugar && (
-            <div className="tooltip-section">
-              <p className="tooltip-header">Estimated Blood Sugar:</p>
-              <p className="tooltip-estimated-bg">
-                ~{Math.round(data.estimatedBloodSugar)} mg/dL (estimated)
+              {/* Only show activity impact if there is one */}
+              {data.activityModified && data.activityImpactMgdL !== 0 && (
+                <p className="tooltip-activity-impact">
+                  <span className="tooltip-label">Activity impact:</span>
+                  <strong className={data.activityImpactMgdL > 0 ? "positive-impact" : "negative-impact"}>
+                    {data.activityImpactMgdL > 0 ? "+" : ""}{data.activityImpactMgdL} mg/dL
+                  </strong>
+                </p>
+              )}
+
+              {/* Final estimate after activity effects */}
+              <p className="tooltip-final-estimate">
+                <span className="tooltip-label">Final estimate:</span>
+                <strong>{Math.round(data.bloodSugar)} mg/dL</strong>
+                {data.bloodSugarStatus && ` - ${data.bloodSugarStatus.label}`}
+                {data.limitAdjusted && " (Limited to minimum safe value)"}
               </p>
-            </div>
+            </>
           )}
         </div>
-      );
-    }
-    return null;
-  }, []);
+
+        {/* Display activity effect summary */}
+        {data.totalActivityEffect !== 0 && (
+          <div className="tooltip-section">
+            <p className="tooltip-header">Activity Effect Summary:</p>
+            <p className="tooltip-effect">
+              Effect Strength: {Math.abs(data.totalActivityEffect).toFixed(2)} units
+              <span style={{
+                color: data.totalActivityEffect > 0 ? '#2196F3' : '#F44336',
+                fontWeight: 'bold',
+                marginLeft: '4px'
+              }}>
+                ({data.totalActivityEffect > 0 ? 'Decreases' : 'Increases'} blood sugar)
+              </span>
+            </p>
+          </div>
+        )}
+      </div>
+    );
+  }
+  return null;
+}, []);
 
   // Table columns definition
   const columns = useMemo(() => [
@@ -999,17 +1185,35 @@ useEffect(() => {
 
                   {/* Blood Sugar Line */}
                   {showActualBloodSugar && (
-                    <Line
-                      yAxisId="bloodSugar"
-                      type="monotone"
-                      dataKey="bloodSugar"
-                      name="Blood Sugar"
-                      stroke="#8884d8"
-                      dot={CustomBloodSugarDot}
-                      activeDot={{ r: 8 }}
-                      connectNulls
-                    />
-                  )}
+  <Line
+    yAxisId="bloodSugar"
+    type="monotone"
+    dataKey="bloodSugar"
+    name="Blood Sugar"
+    stroke="#8031A7"
+    dot={({ cx, cy, payload }) => {
+      if (!payload.isActualReading) return null;
+
+      // Get color from status
+      const dotColor = payload.bloodSugarStatus?.color ||
+                      (payload.bloodSugar > targetGlucose ? '#ff8800' : '#00C851');
+
+      // Using isActualReading in the condition ensures only one dot per actual reading
+      return (
+        <circle
+          cx={cx}
+          cy={cy}
+          r={4}
+          stroke={dotColor}
+          strokeWidth={2}
+          fill="#ffffff"
+        />
+      );
+    }}
+    activeDot={{ r: 8 }}
+    connectNulls
+  />
+)}
 
                   {/* Estimated Blood Sugar Line */}
                   {showActualBloodSugar && (
@@ -1021,7 +1225,7 @@ useEffect(() => {
                       stroke="#8884d8"
                       strokeDasharray="5 5"
                       strokeWidth={2}
-                      dot={{ r: 2 }}
+    dot={false}      // No dots for estimated line
                       connectNulls
                       isAnimationActive={false}
                     />
