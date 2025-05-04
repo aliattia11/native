@@ -673,24 +673,24 @@ const fetchData = useCallback(async () => {
 
   // Helper function to get consistent colors for activity levels
   const getActivityColor = useCallback((level, isEffect = false) => {
-    // Color scheme based on activity level
-    const colorMap = {
-      '-2': '#FF5252', // Very low activity - bright red (increases BG)
-      '-1': '#FF9E80', // Low activity - light red/orange (increases BG)
-      '0': '#B9F6CA', // Normal activity - light green (neutral)
-      '1': '#40C4FF', // High activity - light blue (decreases BG)
-      '2': '#536DFE', // Vigorous activity - deeper blue (decreases BG)
-    };
+  // Color scheme based on activity level - MORE VIBRANT COLORS
+  const colorMap = {
+    '-2': '#FF1744', // Very low activity - intense red (increases BG)
+    '-1': '#FF6D00', // Low activity - bright orange (increases BG)
+    '0': '#00E676', // Normal activity - bright green (neutral)
+    '1': '#00B0FF', // High activity - bright blue (decreases BG)
+    '2': '#3D5AFE', // Vigorous activity - intense blue (decreases BG)
+  };
 
-    const baseColor = colorMap[level] || '#B9F6CA'; // Default to normal
+  const baseColor = colorMap[level] || '#00E676'; // Default to normal
 
-    if (isEffect) {
-      // For effect lines, use a slightly different shade
-      return adjustColorBrightness(baseColor, -20);
-    }
+  if (isEffect) {
+    // For effect lines, use a slightly different shade but still vibrant
+    return adjustColorBrightness(baseColor, -15);
+  }
 
-    return baseColor;
-  }, []);
+  return baseColor;
+}, []);
 
   // Helper function to adjust color brightness
   function adjustColorBrightness(hex, percent) {

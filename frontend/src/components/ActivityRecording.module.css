@@ -522,3 +522,88 @@
 .timeInput:focus:valid {
   box-shadow: 0 0 0 0.2rem rgba(40, 167, 69, 0.25);
 }
+
+/* Add these styles to your existing ActivityRecording.module.css */
+
+.title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.importExportButtons {
+  display: flex;
+  gap: 10px;
+}
+
+.importButton, .templateButton {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  background-color: #f1f1f1;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background-color 0.2s;
+}
+
+.importButton:hover, .templateButton:hover {
+  background-color: #e0e0e0;
+}
+
+.importButton:disabled, .templateButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.importMessage {
+  margin: 10px 0;
+  padding: 10px;
+  border-radius: 4px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.info {
+  background-color: #e1f5fe;
+  color: #0277bd;
+}
+
+.success {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+}
+
+.error {
+  background-color: #ffebee;
+  color: #c62828;
+}
+
+.messageIcon {
+  margin-top: 4px;
+  flex-shrink: 0;
+}
+
+.messageContent {
+  flex-grow: 1;
+}
+
+.messageContent h4 {
+  margin: 0 0 5px 0;
+  font-size: 1rem;
+}
+
+.details {
+  background-color: rgba(0, 0, 0, 0.05);
+  padding: 8px;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  white-space: pre-wrap;
+  margin: 5px 0 0 0;
+  max-height: 150px;
+  overflow-y: auto;
+}
