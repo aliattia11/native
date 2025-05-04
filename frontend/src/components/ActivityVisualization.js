@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useContext, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useContext, useRef, memo } from 'react';
 import axios from 'axios';
 import moment from 'moment';
 import { debounce } from 'lodash';
@@ -70,7 +70,29 @@ const getBloodSugarStatus = useCallback((bloodSugar, target) => {
 }, []);
   // Get user's time zone from TimeManager
   const userTimeZone = useMemo(() => TimeManager.getUserTimeZone(), []);
+const CurrentTimeDisplay = memo(({ timeInRange, yAxisId }) => {
+  const [time, setTime] = useState(new Date().getTime());
 
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTime(new Date().getTime());
+    }, 60000);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  if (!timeInRange) return null;
+
+  return (
+    <ReferenceLine
+      x={time}
+      yAxisId={yAxisId}
+      stroke="#ff0000"
+      strokeWidth={2}
+      label={{ value: 'Now', position: 'top', fill: '#ff0000' }}
+    />
+  );
+});
   // Helper function to get activity parameters from patient constants
   const getActivityParameters = useCallback((activityLevel) => {
     // Get activity coefficients from patient constants
