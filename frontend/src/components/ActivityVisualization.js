@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo, useContext, useRef } from 'react';
 import axios from 'axios';
 import moment from 'moment';
+import { debounce } from 'lodash';
+
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -331,6 +333,21 @@ const effect = params.direction === 'decrease' ? -effectStrength :
     return [];
   }
 }, [calculateActivityEffect, targetGlucose, getActivityBarValue, includeFutureEffect, futureHours, showActualBloodSugar, getBloodSugarStatus]);
+
+
+ const getActivityLevelLabel = useCallback((level) => {
+    const matchingLevel = ACTIVITY_LEVELS.find(a => a.value === Number(level));
+    return matchingLevel ? matchingLevel.label : `Level ${level}`;
+  }, []);
+
+  // Helper function to get activity impact coefficient
+  const getActivityImpactCoefficient = useCallback((level) => {
+    const activityCoefficients = patientConstants.activity_coefficients || {};
+    return activityCoefficients[level] || 1.0;
+  }, [patientConstants]);
+
+
+
   // Fetch activity and blood sugar data
 const fetchData = useCallback(async () => {
   try {
@@ -350,7 +367,16 @@ const fetchData = useCallback(async () => {
             .format('YYYY-MM-DD')
         };
 
-    // Update lastFetchedDateRange ref to prevent redundant fetches
+    // Compare with last fetched range to prevent duplicate fetches
+    if (
+      lastFetchedDateRange.current.start === timeSettings.startDate &&
+      lastFetchedDateRange.current.end === timeSettings.endDate
+    ) {
+      setLoading(false);
+      return; // Skip fetch if date range hasn't changed
+    }
+
+    // Update lastFetchedDateRange ref
     lastFetchedDateRange.current = {
       start: timeSettings.startDate,
       end: timeSettings.endDate
@@ -366,7 +392,7 @@ const fetchData = useCallback(async () => {
       { headers: { Authorization: `Bearer ${token}` } }
     );
 
-    // Process activity data
+    // Process activity data with proper memoization
     const processedActivityData = activityResponse.data.map(activity => {
       // Parse times
       const startTime = activity.startTime ? new Date(activity.startTime).getTime() : null;
@@ -402,12 +428,7 @@ const fetchData = useCallback(async () => {
     // Filter blood sugar data to match our date range
     let filteredBloodSugar = [];
     if (bloodSugarData && bloodSugarData.length > 0) {
-      console.log("Using blood sugar data from context:", bloodSugarData.length, "readings");
       filteredBloodSugar = getFilteredData(bloodSugarData);
-      console.log("Filtered to:", filteredBloodSugar.length, "readings for date range");
-    } else {
-      console.log("No blood sugar data available in context");
-      filteredBloodSugar = [];
     }
 
     // Generate combined data
@@ -423,27 +444,25 @@ const fetchData = useCallback(async () => {
     setLoading(false);
   }
 }, [timeContext, includeFutureEffect, futureHours, patientId, selectedActivityLevels.length,
-    bloodSugarData, getFilteredData, generateCombinedData]);
+    getActivityLevelLabel, getActivityImpactCoefficient, getFilteredData, generateCombinedData]);
 
   // Helper function to get activity level label
-  const getActivityLevelLabel = useCallback((level) => {
-    const matchingLevel = ACTIVITY_LEVELS.find(a => a.value === Number(level));
-    return matchingLevel ? matchingLevel.label : `Level ${level}`;
-  }, []);
 
-  // Helper function to get activity impact coefficient
-  const getActivityImpactCoefficient = useCallback((level) => {
-    const activityCoefficients = patientConstants.activity_coefficients || {};
-    return activityCoefficients[level] || 1.0;
-  }, [patientConstants]);
+const debouncedFetchData = useCallback(
+  debounce(() => {
+    fetchData();
+  }, 500),
+  [fetchData]
+);
 
   // Effect to fetch data once when component mounts and when necessary params change
-  useEffect(() => {
-    // Only fetch if we haven't fetched yet or if the date range changes
-    if (!dataFetched || timeContext?.dateRange?.start || timeContext?.dateRange?.end) {
-      fetchData();
-    }
-  }, [fetchData, dataFetched, timeContext?.dateRange]);
+useEffect(() => {
+  // Only fetch if we haven't fetched yet or if the date range changes
+  if (!dataFetched ||
+      (timeContext?.dateRange?.start && timeContext?.dateRange?.end)) {
+    debouncedFetchData();
+  }
+}, [debouncedFetchData, dataFetched, timeContext?.dateRange]);
 
   // Regenerate combined data when blood sugar data changes
   useEffect(() => {
@@ -493,11 +512,10 @@ const fetchData = useCallback(async () => {
   }, [targetGlucose]);
 
   // Force update the data
-    const handleForceUpdate = useCallback(() => {
-    console.log('Forcing data update...');
-    // No need to reset dataFetched flag since we're explicitly fetching
-    fetchData();
-  }, [fetchData]);
+ const handleForceUpdate = useCallback(() => {
+  console.log('Forcing data update...');
+  fetchData(); // Call the non-debounced version directly
+}, [fetchData]);
 
      // Handler for when date range changes
   const handleDateRangeChange = useCallback(() => {

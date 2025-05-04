@@ -594,12 +594,17 @@ export const BloodSugarDataProvider = ({ children }) => {
   }, [combinedData]);
 
   // Update estimated data when filteredData changes
-  useEffect(() => {
-    // Skip initial render
-    if (didInitialFetch.current) {
+useEffect(() => {
+  // Skip initial render and avoid redundant calculations
+  if (didInitialFetch.current && !processingData.current) {
+    // Add throttling to prevent too frequent updates
+    const timeoutId = setTimeout(() => {
       generateEstimatedData();
-    }
-  }, [filteredData, estimationSettings, targetGlucose, generateEstimatedData]);
+    }, 200);
+
+    return () => clearTimeout(timeoutId);
+  }
+}, [filteredData, estimationSettings, targetGlucose, generateEstimatedData]);
 
   // Update local time scale when date range changes (if not using TimeContext)
   useEffect(() => {

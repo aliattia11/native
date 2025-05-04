@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import axios from 'axios';
-import { FaPlus, FaMinus, FaFileImport, FaInfoCircle } from 'react-icons/fa';
+import { FaPlus, FaMinus, FaFileImport, FaSync, FaHistory, FaInfoCircle } from 'react-icons/fa';
 import styles from './ActivityRecording.module.css';
 import { ACTIVITY_LEVELS } from '../constants';
 import { useConstants } from '../contexts/ConstantsContext';
@@ -19,8 +19,8 @@ const ActivityItem = React.memo(({ item, updateItem, removeItem, activityCoeffic
   const impact = getActivityImpact(item.level);
   const impactPercentage = ((impact - 1) * 100).toFixed(1);
   const impactText = impact !== 1
-    ? `Effect over 2 hours: ${impactPercentage}% ${impact > 1 ? 'increase' : 'decrease'} in insulin needs`
-    : 'No effect on insulin needs';
+    ? `Effect: ${impactPercentage}% ${impact > 1 ? 'increase' : 'decrease'}`
+    : 'No effect';
 
   return (
     <div className={styles.activityItem}>
@@ -70,6 +70,9 @@ const ActivityRecording = ({
   const [userTimeZone, setUserTimeZone] = useState('');
   // New state for import functionality
   const [importStatus, setImportStatus] = useState(null);
+  // New state for recent activities
+  const [recentActivities, setRecentActivities] = useState([]);
+  const [showRecentActivities, setShowRecentActivities] = useState(false);
   const fileInputRef = useRef(null);
 
   // Get user's time zone on component mount
@@ -124,6 +127,69 @@ const ActivityRecording = ({
     }
   }, [standalone, onActivityUpdate, patientConstants, processedActivities, totalImpact]);
 
+  // Fetch recent activities - new function
+  const fetchRecentActivities = useCallback(async () => {
+    if (!standalone) return;
+
+    try {
+      setIsLoading(true);
+      const token = localStorage.getItem('token');
+      if (!token) {
+        console.warn('No authentication token found');
+        return;
+      }
+
+      const response = await axios.get(
+        'http://localhost:5000/api/activity-history',
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          params: {
+            limit: 5
+          }
+        }
+      );
+
+      if (response.data && Array.isArray(response.data)) {
+        // Format the activities for display
+        const formattedActivities = response.data.map(activity => {
+          // Get level label from ACTIVITY_LEVELS
+          const levelInfo = ACTIVITY_LEVELS.find(l => l.value === activity.level) || {};
+
+          return {
+            ...activity,
+            levelLabel: levelInfo.label || 'Unknown',
+            formattedStartTime: activity.startTime
+              ? TimeManager.utcToLocalString(activity.startTime)
+              : TimeManager.utcToLocalString(activity.timestamp),
+            formattedEndTime: activity.endTime
+              ? TimeManager.utcToLocalString(activity.endTime)
+              : '',
+            impactType: activity.impact > 1 ? 'increase' : activity.impact < 1 ? 'decrease' : 'neutral'
+          };
+        });
+
+        setRecentActivities(formattedActivities);
+      }
+    } catch (error) {
+      console.error('Error fetching recent activities:', error);
+      setStatus({
+        type: 'error',
+        message: 'Failed to load recent activities'
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [standalone]);
+
+  // Load recent activities on component mount if standalone
+  useEffect(() => {
+    if (standalone) {
+      fetchRecentActivities();
+    }
+  }, [standalone, fetchRecentActivities]);
+
   // Handler functions
   const addActivity = useCallback((type) => {
     const currentTime = TimeManager.getCurrentTimeISOString();
@@ -147,6 +213,14 @@ const ActivityRecording = ({
   const removeActivity = useCallback((activity) => {
     setActivities(prev => prev.filter(a => a !== activity));
   }, []);
+
+  // Toggle recent activities view
+  const toggleRecentActivities = () => {
+    setShowRecentActivities(prev => !prev);
+    if (!showRecentActivities) {
+      fetchRecentActivities();
+    }
+  };
 
   // Convert local time to UTC for API calls
   const convertToUTCIsoString = useCallback((localTime) => {
@@ -237,63 +311,14 @@ const ActivityRecording = ({
         fileInputRef.current.value = '';
       }
 
-      // Fetch newly imported activities and add them to the current state
-      // This would be a separate API call to get the most recent activities
-      // For now, we'll just show a success message
+      // Refresh the recent activities list
+      fetchRecentActivities();
 
     } catch (error) {
       console.error('Error importing data:', error);
       setImportStatus({
         type: 'error',
         message: 'Failed to import data',
-        details: error.response?.data?.error || error.message || 'Unknown error occurred'
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Handle download template
-  const handleDownloadTemplate = async () => {
-    try {
-      setIsLoading(true);
-
-      const token = localStorage.getItem('token');
-      if (!token) {
-        throw new Error('Authentication token not found');
-      }
-
-      // Request the template file
-      const response = await axios.get(
-        `http://localhost:5000/api/import/export-template?format=csv&type=activities`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          },
-          responseType: 'blob'  // Important for file download
-        }
-      );
-
-      // Create a download link and trigger the download
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `activities_import_template.csv`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-
-      setImportStatus({
-        type: 'success',
-        message: 'Template downloaded successfully'
-      });
-
-    } catch (error) {
-      console.error('Error downloading template:', error);
-      setImportStatus({
-        type: 'error',
-        message: 'Failed to download template',
         details: error.response?.data?.error || error.message || 'Unknown error occurred'
       });
     } finally {
@@ -348,7 +373,8 @@ const ActivityRecording = ({
               expectedTime: startTimeUTC,  // Send UTC time
               startTime: startTimeUTC,     // Send UTC time
               endTime: endTimeUTC,         // Send UTC time
-              impact: patientConstants.activity_coefficients[activity.level] || 1.0
+              impact: patientConstants.activity_coefficients[activity.level] || 1.0,
+              notes: notes
             };
           }),
         completedActivities: activities
@@ -366,7 +392,8 @@ const ActivityRecording = ({
               completedTime: startTimeUTC, // Send UTC time
               startTime: startTimeUTC,     // Send UTC time
               endTime: endTimeUTC,         // Send UTC time
-              impact: patientConstants.activity_coefficients[activity.level] || 1.0
+              impact: patientConstants.activity_coefficients[activity.level] || 1.0,
+              notes: notes
             };
           }),
         notes: notes
@@ -411,6 +438,9 @@ const ActivityRecording = ({
       setActivities([]);
       setNotes('');
 
+      // Refresh the activities list after successful submission
+      fetchRecentActivities();
+
     } catch (error) {
       console.error('Error submitting activities:', error);
       setStatus({
@@ -420,7 +450,7 @@ const ActivityRecording = ({
     } finally {
       setIsLoading(false);
     }
-  }, [standalone, activities, notes, totalImpact, patientConstants, convertToUTCIsoString]);
+  }, [standalone, activities, notes, totalImpact, patientConstants, convertToUTCIsoString, fetchRecentActivities]);
 
   if (loading) {
     return <div className={styles.loading}>Loading activity settings...</div>;
@@ -437,26 +467,34 @@ const ActivityRecording = ({
   return (
     <div className={standalone ? styles.standaloneContainer : styles.inlineContainer}>
       {standalone && (
-        <div className={styles.title}>
+        <div className={styles.activityHeader}>
           <h2>Record Activities</h2>
-          <div className={styles.importExportButtons}>
+          <div className={styles.actionButtons}>
             <button
               type="button"
-              className={styles.importButton}
+              className={`${styles.iconButton} ${styles.refreshButton}`}
+              onClick={fetchRecentActivities}
+              title="Refresh activities"
+              disabled={isLoading}
+            >
+              <FaSync className={isLoading ? styles.spin : ""} />
+            </button>
+            <button
+              type="button"
+              className={`${styles.iconButton} ${styles.historyButton}`}
+              onClick={toggleRecentActivities}
+              title={showRecentActivities ? "Hide recent activities" : "Show recent activities"}
+            >
+              <FaHistory />
+            </button>
+            <button
+              type="button"
+              className={`${styles.iconButton} ${styles.importButton}`}
               onClick={handleImportClick}
               title="Import activities"
               disabled={isLoading}
             >
-              <FaFileImport /> Import
-            </button>
-            <button
-              type="button"
-              className={styles.templateButton}
-              onClick={handleDownloadTemplate}
-              title="Download template"
-              disabled={isLoading}
-            >
-              Get Template
+              <FaFileImport />
             </button>
             {/* Hidden file input triggered by the import button */}
             <input
@@ -472,21 +510,72 @@ const ActivityRecording = ({
 
       {/* Add timezone info display */}
       {standalone && (
-        <div className="timezone-info">
+        <div className={styles.timezoneInfo}>
           Your timezone: {userTimeZone}
-          <span className="timezone-note"> (all times stored in UTC but displayed in your local timezone)</span>
+          <span className={styles.timezoneNote}> (all times stored in UTC but displayed in your local timezone)</span>
         </div>
       )}
 
       {/* Import Status Message */}
       {importStatus && (
-        <div className={`${styles.importMessage} ${styles[importStatus.type]}`}>
+        <div className={`${styles.message} ${styles[importStatus.type]}`}>
           <FaInfoCircle className={styles.messageIcon} />
           <div className={styles.messageContent}>
             <h4>{importStatus.message}</h4>
             {importStatus.details && (
               <pre className={styles.details}>{importStatus.details}</pre>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Recent Activities Section */}
+      {standalone && showRecentActivities && (
+        <div className={styles.recentActivities}>
+          <h3>Recent Activities</h3>
+          {recentActivities.length > 0 ? (
+            <div className={styles.recentActivitiesList}>
+              {recentActivities.map((activity) => (
+                <div key={activity.id} className={styles.recentActivityItem}>
+                  <div className={styles.activityTypeAndLevel}>
+                    <span className={styles.activityType}>{activity.type}</span>
+                    <span className={styles.activityLevel}>{activity.levelLabel}</span>
+                  </div>
+                  <div className={styles.activityDetails}>
+                    <span className={styles.activityTime}>
+                      {new Date(activity.formattedStartTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                      {activity.formattedEndTime && ` - ${new Date(activity.formattedEndTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`}
+                    </span>
+                    <span className={styles.activityDate}>
+                      {new Date(activity.formattedStartTime).toLocaleDateString()}
+                    </span>
+                    <span className={styles.activityDuration}>
+                      Duration: {activity.duration}
+                    </span>
+                  </div>
+                  {activity.notes && (
+                    <div className={styles.activityNotes} title={activity.notes}>
+                      {activity.notes}
+                    </div>
+                  )}
+                  <div
+                    className={styles.activityImpact}
+                    data-impact={activity.impactType}
+                  >
+                    {activity.impact !== 1
+                      ? `${Math.abs((activity.impact - 1) * 100).toFixed(1)}% ${activity.impact > 1 ? 'Increase' : 'Decrease'}`
+                      : 'No Effect'}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className={styles.noActivities}>{isLoading ? 'Loading...' : 'No recent activities found'}</p>
+          )}
+          <div className={styles.activitiesFooter}>
+            <span className={styles.importNote}>
+              Need to import multiple activities? Click the <FaFileImport className={styles.inlineIcon} /> import button above.
+            </span>
           </div>
         </div>
       )}
@@ -509,18 +598,6 @@ const ActivityRecording = ({
           {status.message}
         </div>
       )}
-
-      <style jsx="true">{`
-        .timezone-info {
-          font-size: 0.9rem;
-          color: #666;
-          margin-bottom: 15px;
-        }
-        
-        .timezone-note {
-          font-style: italic;
-        }
-      `}</style>
     </div>
   );
 

@@ -480,12 +480,32 @@ def get_activity(current_user):
         start_date_str = request.args.get('start_date')
         end_date_str = request.args.get('end_date')
         include_details = request.args.get('include_details') == 'true'
+        limit = int(request.args.get('limit', 1000))  # Add limit parameter with default
 
         user_id = str(current_user['_id'])
         logger.info(f"Fetching activity data for user {user_id} from {start_date_str} to {end_date_str}")
 
-        # Build the query
+        # Build the query with minimal required fields
         query = {"user_id": user_id}
+        projection = {
+            "_id": 1,
+            "type": 1,
+            "level": 1,
+            "impact": 1,
+            "duration": 1,
+            "timestamp": 1,
+            "startTime": 1,
+            "endTime": 1
+        }
+
+        # Add optional fields if details are requested
+        if include_details:
+            projection.update({
+                "expectedTime": 1,
+                "completedTime": 1,
+                "notes": 1,
+                "meal_id": 1
+            })
 
         # Add date range filters if provided
         if start_date_str or end_date_str:
@@ -508,67 +528,31 @@ def get_activity(current_user):
                     logger.error(f"Error parsing end date '{end_date_str}': {e}")
                     return jsonify({"error": f"Invalid end date format: {end_date_str}"}), 400
 
-            # Create time range filter conditions using $or to include activities that overlap the range
+            # Create simplified time range filter using $or with fewer conditions
             time_conditions = []
 
-            # Condition 1: Traditional timestamp filter
-            timestamp_condition = {}
-            if start_date:
-                timestamp_condition["$gte"] = start_date
-            if end_date:
-                timestamp_condition["$lt"] = end_date
-            if timestamp_condition:
-                time_conditions.append({"timestamp": timestamp_condition})
+            # Timestamp filter (simplified)
+            if start_date and end_date:
+                time_conditions.append({"timestamp": {"$gte": start_date, "$lt": end_date}})
+            elif start_date:
+                time_conditions.append({"timestamp": {"$gte": start_date}})
+            elif end_date:
+                time_conditions.append({"timestamp": {"$lt": end_date}})
 
-            # Condition 2: Start time within range
-            start_time_conditions = []
-            for time_field in ["startTime", "expectedTime", "completedTime"]:
-                if start_date and end_date:
-                    start_time_conditions.append({
-                        time_field: {"$gte": start_date, "$lt": end_date}
-                    })
-                elif start_date:
-                    start_time_conditions.append({
-                        time_field: {"$gte": start_date}
-                    })
-                elif end_date:
-                    start_time_conditions.append({
-                        time_field: {"$lt": end_date}
-                    })
+            # Add startTime filter
+            if start_date and end_date:
+                time_conditions.append({"startTime": {"$gte": start_date, "$lt": end_date}})
+            elif start_date:
+                time_conditions.append({"startTime": {"$gte": start_date}})
+            elif end_date:
+                time_conditions.append({"startTime": {"$lt": end_date}})
 
-            # Condition 3: End time within range
-            end_time_conditions = []
-            if "endTime" in mongo.db.activities.find_one({}, {"_id": 0, "endTime": 1}):
-                if start_date and end_date:
-                    end_time_conditions.append({
-                        "endTime": {"$gte": start_date, "$lt": end_date}
-                    })
-                elif start_date:
-                    end_time_conditions.append({
-                        "endTime": {"$gte": start_date}
-                    })
-                elif end_date:
-                    end_time_conditions.append({
-                        "endTime": {"$lt": end_date}
-                    })
+            # Add the time conditions to query with $or
+            if time_conditions:
+                query["$or"] = time_conditions
 
-            # Condition 4: Activity spans the entire range
-            span_conditions = []
-            if start_date and end_date and "startTime" in mongo.db.activities.find_one({}, {"_id": 0,
-                                                                                            "startTime": 1}) and "endTime" in mongo.db.activities.find_one(
-                    {}, {"_id": 0, "endTime": 1}):
-                span_conditions.append({
-                    "startTime": {"$lte": start_date},
-                    "endTime": {"$gte": end_date}
-                })
-
-            # Combine all conditions with $or
-            all_time_conditions = time_conditions + start_time_conditions + end_time_conditions + span_conditions
-            if all_time_conditions:
-                query["$or"] = all_time_conditions
-
-        # Get the activities
-        user_activities = list(mongo.db.activities.find(query).sort("timestamp", -1))
+        # Get the activities with limit for better performance
+        user_activities = list(mongo.db.activities.find(query, projection).sort("timestamp", -1).limit(limit))
         logger.debug(f"Found {len(user_activities)} activities")
 
         # Format activities for response
@@ -592,13 +576,12 @@ def get_activity(current_user):
                         else:
                             formatted_activity[time_field] = activity[time_field]
 
-                # Add notes if present
-                if 'notes' in activity:
-                    formatted_activity["notes"] = activity['notes']
-
-                # Add meal reference if present
-                if 'meal_id' in activity:
-                    formatted_activity["meal_id"] = activity['meal_id']
+                # Add notes and meal_id only if include_details is True
+                if include_details:
+                    if 'notes' in activity:
+                        formatted_activity["notes"] = activity['notes']
+                    if 'meal_id' in activity:
+                        formatted_activity["meal_id"] = activity['meal_id']
 
                 formatted_activities.append(formatted_activity)
             except Exception as e:
