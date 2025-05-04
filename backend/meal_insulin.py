@@ -682,6 +682,7 @@ def submit_meal(current_user):
         logger.error(f"Error in submit_meal: {str(e)}")
         return jsonify({"error": str(e)}), 400
 
+
 @meal_insulin_bp.route('/api/meals', methods=['GET'])
 @token_required
 @api_error_handler
@@ -691,35 +692,54 @@ def get_meals(current_user):
         limit = int(request.args.get('limit', 10))
         skip = int(request.args.get('skip', 0))
 
+        # Add logging for debugging
+        logger.info(f"Fetching meals for user {current_user['_id']} with limit {limit} and skip {skip}")
+
         # Get total count for pagination
         total_meals = mongo.db.meals.count_documents({"user_id": str(current_user['_id'])})
+
+        logger.info(f"Found {total_meals} total meals for user {current_user['_id']}")
 
         # Get meals with pagination
         meals = list(mongo.db.meals.find(
             {"user_id": str(current_user['_id'])}
         ).sort("timestamp", -1).skip(skip).limit(limit))
 
+        logger.info(f"Retrieved {len(meals)} meals after pagination")
+
         # Transform ObjectId to string and format datetime for JSON serialization
         formatted_meals = []
         for meal in meals:
-            formatted_meal = {
-                "id": str(meal['_id']),
-                "mealType": meal['mealType'],
-                "foodItems": meal['foodItems'],
-                "nutrition": meal['nutrition'],
-                "activities": meal['activities'],
-                "bloodSugar": meal.get('bloodSugar'),
-                "bloodSugarTimestamp": meal.get('bloodSugarTimestamp'),  # Ensure this is included
-                "bloodSugarSource": meal.get('bloodSugarSource', 'direct'),  # Include source if available
-                "intendedInsulin": meal.get('intendedInsulin'),
-                "intendedInsulinType": meal.get('intendedInsulinType'),
-                "suggestedInsulin": meal['suggestedInsulin'],
-                "suggestedInsulinType": meal.get('suggestedInsulinType', 'regular_insulin'),
-                "insulinCalculation": meal.get('insulinCalculation', {}),
-                "notes": meal.get('notes', ''),
-                "timestamp": meal['timestamp'].isoformat()
-            }
-            formatted_meals.append(formatted_meal)
+            try:
+                # Check if the meal has all necessary fields
+                logger.debug(f"Processing meal {meal.get('_id')}, type: {meal.get('mealType')}")
+
+                formatted_meal = {
+                    "id": str(meal.get('_id')),
+                    "mealType": meal.get('mealType', 'unknown'),
+                    "foodItems": meal.get('foodItems', []),
+                    "nutrition": meal.get('nutrition', {}),
+                    "activities": meal.get('activities', []),
+                    "bloodSugar": meal.get('bloodSugar'),
+                    "bloodSugarTimestamp": meal.get('bloodSugarTimestamp'),
+                    "bloodSugarSource": meal.get('bloodSugarSource', 'direct'),
+                    "intendedInsulin": meal.get('intendedInsulin'),
+                    "intendedInsulinType": meal.get('intendedInsulinType'),
+                    "suggestedInsulin": meal.get('suggestedInsulin', 0),  # Default to 0 if missing
+                    "suggestedInsulinType": meal.get('suggestedInsulinType', 'regular_insulin'),
+                    "insulinCalculation": meal.get('insulinCalculation', {}),
+                    "notes": meal.get('notes', ''),
+                    "timestamp": meal['timestamp'].isoformat()
+                }
+
+                # Add imported_at field if it exists
+                if 'imported_at' in meal:
+                    formatted_meal["imported_at"] = meal['imported_at'].isoformat()
+
+                formatted_meals.append(formatted_meal)
+            except Exception as e:
+                logger.error(f"Error processing meal {meal.get('_id')}: {str(e)}")
+                # Continue with the next meal instead of failing the entire request
 
         return jsonify({
             "meals": formatted_meals,
@@ -731,6 +751,59 @@ def get_meals(current_user):
         }), 200
 
     except Exception as e:
+        logger.error(f"Error in get_meals: {str(e)}")
+        return jsonify({"error": str(e)}), 400
+
+
+@meal_insulin_bp.route('/api/repair-imported-meals', methods=['POST'])
+@token_required
+@api_error_handler
+def repair_imported_meals(current_user):
+    """
+    Repair imported meal records by adding missing required fields
+    """
+    try:
+        # Only allow admin or doctor to run this
+        if current_user.get('user_type') not in ['doctor', 'admin']:
+            return jsonify({"error": "Unauthorized"}), 403
+
+        # Get patient ID from request or use current user
+        patient_id = request.json.get('patient_id', str(current_user['_id']))
+
+        # Find all imported meals (those with imported_at field)
+        imported_meals = mongo.db.meals.find({"user_id": patient_id, "imported_at": {"$exists": True}})
+        count = 0
+
+        for meal in imported_meals:
+            updates = {}
+
+            # Check and add missing fields
+            if 'suggestedInsulin' not in meal:
+                updates['suggestedInsulin'] = 0
+
+            if 'suggestedInsulinType' not in meal:
+                updates['suggestedInsulinType'] = 'regular_insulin'
+
+            if 'insulinCalculation' not in meal:
+                updates['insulinCalculation'] = {}
+
+            if 'activities' not in meal:
+                updates['activities'] = []
+
+            if updates:
+                mongo.db.meals.update_one(
+                    {"_id": meal['_id']},
+                    {"$set": updates}
+                )
+                count += 1
+
+        return jsonify({
+            "message": f"Repaired {count} imported meal records",
+            "patient_id": patient_id
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error in repair_imported_meals: {str(e)}")
         return jsonify({"error": str(e)}), 400
 
 
