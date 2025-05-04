@@ -1,0 +1,4 @@
+Timestamp,Reading Time,Blood Sugar (mg/dL),Unit,Notes,Source
+2025-05-04T08:00:00,2025-05-04T08:00:00,135,mg/dL,Morning fasting,fingerstick
+2025-05-04T12:00:00,2025-05-04T12:00:00,110,mg/dL,Before lunch,cgm
+2025-05-04T15:30:00,2025-05-04T15:30:00,95,mg/dL,Afternoon check,fingerstick

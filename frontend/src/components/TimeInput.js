@@ -355,24 +355,6 @@ const TimeInput = ({
             </div>
           )}
 
-          {/* System info toggle button and display */}
-          <div className="system-info-container">
-            <button
-              type="button"
-              className="system-info-toggle"
-              onClick={toggleSystemInfo}
-              aria-expanded={showSystemInfo}
-            >
-              {showSystemInfo ? 'Hide System Info' : 'Show System Info'}
-            </button>
-
-            {showSystemInfo && (
-              <div className="system-info">
-                <span className="time-label">Current: {systemDateTime} UTC | </span>
-                <span className="user-label">User: {currentUserLogin}</span>
-              </div>
-            )}
-          </div>
         </div>
       )}
     </div>

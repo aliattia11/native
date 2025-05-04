@@ -6,7 +6,7 @@ import MealHistory from './MealHistory';
 import EnhancedPatientConstantsUI from './EnhancedPatientConstantsUI';
 import ActivityVisualization from './ActivityVisualization';
 import BloodGlucoseCorrelationChart from './Charts/BloodGlucoseCorrelationChart ';
-import DataImport from './DataImport';
+import DataImport from './ImportExport';
 import styles from './DoctorDashboard.module.css';
 import { FaSync, FaUserMd, FaClock, FaDatabase } from 'react-icons/fa';
 

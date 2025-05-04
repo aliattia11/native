@@ -83,19 +83,14 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
   const [showExpectedEffect, setShowExpectedEffect] = useState(true);
   const [activeView, setActiveView] = useState('chart'); // 'chart' or 'table'
   const [viewMode, setViewMode] = useState('combined'); // 'combined', 'doses', or 'effect'
-  const [userTimeZone, setUserTimeZone] = useState('');
   const [dataFetched, setDataFetched] = useState(false);
   const [includeFutureEffect, setIncludeFutureEffect] = useState(true);
   const [futureHours, setFutureHours] = useState(7); // Hours to project into future
-  const [showSystemInfo, setShowSystemInfo] = useState(true);
-  const [isFetching, setIsFetching] = useState(false); // Track when update is in progress
-  const [showDetailedInsulinInfo, setShowDetailedInsulinInfo] = useState(false); // For collapsible legends
   const [dataPointCount, setDataPointCount] = useState(0);
+  const [effectDurationHours, setEffectDurationHours] = useState(5); // Similar to ActivityVisualization
 
-  // Get user's time zone on component mount
-  useEffect(() => {
-    setUserTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
-  }, []);
+  // Get user's time zone from TimeManager
+  const userTimeZone = useMemo(() => TimeManager.getUserTimeZone(), []);
 
   // Helper function to get insulin parameters from patient constants
   const getInsulinParameters = useCallback((insulinType) => {
@@ -202,6 +197,17 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
       // Set a reasonable maximum data points to prevent browser crashes
       const MAX_DATA_POINTS = 2000;
 
+      // First, create a map of all exact blood sugar readings for quick lookup
+      const exactBloodSugarMap = new Map();
+      bloodGlucoseData.forEach(reading => {
+        if (reading.isActualReading) {
+          exactBloodSugarMap.set(reading.readingTime, reading);
+        }
+      });
+
+      // Track which readings we've already included
+      const includedReadings = new Set();
+
       while (currentTime <= maxTime && pointCount < MAX_DATA_POINTS) {
         pointCount++;
         const timePoint = {
@@ -212,23 +218,40 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
           insulinEffects: {},
           insulinEffectValues: {}, // Simplified key for effect lines
           totalInsulinEffect: 0,
-          totalInsulinEffectValue: 0 // Simplified key for effect area
+          totalInsulinEffectValue: 0, // Simplified key for effect area
+          // Default to not being an actual reading
+          isActualReading: false,
+          dataType: 'estimated'
         };
 
-        // Add blood sugar reading if available at this time
-        const searchTime = currentTime;
-        const closestBloodSugar = bloodGlucoseData.find(bs =>
-          Math.abs(bs.readingTime - searchTime) < interval / 2 // Within half the interval
-        );
+        // Check if there's an exact blood sugar reading at this time
+        const exactBSReading = exactBloodSugarMap.get(currentTime);
+        if (exactBSReading) {
+          timePoint.bloodSugar = exactBSReading.bloodSugar;
+          timePoint.bloodSugarStatus = exactBSReading.status;
+          timePoint.isActualReading = true;
+          timePoint.dataType = 'actual';
+          includedReadings.add(currentTime);
+        } else {
+          // If no exact match, look for the closest reading within the interval window
+          const searchTime = currentTime;
+          const closestBloodSugar = bloodGlucoseData.find(bs =>
+            !includedReadings.has(bs.readingTime) &&
+            Math.abs(bs.readingTime - searchTime) < interval / 2 // Within half the interval
+          );
 
-        if (closestBloodSugar) {
-          timePoint.bloodSugar = closestBloodSugar.bloodSugar;
-          timePoint.predictedBloodSugar = closestBloodSugar.predictedBloodSugar;
-          timePoint.bloodSugarStatus = closestBloodSugar.status;
-          timePoint.bloodSugarNotes = closestBloodSugar.notes;
-          timePoint.isActualReading = closestBloodSugar.isActualReading;
-          timePoint.isEstimated = closestBloodSugar.isInterpolated || closestBloodSugar.isEstimated;
-          timePoint.dataType = closestBloodSugar.dataType;
+          if (closestBloodSugar) {
+            timePoint.bloodSugar = closestBloodSugar.bloodSugar;
+            timePoint.predictedBloodSugar = closestBloodSugar.predictedBloodSugar;
+            timePoint.bloodSugarStatus = closestBloodSugar.status;
+            timePoint.bloodSugarNotes = closestBloodSugar.notes;
+            timePoint.readingTime = closestBloodSugar.readingTime; // Keep original reading time
+            timePoint.isActualReading = closestBloodSugar.isActualReading;
+            timePoint.dataType = closestBloodSugar.dataType || (closestBloodSugar.isActualReading ? 'actual' : 'estimated');
+            timePoint.isInterpolated = closestBloodSugar.isInterpolated;
+            timePoint.isEstimated = closestBloodSugar.isEstimated;
+            includedReadings.add(closestBloodSugar.readingTime);
+          }
         }
 
         // Calculate insulin doses and effects at this time
@@ -242,11 +265,16 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
             // Create DIRECT negative value for the bar chart
             timePoint.insulinBars[key] = getBidirectionalValue((timePoint.insulinDoses[key]));
 
-            // Debug for insulin doses
-            if (timePoint.insulinDoses[key] > 0) {
-              console.log(`Found insulin dose: ${timePoint.insulinDoses[key]} units of ${key} at ${timePoint.formattedTime}`);
-              console.log(`Bar value: ${timePoint.insulinBars[key]}`);
-            }
+            // Store insulin details for tooltip
+            if (!timePoint.insulinDetails) timePoint.insulinDetails = [];
+            timePoint.insulinDetails.push({
+              type: dose.medication,
+              dose: dose.dose,
+              time: dose.administrationTime,
+              formattedTime: dose.formattedTime,
+              mealType: dose.mealType,
+              notes: dose.notes
+            });
           }
 
           // Calculate expected effect from each previous dose at current time
@@ -278,6 +306,18 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
           }
         });
 
+        // Add simulated blood sugar effect if we have an insulin effect
+        if (timePoint.totalInsulinEffect !== 0 && timePoint.bloodSugar && !timePoint.isActualReading) {
+          // Using existing blood sugar as base
+          const baseValue = timePoint.bloodSugar;
+
+          // Calculate insulin impact on blood sugar
+          const insulinImpact = 40 * timePoint.totalInsulinEffect;
+
+          // Estimate blood sugar with insulin effect
+          timePoint.predictedBloodSugar = baseValue - insulinImpact;
+        }
+
         timelineData.push(timePoint);
         currentTime += interval;
       }
@@ -285,15 +325,8 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
       console.log(`Generated ${timelineData.length} data points`);
       setDataPointCount(timelineData.length);
 
-      // Find points with insulin doses for debugging
-      const pointsWithDoses = timelineData.filter(point =>
-        Object.values(point.insulinDoses).some(dose => dose > 0)
-      );
-
-      console.log(`Found ${pointsWithDoses.length} points with insulin doses`);
-      if (pointsWithDoses.length > 0) {
-        console.log("Sample point with dose:", pointsWithDoses[0]);
-      }
+      // Sort by timestamp for consistency
+      timelineData.sort((a, b) => a.timestamp - b.timestamp);
 
       return timelineData;
     } catch (error) {
@@ -348,21 +381,27 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
   // Fetch insulin data
   const fetchInsulinData = useCallback(async () => {
     try {
-      setIsFetching(true);
       setLoading(true);
       const token = localStorage.getItem('token');
       if (!token) {
         throw new Error('Authentication token not found');
       }
 
-      // Calculate the date range including future hours
-      const endDate = moment(dateRange.end).add(includeFutureEffect ? futureHours : 0, 'hours').format('YYYY-MM-DD');
+      // Get time settings from TimeContext
+      const timeSettings = timeContext && timeContext.getAPITimeSettings
+        ? timeContext.getAPITimeSettings()
+        : {
+            startDate: timeContext ? timeContext.dateRange.start : dateRange.start,
+            endDate: moment(timeContext ? timeContext.dateRange.end : dateRange.end)
+              .add(includeFutureEffect ? futureHours : 0, 'hours')
+              .format('YYYY-MM-DD')
+          };
 
-      console.log(`Fetching insulin data from ${dateRange.start} to ${endDate}`);
+      console.log(`Fetching insulin data from ${timeSettings.startDate} to ${timeSettings.endDate}`);
 
       // Use the correct endpoint for comprehensive insulin data
       const insulinResponse = await axios.get(
-        `http://localhost:5000/api/insulin-data?days=30&end_date=${endDate}${patientId ? `&patient_id=${patientId}` : ''}`,
+        `http://localhost:5000/api/insulin-data?start_date=${timeSettings.startDate}&end_date=${timeSettings.endDate}${patientId ? `&patient_id=${patientId}` : ''}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
@@ -400,7 +439,7 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
       });
 
       // Filter insulin data based on date range
-      const startDate = moment(dateRange.start).startOf('day').valueOf();
+      const startDate = moment(timeSettings.startDate).startOf('day').valueOf();
       const filteredInsulinData = processedInsulinData.filter(insulin => {
         return insulin.administrationTime >= startDate;
       });
@@ -433,9 +472,8 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
       setError('Failed to load insulin data. Please try again.');
     } finally {
       setLoading(false);
-      setIsFetching(false);
     }
-  }, [dateRange, includeFutureEffect, futureHours, patientId, selectedInsulinTypes.length,
+  }, [timeContext, dateRange, includeFutureEffect, futureHours, patientId, selectedInsulinTypes.length,
       getInsulinParameters, allBloodSugarData, applyInsulinEffect, generateCombinedData,
       optimizeDataForChart]);
 
@@ -455,11 +493,13 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
 
   // Effect to fetch data when component mounts
   useEffect(() => {
-    // Always fetch data on component mount or when date range changes
-    fetchInsulinData();
-  }, [fetchInsulinData]);
+    // Only fetch if we haven't fetched yet or if the date range changes
+    if (!dataFetched || timeContext?.dateRange?.start || timeContext?.dateRange?.end) {
+      fetchInsulinData();
+    }
+  }, [fetchInsulinData, dataFetched, timeContext?.dateRange]);
 
-  // Filter function for insulin types
+  // Handler for insulin type filter toggling
   const handleInsulinTypeToggle = useCallback((insulinType) => {
     setSelectedInsulinTypes(prev => {
       if (prev.includes(insulinType)) {
@@ -470,14 +510,65 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
     });
   }, []);
 
-  // Date range change handler - Uses TimeContext when available
-  const handleDateRangeChange = useCallback((newRange) => {
-    if (timeContext) {
-      timeContext.setDateRange(newRange);
-    } else {
-      setDateRange(newRange);
+  // Toggle future effects projection
+  const toggleFutureEffect = useCallback(() => {
+    setIncludeFutureEffect(!includeFutureEffect);
+  }, [includeFutureEffect]);
+
+  // Force update the data
+  const handleForceUpdate = useCallback(() => {
+    console.log('Forcing data update...');
+    setDataFetched(false); // Reset dataFetched flag to trigger fetch
+    fetchInsulinData();
+  }, [fetchInsulinData]);
+
+  // Format the X-axis labels using TimeManager
+  const formatXAxis = useCallback((tickItem) => {
+    return TimeManager.formatAxisTick(tickItem, timeScale.tickFormat || 'CHART_TICKS_MEDIUM');
+  }, [timeScale]);
+
+  // Generate ticks for x-axis based on time scale
+  const ticks = useMemo(() => {
+    return TimeManager.generateTimeTicks(timeScale.start, timeScale.end, timeScale.tickInterval || 12);
+  }, [timeScale]);
+
+  // Helper function to get consistent colors for insulin types
+  const getInsulinColor = useCallback((insulinType, index, isEffect = false) => {
+    // Color scheme based on insulin type (using index as fallback)
+    const colorMap = {
+      'rapid_acting': '#8884d8', // Purple
+      'short_acting': '#82ca9d', // Green
+      'intermediate_acting': '#ffc658', // Yellow
+      'long_acting': '#ff8042', // Orange
+      'ultra_long_acting': '#0088fe', // Blue
+    };
+
+    // Find a color by insulin type or use index-based color
+    const baseColor = colorMap[insulinType] || [
+      '#8884d8', '#82ca9d', '#ffc658', '#ff8042', '#0088fe',
+      '#00C49F', '#FFBB28', '#FF8042', '#a4de6c', '#d0ed57'
+    ][index % 10];
+
+    if (isEffect) {
+      // For effect lines, use a slightly different shade
+      return adjustColorBrightness(baseColor, -20);
     }
-  }, [timeContext, setDateRange]);
+
+    return baseColor;
+  }, []);
+
+  // Helper function to adjust color brightness
+  function adjustColorBrightness(hex, percent) {
+    let r = parseInt(hex.substring(1, 3), 16);
+    let g = parseInt(hex.substring(3, 5), 16);
+    let b = parseInt(hex.substring(5, 7), 16);
+
+    r = Math.min(255, Math.max(0, r + percent));
+    g = Math.min(255, Math.max(0, g + percent));
+    b = Math.min(255, Math.max(0, b + percent));
+
+    return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+  }
 
   // Custom tooltip for the chart
   const CustomTooltip = useCallback(({ active, payload }) => {
@@ -489,15 +580,14 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
           <p className="tooltip-time">{data.formattedTime}</p>
 
           {/* Display insulin doses */}
-          {Object.entries(data.insulinDoses || {}).length > 0 && (
+          {data.insulinDetails && data.insulinDetails.length > 0 && (
             <div className="tooltip-section">
               <p className="tooltip-header">Insulin Doses:</p>
-              {Object.entries(data.insulinDoses || {}).map(([type, dose], idx) => (
-                dose > 0 && (
-                  <p key={idx} className="tooltip-dose">
-                    {type.replace(/_/g, ' ')} - {dose} units
-                  </p>
-                )
+              {data.insulinDetails.map((insulin, idx) => (
+                <p key={idx} className="tooltip-dose">
+                  {insulin.type.replace(/_/g, ' ')} - {insulin.dose} units
+                  {insulin.mealType !== 'N/A' && ` (${insulin.mealType.replace(/_/g, ' ')})`}
+                </p>
               ))}
             </div>
           )}
@@ -506,7 +596,9 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
           {data.totalInsulinEffect > 0 && (
             <div className="tooltip-section">
               <p className="tooltip-header">Active Insulin Effect:</p>
-              <p className="tooltip-effect">Total: {data.totalInsulinEffect.toFixed(2)} units</p>
+              <p className="tooltip-effect">
+                Total Effect: {data.totalInsulinEffect.toFixed(2)} units
+              </p>
               {Object.entries(data.insulinEffects || {}).map(([type, effect], idx) => (
                 effect > 0 && (
                   <p key={idx} className="tooltip-effect-detail">
@@ -527,11 +619,16 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
                 {data.isEstimated && ' - Estimated'}
                 {data.isActualReading && ' - Actual Reading'}
               </p>
-              {data.predictedBloodSugar && (
-                <p className="tooltip-blood-sugar predicted">
-                  Predicted with insulin: {Math.round(data.predictedBloodSugar * 10) / 10} {unit}
-                </p>
-              )}
+            </div>
+          )}
+
+          {/* Display predicted blood sugar if available */}
+          {data.predictedBloodSugar && (
+            <div className="tooltip-section">
+              <p className="tooltip-header">Predicted Blood Sugar:</p>
+              <p className="tooltip-predicted-bg">
+                ~{Math.round(data.predictedBloodSugar)} {unit} (with insulin effect)
+              </p>
             </div>
           )}
         </div>
@@ -540,7 +637,31 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
     return null;
   }, [unit]);
 
-  // Table columns definition using useMemo to prevent recreating on each render
+  // Custom dot renderer for blood sugar readings
+  const CustomBloodSugarDot = useCallback((props) => {
+    const { cx, cy, stroke, payload } = props;
+
+    // Only render visible dots for actual readings
+    if (!payload.isActualReading) return null;
+
+    // Get color from status or use a default
+    const dotColor = payload.bloodSugarStatus ?
+      payload.bloodSugarStatus.color :
+      (payload.bloodSugar > targetGlucose ? '#ff8800' : '#00C851');
+
+    return (
+      <circle
+        cx={cx}
+        cy={cy}
+        r={4}
+        stroke={dotColor}
+        strokeWidth={2}
+        fill="#ffffff"
+      />
+    );
+  }, [targetGlucose]);
+
+  // Table columns definition
   const columns = useMemo(() => [
     {
       Header: 'Time',
@@ -612,66 +733,11 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
     state: { pageIndex, pageSize }
   } = tableInstance;
 
-  // Format the X-axis labels using TimeManager
-  const formatXAxis = useCallback((tickItem) => {
-    return TimeManager.formatAxisTick(tickItem, timeScale.tickFormat || 'CHART_TICKS_MEDIUM');
-  }, [timeScale]);
-
-  // Helper function to get consistent colors for insulin types
-  const getInsulinColor = useCallback((insulinType, index, isEffect = false) => {
-    const colors = [
-      '#8884d8', '#82ca9d', '#ffc658', '#ff8042', '#0088fe',
-      '#00C49F', '#FFBB28', '#FF8042', '#a4de6c', '#d0ed57'
-    ];
-
-    if (isEffect) {
-      // For effect lines, use a slightly different shade
-      const baseColor = colors[index % colors.length];
-      return adjustColorBrightness(baseColor, -20);
-    }
-
-    return colors[index % colors.length];
-  }, []);
-
-  // Helper function to adjust color brightness
-  function adjustColorBrightness(hex, percent) {
-    let r = parseInt(hex.substring(1, 3), 16);
-    let g = parseInt(hex.substring(3, 5), 16);
-    let b = parseInt(hex.substring(5, 7), 16);
-
-    r = Math.min(255, Math.max(0, r + percent));
-    g = Math.min(255, Math.max(0, g + percent));
-    b = Math.min(255, Math.max(0, b + percent));
-
-    return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
-  }
-
-  // Toggle future effects projection
-  const toggleFutureEffect = useCallback(() => {
-    setIncludeFutureEffect(!includeFutureEffect);
-  }, [includeFutureEffect]);
-
-  // Toggle system info display
-  const toggleSystemInfo = useCallback(() => {
-    setShowSystemInfo(!showSystemInfo);
-  }, [showSystemInfo]);
-
-  // Force update the data
-  const handleForceUpdate = useCallback(() => {
-    fetchInsulinData();
-  }, [fetchInsulinData]);
-
   // Determine which Y-axis ID to use for the current time reference line
   const currentTimeYAxisId = useMemo(() => {
     if (showActualBloodSugar) return "bloodSugar";
-    if (viewMode === 'doses' || viewMode === 'combined') return "insulinDose";
-    return "insulinEffect";
-  }, [showActualBloodSugar, viewMode]);
-
-  // Generate ticks for x-axis based on time scale using TimeManager
-  const ticks = useMemo(() => {
-    return TimeManager.generateTimeTicks(timeScale.start, timeScale.end, timeScale.tickInterval);
-  }, [timeScale]);
+    return "insulinDose";
+  }, [showActualBloodSugar]);
 
   // Check if current time is within chart range
   const currentTimeInRange = TimeManager.isTimeInRange(
@@ -680,135 +746,135 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
     timeScale.end
   );
 
-  // Toggle detailed insulin info
-  const toggleDetailedInsulinInfo = () => {
-    setShowDetailedInsulinInfo(!showDetailedInsulinInfo);
-  };
-
   return (
     <div className="insulin-visualization">
       <h2 className="title">Insulin Therapy Analysis</h2>
 
-      <div className="super-compact-controls">
-        <div className="top-info-bar">
-          <span className="timezone-info">Your timezone: {userTimeZone}</span>
-          {showSystemInfo && (
-            <span className="system-info-inline">
-              | Current: {systemDateTime} | User: {currentUserLogin}
-              <button onClick={toggleSystemInfo} className="system-info-toggle">×</button>
-            </span>
-          )}
-          {!showSystemInfo && (
-            <button onClick={toggleSystemInfo} className="system-info-toggle show-btn">Info</button>
-          )}
+      <div className="timezone-info">
+        Your timezone: {userTimeZone}
+        <span className="timezone-note"> (all times displayed in your local timezone)</span>
+      </div>
+
+      <div className="view-toggle">
+        <button
+          className={`toggle-btn ${activeView === 'chart' ? 'active' : ''}`}
+          onClick={() => setActiveView('chart')}
+        >
+          Chart View
+        </button>
+        <button
+          className={`toggle-btn ${activeView === 'table' ? 'active' : ''}`}
+          onClick={() => setActiveView('table')}
+        >
+          Table View
+        </button>
+      </div>
+
+      {activeView === 'chart' && (
+        <div className="view-mode-toggle">
+          <button
+            className={`toggle-btn ${viewMode === 'combined' ? 'active' : ''}`}
+            onClick={() => setViewMode('combined')}
+          >
+            Combined View
+          </button>
+          <button
+            className={`toggle-btn ${viewMode === 'doses' ? 'active' : ''}`}
+            onClick={() => setViewMode('doses')}
+          >
+            Insulin Doses
+          </button>
+          <button
+            className={`toggle-btn ${viewMode === 'effect' ? 'active' : ''}`}
+            onClick={() => setViewMode('effect')}
+          >
+            Insulin Effect
+          </button>
+        </div>
+      )}
+
+      <div className="controls">
+        {/* Use TimeInput component in daterange mode */}
+        <TimeInput
+          mode="daterange"
+          value={timeContext ? timeContext.dateRange : dateRange}
+          onChange={timeContext ? timeContext.handleDateRangeChange : setDateRange}
+          useTimeContext={!!timeContext}
+          label="Date Range"
+          className="date-range-control"
+        />
+
+        <div className="insulin-type-filters">
+          <div className="filter-header">Insulin Types:</div>
+          <div className="filter-options">
+            {insulinTypes.map((type, idx) => (
+              <label key={`${type}_${idx}`} className="filter-option">
+                <input
+                  type="checkbox"
+                  checked={selectedInsulinTypes.includes(type)}
+                  onChange={() => handleInsulinTypeToggle(type)}
+                />
+                <span style={{color: getInsulinColor(type, idx)}}>
+                  {type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                </span>
+              </label>
+            ))}
+          </div>
         </div>
 
-        <div className="control-panel">
-          <div className="main-controls">
-            {/* Date range control */}
-            <TimeInput
-              mode="daterange"
-              value={dateRange}
-              onChange={handleDateRangeChange}
-              useTimeContext={!!timeContext}
-              label="Date Range"
-              className="date-range-control"
-              compact={true}
+        <div className="display-options">
+          <label className="display-option">
+            <input
+              type="checkbox"
+              checked={showActualBloodSugar}
+              onChange={() => setShowActualBloodSugar(!showActualBloodSugar)}
             />
-
-            {/* View mode toggles in a compact group */}
-            <div className="view-mode-group">
-              <div className="toggle-group">
-                <button className={`mini-btn ${activeView === 'chart' ? 'active' : ''}`} onClick={() => setActiveView('chart')}>
-                  Chart
-                </button>
-                <button className={`mini-btn ${activeView === 'table' ? 'active' : ''}`} onClick={() => setActiveView('table')}>
-                  Table
-                </button>
-              </div>
-
-              {activeView === 'chart' && (
-                <div className="toggle-group">
-                  <button className={`mini-btn ${viewMode === 'combined' ? 'active' : ''}`} onClick={() => setViewMode('combined')}>
-                    Combined
-                  </button>
-                  <button className={`mini-btn ${viewMode === 'doses' ? 'active' : ''}`} onClick={() => setViewMode('doses')}>
-                    Doses
-                  </button>
-                  <button className={`mini-btn ${viewMode === 'effect' ? 'active' : ''}`} onClick={() => setViewMode('effect')}>
-                    Effect
-                  </button>
-                </div>
-              )}
+            Show Blood Sugar
+          </label>
+          <label className="display-option">
+            <input
+              type="checkbox"
+              checked={showExpectedEffect}
+              onChange={() => setShowExpectedEffect(!showExpectedEffect)}
+            />
+            Show Insulin Effect
+          </label>
+          <label className="display-option">
+            <input
+              type="checkbox"
+              checked={includeFutureEffect}
+              onChange={toggleFutureEffect}
+            />
+            Project Future Effect
+          </label>
+          {includeFutureEffect && (
+            <div className="future-hours">
+              <label>Future Hours:</label>
+              <input
+                type="number"
+                min="1"
+                max="24"
+                value={futureHours}
+                onChange={(e) => setFutureHours(parseInt(e.target.value) || 7)}
+              />
             </div>
-
-            {/* Update button */}
-            <button
-              className={`update-btn ${isFetching ? 'loading' : ''}`}
-              onClick={handleForceUpdate}
-              disabled={isFetching}
-            >
-              {isFetching ? 'Updating...' : 'Update'}
-            </button>
-          </div>
-
-          <div className="secondary-controls">
-            <div className="display-toggles">
-              <label className="mini-toggle">
-                <input type="checkbox" checked={showActualBloodSugar} onChange={() => setShowActualBloodSugar(!showActualBloodSugar)} />
-                <span>BG</span>
-              </label>
-              <label className="mini-toggle">
-                <input type="checkbox" checked={showExpectedEffect} onChange={() => setShowExpectedEffect(!showExpectedEffect)} />
-                <span>Effect</span>
-              </label>
-              <label className="mini-toggle">
-                <input type="checkbox" checked={includeFutureEffect} onChange={toggleFutureEffect} />
-                <span>Future</span>
-                {includeFutureEffect && (
-                  <span className="future-hours">
-                    <input
-                      type="number"
-                      min="1"
-                      max="24"
-                      value={futureHours}
-                      onChange={(e) => setFutureHours(parseInt(e.target.value) || 7)}
-                    />h
-                  </span>
-                )}
-              </label>
-            </div>
-
-            <div className="insulin-types-mini">
-              <span>Types:</span>
-              <div className="mini-types">
-                {insulinTypes.map((type, idx) => (
-                  <label key={`${type}_${idx}`} className="type-label">
-                    <input
-                      type="checkbox"
-                      checked={selectedInsulinTypes.includes(type)}
-                      onChange={() => handleInsulinTypeToggle(type)}
-                    />
-                    <span style={{color: getInsulinColor(type, idx)}}>
-                      {type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </div>
+          )}
+          <div className="effect-duration">
+            <label>Effect Duration (hours):</label>
+            <input
+              type="number"
+              min="1"
+              max="24"
+              value={effectDurationHours}
+              onChange={(e) => setEffectDurationHours(parseInt(e.target.value) || 5)}
+            />
           </div>
         </div>
+
+        <button className="update-btn" onClick={handleForceUpdate}>Update Data</button>
       </div>
 
       {error && <div className="error-message">{error}</div>}
-
-      {/* Data point counter information */}
-      <div className="data-info">
-        <span>Displaying {optimizedData.length} data points</span>
-        {optimizedData.length < combinedData.length &&
-          <span className="optimization-note"> (optimized from {combinedData.length} total)</span>
-        }
-      </div>
 
       {loading ? (
         <div className="loading">Loading insulin data...</div>
@@ -842,12 +908,13 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
                       <YAxis
                         yAxisId="bloodSugar"
                         orientation="left"
-                        domain={['dataMin - 10', 'dataMax + 10']}
+                        domain={['dataMin - 20', 'dataMax + 20']}
+                        tickFormatter={(value) => Math.round(value)}
                         label={{ value: `Blood Sugar (${unit})`, angle: -90, position: 'insideLeft' }}
                       />
                     )}
 
-                    {/* Y-axis for insulin doses - BIDIRECTIONAL - SIMPLIFIED */}
+                    {/* Y-axis for insulin doses - BIDIRECTIONAL */}
                     {(viewMode === 'combined' || viewMode === 'doses') && (
                       <YAxis
                         yAxisId="insulinDose"
@@ -863,7 +930,7 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
                       />
                     )}
 
-                    {/* Y-axis for insulin effect - BIDIRECTIONAL - SIMPLIFIED */}
+                    {/* Y-axis for insulin effect */}
                     {(viewMode === 'combined' || viewMode === 'effect') && showExpectedEffect && (
                       <YAxis
                         yAxisId="insulinEffect"
@@ -902,57 +969,19 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
                     {/* Blood Sugar Lines */}
                     {showActualBloodSugar && (
                       <>
-                        {/* 1. Line for actual readings - dark blue */}
+                        {/* Actual readings with custom dots */}
                         <Line
                           yAxisId="bloodSugar"
                           type="monotone"
                           dataKey="bloodSugar"
-                          name={`Actual Blood Sugar (${unit})`}
-                          data={optimizedData.filter(d => d.isActualReading && !d.isEstimated)}
-                          stroke="#1a4b8c"
-                          strokeWidth={2}
-                          dot={{
-                            r: 4,
-                            fill: "#1a4b8c",
-                            stroke: "#0c2c5c",
-                            strokeWidth: 1
-                          }}
-                          activeDot={{
-                            r: 6,
-                            fill: "#1a4b8c",
-                            stroke: "#fff",
-                            strokeWidth: 1
-                          }}
-                          connectNulls={false}
+                          name={`Blood Sugar (${unit})`}
+                          stroke="#8884d8"
+                          dot={CustomBloodSugarDot}
+                          activeDot={{ r: 8 }}
+                          connectNulls
                         />
 
-                        {/* 2. Line for estimated readings - light blue */}
-                        <Line
-                          yAxisId="bloodSugar"
-                          type="monotone"
-                          dataKey="bloodSugar"
-                          name={`Estimated Blood Sugar (${unit})`}
-                          data={optimizedData.filter(d => d.isEstimated || d.dataType === 'estimated')}
-                          stroke="#a5c0e6"
-                          strokeWidth={1.5}
-                          strokeOpacity={0.7}
-                          dot={{
-                            r: 2.5,
-                            fill: "#a5c0e6",
-                            stroke: "#8eb0e0",
-                            strokeWidth: 1,
-                            opacity: 0.7
-                          }}
-                          activeDot={{
-                            r: 4,
-                            fill: "#a5c0e6",
-                            stroke: "#fff",
-                            strokeWidth: 1
-                          }}
-                          connectNulls={false}
-                        />
-
-                        {/* 3. Line for predicted insulin effects - green dashed */}
+                        {/* Predicted blood sugar with insulin effect */}
                         <Line
                           yAxisId="bloodSugar"
                           type="monotone"
@@ -960,70 +989,53 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
                           name={`Predicted with Insulin (${unit})`}
                           stroke="#00C853"
                           strokeWidth={1.5}
-                          strokeOpacity={0.8}
                           strokeDasharray="5 2"
-                          dot={{
-                            r: 3,
-                            fill: "#00C853",
-                            stroke: "#005724",
-                            strokeWidth: 1,
-                            opacity: 0.7
-                          }}
-                          activeDot={{
-                            r: 5,
-                            stroke: "#ffffff",
-                            strokeWidth: 1
-                          }}
-                          connectNulls={true}
+                          dot={{ r: 2 }}
+                          connectNulls
                         />
                       </>
                     )}
 
-                    {/* SIMPLIFIED Insulin Doses - More prominent bars */}
+                    {/* Insulin Doses as Bars */}
                     {(viewMode === 'combined' || viewMode === 'doses') && selectedInsulinTypes.map((insulinType, idx) => (
                       <Bar
                         key={`dose-${insulinType}-${idx}`}
                         yAxisId="insulinDose"
-                        dataKey={`insulinBars.${insulinType}`} // Direct key to the bar value
+                        dataKey={`insulinBars.${insulinType}`}
                         name={`${insulinType.replace(/_/g, ' ')} Dose`}
                         fill={getInsulinColor(insulinType, idx)}
-                        fillOpacity={0.9}
-                        stroke={adjustColorBrightness(getInsulinColor(insulinType, idx), -30)}
-                        strokeWidth={1}
-                        barSize={50}  // Make bars wider
-                        isAnimationActive={false} // Disable animation for performance
+                        barSize={20}
                       />
                     ))}
 
-                    {/* SIMPLIFIED Insulin Effect Area */}
+                    {/* Insulin Effect Area */}
                     {(viewMode === 'combined' || viewMode === 'effect') && showExpectedEffect && (
                       <Area
                         yAxisId="insulinEffect"
                         type="monotone"
-                        dataKey="totalInsulinEffectValue" // Direct key to effect value
-                        name="Active Insulin Effect"
+                        dataKey="totalInsulinEffectValue"
+                        name="Total Active Insulin"
                         fill="#82ca9d"
                         stroke="#82ca9d"
                         fillOpacity={0.3}
-                        isAnimationActive={false} // Disable animation for performance
                       />
                     )}
 
-                    {/* SIMPLIFIED insulin effects lines */}
-                    {(viewMode === 'combined' || viewMode === 'effect') && showExpectedEffect && selectedInsulinTypes.map((insulinType, idx) => (
-                      <Line
-                        key={`effect-${insulinType}-${idx}`}
-                        yAxisId="insulinEffect"
-                        type="monotone"
-                        dataKey={`insulinEffectValues.${insulinType}`} // Direct key to effect value
-                        name={`${insulinType.replace(/_/g, ' ')} Effect`}
-                        stroke={getInsulinColor(insulinType, idx, true)}
-                        strokeWidth={1}
-                        strokeDasharray="3 3"
-                        dot={false}
-                        isAnimationActive={false} // Disable animation for performance
-                      />
-                    ))}
+                    {/* Individual insulin effects */}
+                    {(viewMode === 'combined' || viewMode === 'effect') && showExpectedEffect &&
+                      selectedInsulinTypes.map((insulinType, idx) => (
+                        <Line
+                          key={`effect-${insulinType}-${idx}`}
+                          yAxisId="insulinEffect"
+                          type="monotone"
+                          dataKey={`insulinEffectValues.${insulinType}`}
+                          name={`${insulinType.replace(/_/g, ' ')} Effect`}
+                          stroke={getInsulinColor(insulinType, idx, true)}
+                          strokeWidth={1}
+                          strokeDasharray="3 3"
+                          dot={false}
+                        />
+                      ))}
 
                     {/* Current time reference line */}
                     {currentTimeInRange && (
@@ -1039,70 +1051,39 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
                 </ResponsiveContainer>
               </ErrorBoundary>
 
-              {/* Compact collapsible legend */}
-              <div className="compact-legends">
-                <div className="legend-section">
-                  <div className="legend-header" onClick={toggleDetailedInsulinInfo}>
-                    <h4>Insulin Types {showDetailedInsulinInfo ? '▼' : '►'}</h4>
-                  </div>
-
-                  {showDetailedInsulinInfo && (
-                    <div className="insulin-types-grid">
-                      {insulinTypes.filter(type => selectedInsulinTypes.includes(type)).map((type, idx) => {
-                        const params = getInsulinParameters(type);
-                        return (
-                          <div key={`legend-${type}-${idx}`} className="insulin-type-compact">
-                            <div className="insulin-type-header">
-                              <span
-                                className="insulin-color-box"
-                                style={{ backgroundColor: getInsulinColor(type, idx) }}
-                              ></span>
-                              <span className="insulin-type-name">
-                                {type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                              </span>
-                            </div>
-                            <div className="insulin-pharmacokinetics">
-                              <span>Onset: {params.onset_hours}h</span>
-                              {params.peak_hours && <span>Peak: {params.peak_hours}h</span>}
-                              <span>Duration: {params.duration_hours}h</span>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
+              <div className="insulin-legend">
+                <h4>Insulin Type Guide</h4>
+                <div className="insulin-scale">
+                  {insulinTypes.filter(type => selectedInsulinTypes.includes(type)).map((type, idx) => {
+                    const params = getInsulinParameters(type);
+                    return (
+                      <div key={`legend-${type}-${idx}`} className="insulin-scale-item">
+                        <span className="scale-color" style={{ backgroundColor: getInsulinColor(type, idx) }}></span>
+                        <span className="scale-label">{type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</span>
+                        <span className="scale-details">
+                          Onset: {params.onset_hours}h |
+                          {params.peak_hours ? ` Peak: ${params.peak_hours}h |` : ''}
+                          Duration: {params.duration_hours}h
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
+              </div>
 
-                {/* Simple blood sugar effect legend */}
-                {showActualBloodSugar && (
-                  <div className="blood-sugar-legend">
-                    <div className="compact-legend-items">
-                      <div className="legend-item">
-                        <span className="legend-color" style={{backgroundColor: '#1a4b8c'}}></span>
-                        <span>Actual Readings</span>
-                      </div>
-                      <div className="legend-item">
-                        <span className="legend-color" style={{backgroundColor: '#a5c0e6'}}></span>
-                        <span>Estimated Points</span>
-                      </div>
-                      <div className="legend-item">
-                        <span className="legend-dash" style={{borderTop: '2px dashed #00C853'}}></span>
-                        <span>Predicted with Insulin</span>
-                      </div>
-                      <div className="legend-item">
-                        <span className="legend-color" style={{backgroundColor: '#FF7300'}}></span>
-                        <span>Target: {targetGlucose} {unit}</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Bidirectional chart explanation */}
+              <div className="chart-legend">
+                <h4>Chart Explanation</h4>
                 <div className="chart-explanation">
-                  <p className="explanation-note">
-                    <strong>Note:</strong> Insulin doses and effects are shown below the zero line.
-                    Higher values extend further downward on the chart.
-                  </p>
+                  <div className="explanation-section">
+                    <p><strong>Insulin Doses:</strong> Shown as bars extending downward. Taller bars represent larger doses.</p>
+                    <p><strong>Active Insulin:</strong> The estimated amount of insulin still active in your body over time.</p>
+                    <p><strong>Predicted Effect:</strong> Shows how insulin is expected to affect blood sugar levels.</p>
+                  </div>
+
+                  <div className="explanation-note">
+                    <p><strong>Note:</strong> Insulin doses and effects are shown below the zero line.
+                    Higher values extend further downward on the chart for clearer visualization.</p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1156,7 +1137,7 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
                   ) : (
                     <tr>
                       <td colSpan={columns.length} className="no-data">
-                        No insulin data found for the selected date range.
+                        No insulin data found for the selected filters.
                       </td>
                     </tr>
                   )}
@@ -1203,6 +1184,14 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
           )}
         </div>
       )}
+
+      {/* Data point information */}
+      <div className="data-info">
+        <span>Displaying {optimizedData.length} data points</span>
+        {optimizedData.length < combinedData.length &&
+          <span className="optimization-note"> (optimized from {combinedData.length} total points)</span>
+        }
+      </div>
     </div>
   );
 };

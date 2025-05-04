@@ -126,3 +126,283 @@
   background-color: #f5f5f5;
   cursor: not-allowed;
 }
+
+/* Add to BloodSugarInput.css */
+.import-section {
+  margin-bottom: 20px;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 10px;
+}
+
+.import-button {
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
+  background-color: #6c757d;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-bottom: 10px;
+  font-size: 0.9rem;
+}
+
+.import-button svg {
+  margin-right: 8px;
+}
+
+.import-wrapper {
+  margin-top: 10px;
+  margin-bottom: 20px;
+}
+
+/* Add these styles to your existing BloodSugarInput.css file */
+
+.blood-sugar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.blood-sugar-header h2 {
+  margin: 0;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 10px;
+}
+
+.icon-button {
+  background: none;
+  border: none;
+  color: #3498db;
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 5px;
+  border-radius: 4px;
+  transition: background-color 0.2s, color 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+}
+
+.icon-button:hover {
+  background-color: #edf7ff;
+  color: #2980b9;
+}
+
+.icon-button:disabled {
+  color: #95a5a6;
+  cursor: not-allowed;
+}
+
+.import-button {
+  color: #27ae60;
+}
+
+.import-button:hover {
+  background-color: #e5f9ee;
+  color: #219653;
+}
+
+.history-button {
+  color: #f39c12;
+}
+
+.history-button:hover {
+  background-color: #fef6e7;
+  color: #d35400;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.recent-readings {
+  margin-top: 20px;
+  padding: 15px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+}
+
+.recent-readings h3 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  font-size: 1.1rem;
+  color: #2c3e50;
+}
+
+.readings-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.reading-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px;
+  margin-bottom: 8px;
+  border-radius: 6px;
+  background-color: #f9f9f9;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.reading-value {
+  font-size: 1.2rem;
+  font-weight: 600;
+  width: 30%;
+}
+
+.reading-details {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  margin: 0 10px;
+}
+
+.reading-time {
+  font-size: 0.9rem;
+  color: #7f8c8d;
+}
+
+.reading-notes {
+  font-size: 0.85rem;
+  color: #333;
+  margin-top: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 150px;
+}
+
+.reading-status {
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.status-normal {
+  color: #27ae60;
+}
+
+.status-high {
+  color: #e74c3c;
+}
+
+.status-low {
+  color: #e67e22;
+}
+
+.reading-value.status-normal {
+  color: #27ae60;
+}
+
+.reading-value.status-high {
+  color: #e74c3c;
+}
+
+.reading-value.status-low {
+  color: #e67e22;
+}
+
+.reading-status.status-normal {
+  background-color: #e5f9ee;
+  color: #27ae60;
+}
+
+.reading-status.status-high {
+  background-color: #fde7e5;
+  color: #e74c3c;
+}
+
+.reading-status.status-low {
+  background-color: #fef6e7;
+  color: #e67e22;
+}
+
+.no-readings {
+  color: #95a5a6;
+  font-style: italic;
+  text-align: center;
+  padding: 20px;
+}
+
+.readings-footer {
+  margin-top: 15px;
+  padding-top: 10px;
+  border-top: 1px dotted #e0e0e0;
+  font-size: 0.9rem;
+}
+
+.import-note {
+  color: #7f8c8d;
+}
+
+.import-link {
+  color: #3498db;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.import-link:hover {
+  text-decoration: underline;
+}
+/* Add these additional styles for import functionality */
+
+.import-message {
+  margin-top: 15px;
+  padding: 12px;
+  border-radius: 6px;
+  animation: fadeIn 0.3s ease;
+}
+
+.import-message.info {
+  background-color: #e2f0fb;
+  color: #0c5460;
+  border-left: 4px solid #17a2b8;
+}
+
+.import-message-header {
+  display: flex;
+  align-items: center;
+  font-weight: 500;
+}
+
+.message-icon {
+  margin-right: 8px;
+}
+
+.import-details {
+  margin-top: 8px;
+  padding: 8px;
+  border-radius: 4px;
+  background-color: rgba(255, 255, 255, 0.4);
+  font-size: 0.9rem;
+  font-family: monospace;
+  white-space: pre-wrap;
+}
+
+.inline-icon {
+  font-size: 0.9em;
+  vertical-align: middle;
+  margin: -2px 2px 0;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+/* Existing styles for the blood-sugar-input component would remain below */

@@ -1,690 +1,409 @@
 .insulin-visualization {
-  width: 100%;
-  max-width: 100%;
+  font-family: Arial, sans-serif;
+  padding: 20px;
+  max-width: 1200px;
   margin: 0 auto;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
-/* Super compact controls */
-.super-compact-controls {
+.insulin-visualization .title {
+  color: #333;
+  border-bottom: 1px solid #ddd;
+  padding-bottom: 10px;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.insulin-visualization .timezone-info {
+  font-size: 0.8rem;
+  color: #666;
+  margin-bottom: 10px;
+  text-align: right;
+}
+
+.insulin-visualization .timezone-note {
+  font-style: italic;
+}
+
+.insulin-visualization .view-toggle {
+  display: flex;
+  justify-content: center;
   margin-bottom: 15px;
 }
 
-.top-info-bar {
+.insulin-visualization .view-mode-toggle {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 0.8rem;
-  color: #666;
-  margin-bottom: 8px;
+  justify-content: center;
+  margin-bottom: 20px;
 }
 
-.timezone-info {
-  white-space: nowrap;
-  font-size: 0.8rem;
-}
-
-.system-info-inline {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 0.8rem;
-}
-
-.system-info-toggle {
-  border: none;
-  background: none;
-  color: #888;
-  cursor: pointer;
-  font-size: 0.9rem;
-  padding: 0 3px;
-  margin-left: 2px;
-}
-
-.system-info-toggle.show-btn {
-  padding: 2px 8px;
+.insulin-visualization .toggle-btn {
   background-color: #f0f0f0;
-  border-radius: 3px;
-  font-size: 0.8rem;
-}
-
-/* Control panel with two rows */
-.control-panel {
-  background-color: #f8f9fa;
-  border-radius: 5px;
-  border: 1px solid #e9ecef;
-  padding: 8px;
-}
-
-.main-controls {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 8px;
-}
-
-.view-mode-group {
-  display: flex;
-  gap: 8px;
-}
-
-.toggle-group {
-  display: flex;
   border: 1px solid #ddd;
+  padding: 8px 16px;
+  margin: 0 5px;
   border-radius: 4px;
-  overflow: hidden;
-}
-
-.mini-btn {
-  background-color: #f5f5f5;
-  border: none;
-  border-right: 1px solid #ddd;
-  padding: 4px 8px;
-  font-size: 0.8rem;
   cursor: pointer;
-  transition: all 0.15s;
+  font-size: 14px;
+  transition: all 0.3s ease;
 }
 
-.mini-btn:last-child {
-  border-right: none;
+.insulin-visualization .toggle-btn:hover {
+  background-color: #e3e3e3;
 }
 
-.mini-btn.active {
-  background-color: #4285f4;
+.insulin-visualization .toggle-btn.active {
+  background-color: #007bff;
   color: white;
+  border-color: #007bff;
 }
 
-.mini-btn:hover:not(.active) {
-  background-color: #e9ecef;
-}
-
-.update-btn {
-  padding: 4px 12px;
-  background-color: #4285f4;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.8rem;
-  font-weight: 500;
-  min-width: 80px;
-  transition: all 0.2s;
-  white-space: nowrap;
-}
-
-.update-btn:hover {
-  background-color: #3367d6;
-}
-
-.update-btn.loading {
-  background-color: #6c757d;
-  cursor: not-allowed;
-}
-
-.update-btn:disabled {
-  background-color: #6c757d;
-  cursor: not-allowed;
-}
-
-/* Secondary row controls */
-.secondary-controls {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  background-color: #f0f0f8;
-  padding: 5px 8px;
-  border-radius: 4px;
-  border: 1px solid #e0e0f0;
-}
-
-.display-toggles {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.mini-toggle {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  font-size: 0.75rem;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.mini-toggle input[type="checkbox"] {
-  margin: 0;
-  width: 13px;
-  height: 13px;
-}
-
-.future-hours {
-  display: inline-flex;
-  align-items: center;
-  margin-left: 3px;
-}
-
-.future-hours input {
-  width: 28px;
-  padding: 1px 2px;
-  margin: 0 2px;
-  font-size: 0.75rem;
-  border-radius: 2px;
-  border: 1px solid #ced4da;
-}
-
-/* Ultra compact insulin type controls */
-.insulin-types-mini {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 0.75rem;
-}
-
-.mini-types {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-}
-
-.type-label {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  cursor: pointer;
-  white-space: nowrap;
-  font-size: 0.75rem;
-}
-
-.type-label input[type="checkbox"] {
-  margin: 0;
-  width: 13px;
-  height: 13px;
-}
-
-/* Small date range input */
-.date-range-control {
-  font-size: 0.8rem;
-}
-
-.date-range-control input[type="date"] {
-  padding: 3px;
-  font-size: 0.8rem;
-  width: 120px;
-}
-
-.date-range-control label {
-  font-size: 0.8rem;
-  margin-right: 3px;
-}
-
-/* Tooltip styling */
-.insulin-tooltip {
-  background-color: rgba(255, 255, 255, 0.95);
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  padding: 8px;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
-  max-width: 280px;
-  font-size: 0.85rem;
-}
-
-.tooltip-time {
-  font-weight: bold;
-  margin-bottom: 6px;
-  padding-bottom: 4px;
-  border-bottom: 1px solid #eee;
-  color: #333;
-  font-size: 0.9rem;
-}
-
-.tooltip-section {
-  margin-bottom: 6px;
-  padding-bottom: 4px;
-  border-bottom: 1px dashed #eee;
-}
-
-.tooltip-section:last-child {
-  margin-bottom: 0;
-  padding-bottom: 0;
-  border-bottom: none;
-}
-
-.tooltip-header {
-  font-weight: 600;
-  margin: 4px 0 2px;
-  color: #555;
-  font-size: 0.85rem;
-}
-
-.tooltip-dose, .tooltip-effect, .tooltip-effect-detail {
-  margin: 2px 0;
-  font-size: 0.8rem;
-}
-
-.tooltip-blood-sugar {
-  font-weight: 500;
-  margin: 4px 0;
-  font-size: 0.85rem;
-}
-
-.tooltip-blood-sugar.predicted {
-  color: #00C853;
-  font-size: 0.8rem;
-}
-
-/* Compact legends */
-.compact-legends {
+.insulin-visualization .controls {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-top: 12px;
-  padding: 8px;
-  background-color: #f9f9f9;
+  gap: 15px;
+  margin-bottom: 20px;
+  padding: 15px;
+  border: 1px solid #ddd;
   border-radius: 4px;
-  border: 1px solid #eee;
-  font-size: 0.85rem;
+  background-color: white;
 }
 
-.legend-section {
-  margin-bottom: 4px;
+.insulin-visualization .insulin-type-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
 }
 
-.legend-header {
+.insulin-visualization .filter-header {
+  font-weight: bold;
+  margin-right: 10px;
+}
+
+.insulin-visualization .filter-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.insulin-visualization .filter-option {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 4px;
+  padding: 5px 10px;
+  border-radius: 4px;
+  background-color: #f5f5f5;
+  white-space: nowrap;
 }
 
-.legend-header h4 {
-  margin: 0;
-  font-size: 0.9rem;
-  color: #444;
-}
-
-.insulin-types-grid {
+.insulin-visualization .display-options {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 6px;
+  gap: 15px;
+  align-items: center;
 }
 
-.insulin-type-compact {
-  padding: 6px;
-  background-color: #f0f0f4;
+.insulin-visualization .display-option {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+}
+
+.insulin-visualization .future-hours {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.insulin-visualization .future-hours input {
+  width: 50px;
+  padding: 2px 5px;
+  border: 1px solid #ddd;
   border-radius: 3px;
-  border: 1px solid #e5e5e5;
-  flex: 1 0 180px;
-  max-width: 250px;
 }
 
-.insulin-type-header {
+.insulin-visualization .effect-duration {
   display: flex;
   align-items: center;
-  gap: 4px;
-  margin-bottom: 4px;
+  gap: 5px;
 }
 
-.insulin-color-box {
-  width: 10px;
-  height: 10px;
-  border-radius: 2px;
+.insulin-visualization .effect-duration input {
+  width: 50px;
+  padding: 2px 5px;
+  border: 1px solid #ddd;
+  border-radius: 3px;
 }
 
-.insulin-type-name {
-  font-weight: 500;
-  font-size: 0.85rem;
+.insulin-visualization .update-btn {
+  padding: 8px 16px;
+  background-color: #28a745;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+  align-self: flex-end;
 }
 
-.insulin-pharmacokinetics {
+.insulin-visualization .update-btn:hover {
+  background-color: #218838;
+}
+
+.insulin-visualization .error-message {
+  color: #dc3545;
+  background-color: #f8d7da;
+  padding: 10px;
+  border-radius: 4px;
+  margin-bottom: 15px;
+}
+
+.insulin-visualization .loading,
+.insulin-visualization .no-data {
+  text-align: center;
+  padding: 20px;
+  color: #666;
+}
+
+.insulin-visualization .content-container {
+  margin-top: 20px;
+}
+
+.insulin-visualization .chart-container {
+  background-color: white;
+  padding: 15px;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+  margin-bottom: 20px;
+}
+
+.insulin-visualization .insulin-tooltip {
+  background-color: white;
+  padding: 10px 15px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+  font-size: 12px;
+  max-width: 300px;
+}
+
+.insulin-visualization .tooltip-time {
+  font-weight: bold;
+  margin-bottom: 5px;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 5px;
+}
+
+.insulin-visualization .tooltip-section {
+  margin-bottom: 8px;
+}
+
+.insulin-visualization .tooltip-header {
+  font-weight: bold;
+  margin: 5px 0 3px;
+  color: #007bff;
+}
+
+.insulin-visualization .tooltip-dose,
+.insulin-visualization .tooltip-effect,
+.insulin-visualization .tooltip-effect-detail,
+.insulin-visualization .tooltip-blood-sugar,
+.insulin-visualization .tooltip-predicted-bg {
+  margin: 2px 0;
+  font-size: 11px;
+}
+
+.insulin-visualization .insulin-legend {
+  margin-top: 20px;
+  background-color: #f9f9f9;
+  border: 1px solid #eee;
+  border-radius: 4px;
+  padding: 10px;
+}
+
+.insulin-visualization .insulin-legend h4 {
+  margin: 0 0 10px;
+  font-size: 16px;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 5px;
+}
+
+.insulin-visualization .insulin-scale {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 10px;
+}
+
+.insulin-visualization .insulin-scale-item {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  font-size: 0.75rem;
+  flex-direction: column;
+  padding: 8px;
+  border-radius: 4px;
+  background-color: white;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
 
-.blood-sugar-legend {
-  padding-top: 4px;
+.insulin-visualization .scale-color {
+  height: 15px;
+  width: 30px;
+  border-radius: 3px;
+  margin-bottom: 5px;
 }
 
-.compact-legend-items {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 4px;
+.insulin-visualization .scale-label {
+  font-weight: bold;
+  margin-bottom: 3px;
 }
 
-.legend-item {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 0.8rem;
+.insulin-visualization .scale-details {
+  font-size: 12px;
+  color: #666;
 }
 
-.legend-color {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  display: inline-block;
+.insulin-visualization .chart-legend {
+  margin-top: 20px;
 }
 
-.legend-dash {
-  width: 16px;
-  display: inline-block;
+.insulin-visualization .chart-legend h4 {
+  margin: 0 0 10px;
+  font-size: 16px;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 5px;
 }
 
-/* Table styling */
-.table-container {
+.insulin-visualization .chart-explanation {
+  background-color: #f9f9f9;
+  border: 1px solid #eee;
+  border-radius: 4px;
+  padding: 10px;
+}
+
+.insulin-visualization .explanation-section {
+  margin-bottom: 10px;
+}
+
+.insulin-visualization .explanation-note {
+  font-size: 12px;
+  background-color: #fff8dc;
+  padding: 8px;
+  border-radius: 4px;
+  border-left: 3px solid #ffd700;
+}
+
+.insulin-visualization .table-container {
   overflow-x: auto;
-  margin-top: 12px;
 }
 
-.insulin-table {
+.insulin-visualization .insulin-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.85rem;
+  margin-bottom: 15px;
 }
 
-.insulin-table th,
-.insulin-table td {
-  padding: 6px 8px;
+.insulin-visualization .insulin-table th,
+.insulin-visualization .insulin-table td {
+  padding: 8px 12px;
   text-align: left;
-  border: 1px solid #ddd;
+  border-bottom: 1px solid #ddd;
 }
 
-.insulin-table th {
-  background-color: #f5f5f5;
-  font-weight: 500;
+.insulin-visualization .insulin-table th {
+  background-color: #f4f4f4;
+  font-weight: bold;
+  cursor: pointer;
 }
 
-.insulin-table tr:nth-child(even) {
+.insulin-visualization .insulin-table tbody tr:hover {
   background-color: #f9f9f9;
 }
 
-.insulin-table tr:hover {
-  background-color: #f1f1f1;
-}
-
-/* Pagination */
-.pagination {
+.insulin-visualization .pagination {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-top: 12px;
+  justify-content: center;
   flex-wrap: wrap;
-  font-size: 0.85rem;
+  gap: 10px;
+  margin-top: 15px;
 }
 
-.pagination button {
-  padding: 3px 8px;
+.insulin-visualization .pagination button {
   background-color: #f0f0f0;
   border: 1px solid #ddd;
+  padding: 5px 10px;
   border-radius: 3px;
   cursor: pointer;
-  font-size: 0.8rem;
 }
 
-.pagination button:disabled {
+.insulin-visualization .pagination button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-.pagination input {
-  width: 40px;
-  padding: 3px;
+.insulin-visualization .pagination input {
+  width: 50px;
+  padding: 5px;
   border: 1px solid #ddd;
   border-radius: 3px;
-  font-size: 0.8rem;
 }
 
-.pagination select {
-  padding: 3px;
+.insulin-visualization .pagination select {
+  padding: 5px;
   border: 1px solid #ddd;
   border-radius: 3px;
-  font-size: 0.8rem;
 }
 
-/* Loading and error states */
-.loading, .no-data {
-  padding: 16px;
-  text-align: center;
+.insulin-visualization .data-info {
+  font-size: 12px;
   color: #666;
-  background-color: #f9f9f9;
-  border-radius: 4px;
-  margin: 12px 0;
-  font-size: 0.9rem;
-}
-
-.error-message {
-  padding: 8px;
-  background-color: #fff4f4;
-  border-left: 4px solid #ff5252;
-  color: #c62828;
-  margin: 8px 0;
-  border-radius: 3px;
-  font-size: 0.85rem;
-}
-
-/* Responsive adjustments */
-@media (max-width: 768px) {
-  .main-controls {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .view-mode-group {
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .secondary-controls {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .update-btn {
-    width: 100%;
-  }
-
-  .insulin-types-mini {
-    width: 100%;
-  }
-}
-
-/* TimeInput component adjustments when used in this component */
-.super-compact-controls .date-range-control {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.super-compact-controls .date-range-control > div {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.super-compact-controls .date-range-control label {
-  font-size: 0.8rem;
-}
-
-.super-compact-controls .date-range-control input {
-  padding: 3px 4px;
-  font-size: 0.8rem;
-  width: 115px;
-}
-
-/* Add this to your existing CSS file */
-.chart-explanation {
-  margin-top: 10px;
-  padding: 8px;
-  background-color: #f8f8f8;
-  border-radius: 4px;
-  border-left: 3px solid #4285f4;
-}
-
-.explanation-note {
-  margin: 0;
-  font-size: 0.85rem;
-  color: #444;
-}
-
-/* Add indicator style for better visual understanding */
-.bidirectional-indicator {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  margin-top: 5px;
-}
-
-.direction-arrow {
-  font-size: 1rem;
-  color: #555;
-}
-
-/* Add these styles to enhance the insulin dose bars */
-.recharts-bar-rectangle {
-  filter: drop-shadow(0px 2px 3px rgba(0, 0, 0, 0.2));
-  transition: all 0.3s ease;
-}
-
-.recharts-bar-rectangle:hover {
-  filter: drop-shadow(0px 3px 6px rgba(0, 0, 0, 0.3));
-  opacity: 0.95;
-}
-
-/* Improve the legend to match the enhanced bar styling */
-.recharts-legend-item .recharts-surface {
-  filter: drop-shadow(0px 1px 2px rgba(0, 0, 0, 0.15));
-}
-
-/* Add explanation text styling */
-.chart-explanation {
-  margin-top: 10px;
-  padding: 8px 12px;
-  background-color: #f8f8f8;
-  border-radius: 4px;
-  border-left: 3px solid #4285f4;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-}
-
-.explanation-note {
-  margin: 0;
-  font-size: 0.85rem;
-  color: #444;
-}
-
-.explanation-note strong {
-  color: #333;
-}
-
-/* Enhanced insulin type display in the compact legend */
-.insulin-type-compact {
-  padding: 6px;
-  background-color: #f0f0f4;
-  border-radius: 5px;
-  border: 1px solid #e5e5e5;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-  flex: 1 0 180px;
-  max-width: 250px;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.insulin-type-compact:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 3px 6px rgba(0,0,0,0.1);
-}
-
-.insulin-color-box {
-  width: 12px;
-  height: 12px;
-  border-radius: 3px;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-}
-
-/* Error boundary styling */
-.error-boundary {
-  padding: 20px;
-  background-color: #fff4f4;
-  border: 1px solid #ffcdd2;
-  border-radius: 4px;
-  margin: 10px 0;
   text-align: center;
+  margin-top: 10px;
 }
 
-.error-boundary h3 {
-  color: #d32f2f;
-  margin-top: 0;
+.insulin-visualization .optimization-note {
+  font-style: italic;
 }
 
-.error-boundary button {
-  background-color: #d32f2f;
+/* Error boundary styles */
+.insulin-visualization .error-boundary {
+  background-color: #f8d7da;
+  color: #721c24;
+  padding: 15px;
+  border-radius: 4px;
+  text-align: center;
+  margin: 20px 0;
+}
+
+.insulin-visualization .error-boundary button {
+  background-color: #dc3545;
   color: white;
   border: none;
   padding: 8px 16px;
   border-radius: 4px;
+  margin-top: 10px;
   cursor: pointer;
-  margin-top: 10px;
 }
 
-/* Data point info display */
-.data-info {
-  font-size: 0.8rem;
-  color: #666;
-  margin: 8px 0;
-  text-align: right;
-}
+/* For responsive layout */
+@media (max-width: 768px) {
+  .insulin-visualization .controls {
+    flex-direction: column;
+  }
 
-.optimization-note {
-  font-style: italic;
-  color: #999;
-}
+  .insulin-visualization .filter-options {
+    flex-direction: column;
+  }
 
-/* Make insulin dose bars more prominent */
-.recharts-bar {
-  opacity: 0.9;
-}
+  .insulin-visualization .display-options {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 
-.recharts-bar:hover {
-  opacity: 1;
-}
-
-/* Add visual emphasis to the insulin bars with CSS */
-.recharts-bar-rectangle path {
-  stroke-width: 1.5px;
-  transition: filter 0.3s ease;
-}
-
-.recharts-bar-rectangle:hover path {
-  filter: brightness(1.1);
-  stroke-width: 2px;
-}
-
-/* Enhance tooltip appearance */
-.insulin-tooltip {
-  background-color: rgba(255, 255, 255, 0.95);
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  padding: 10px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-}
-
-/* Improved styling for the explanation */
-.chart-explanation {
-  margin-top: 10px;
-  padding: 10px;
-  background-color: #f0f7ff;
-  border-radius: 4px;
-  border-left: 3px solid #4285f4;
-}
-
-.explanation-note {
-  margin: 0;
-  font-size: 0.85rem;
-  color: #333;
+  .insulin-visualization .insulin-scale {
+    grid-template-columns: 1fr;
+  }
 }

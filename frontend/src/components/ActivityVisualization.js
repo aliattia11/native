@@ -782,85 +782,90 @@ const fetchData = useCallback(async () => {
         </div>
       )}
 
-      <div className="controls">
-        {/* Use TimeInput component in daterange mode */}
-        <TimeInput
-            mode="daterange"
-            value={timeContext ? timeContext.dateRange : null}
-            onChange={timeContext ? (e) => {
-              timeContext.handleDateRangeChange(e);
-              handleDateRangeChange();
-            } : null}
-            useTimeContext={!!timeContext}
-            label="Date Range"
-            className="date-range-control"
+      {/* Modified Controls Section */}
+<div className="controls">
+  <div className="date-range-control">
+    <TimeInput
+      mode="daterange"
+      value={timeContext ? timeContext.dateRange : null}
+      onChange={timeContext ? (e) => {
+        timeContext.handleDateRangeChange(e);
+        handleDateRangeChange();
+      } : null}
+      useTimeContext={!!timeContext}
+      label="Date Range"
+      className="date-range-control"
+    />
+
+    <button className="update-btn" onClick={handleForceUpdate}>Update Data</button>
+  </div>
+
+  <div className="filters-and-options">
+    <div className="activity-level-filters">
+      <div className="filter-header">Activity Levels:</div>
+      <div className="filter-options">
+        {activityLevels.map((level, idx) => (
+          <label key={`${level}_${idx}`} className="filter-option">
+            <input
+              type="checkbox"
+              checked={selectedActivityLevels.includes(level)}
+              onChange={() => handleActivityLevelToggle(level)}
+            />
+            {getActivityLevelLabel(level)}
+          </label>
+        ))}
+      </div>
+    </div>
+
+    <div className="display-options">
+      <label className="display-option">
+        <input
+          type="checkbox"
+          checked={showActualBloodSugar}
+          onChange={() => setShowActualBloodSugar(!showActualBloodSugar)}
         />
-
-        <div className="activity-level-filters">
-          <div className="filter-header">Activity Levels:</div>
-          <div className="filter-options">
-            {activityLevels.map((level, idx) => (
-                <label key={`${level}_${idx}`} className="filter-option">
-                  <input
-                      type="checkbox"
-                      checked={selectedActivityLevels.includes(level)}
-                      onChange={() => handleActivityLevelToggle(level)}
-                  />
-                  {getActivityLevelLabel(level)}
-                </label>
-            ))}
-          </div>
+        Show Blood Sugar
+      </label>
+      <label className="display-option">
+        <input
+          type="checkbox"
+          checked={showActivityEffect}
+          onChange={() => setShowActivityEffect(!showActivityEffect)}
+        />
+        Show Activity Effect
+      </label>
+      <label className="display-option">
+        <input
+          type="checkbox"
+          checked={includeFutureEffect}
+          onChange={toggleFutureEffect}
+        />
+        Project Future Effect
+      </label>
+      {includeFutureEffect && (
+        <div className="future-hours">
+          <label>Future Hours:</label>
+          <input
+            type="number"
+            min="1"
+            max="24"
+            value={futureHours}
+            onChange={(e) => setFutureHours(parseInt(e.target.value) || 7)}
+          />
         </div>
-
-        <div className="display-options">
-          <label className="display-option">
-            <input
-                type="checkbox"
-                checked={showActualBloodSugar}
-                onChange={() => setShowActualBloodSugar(!showActualBloodSugar)}
-            />
-            Show Blood Sugar
-          </label>
-          <label className="display-option">
-            <input
-                type="checkbox"
-                checked={showActivityEffect}
-                onChange={() => setShowActivityEffect(!showActivityEffect)}
-            />
-            Show Activity Effect
-          </label>
-          <label className="display-option">
-            <input
-                type="checkbox"
-                checked={includeFutureEffect}
-                onChange={toggleFutureEffect}
-            />
-            Project Future Effect
-          </label>
-          {includeFutureEffect && (
-              <div className="future-hours">
-                <label>Future Hours:</label>
-                <input
-                    type="number"
-                    min="1"
-                    max="24"
-                    value={futureHours}
-                    onChange={(e) => setFutureHours(parseInt(e.target.value) || 7)}
-                />
-              </div>
-          )}
-          <div className="effect-duration">
-            <label>Effect Duration (hours):</label>
-            <input
-                type="number"
-                min="1"
-                max="24"
-                value={effectDurationHours}
-                onChange={(e) => setEffectDurationHours(parseInt(e.target.value) || 5)}
-            />
-          </div>
-        </div>
-
+      )}
+      <div className="effect-duration">
+        <label>Effect Duration (hours):</label>
+        <input
+          type="number"
+          min="1"
+          max="24"
+          value={effectDurationHours}
+          onChange={(e) => setEffectDurationHours(parseInt(e.target.value) || 5)}
+        />
+      </div>
+    </div>
+  </div>
         <button className="update-btn" onClick={handleForceUpdate}>Update Data</button>
       </div>
 

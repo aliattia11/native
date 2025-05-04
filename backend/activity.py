@@ -611,3 +611,60 @@ def get_activity(current_user):
         return jsonify({"error": str(e)}), 500
 
 
+@activity_bp.route('/api/activities', methods=['GET'])
+@token_required
+def get_activities(current_user):
+    """
+    Get recent activities for the current user with pagination and sorting
+    """
+    try:
+        # Parse query parameters
+        limit = int(request.args.get('limit', 10))
+        skip = int(request.args.get('skip', 0))
+        sort_field = request.args.get('sort', '-timestamp')
+
+        # Handle sort direction
+        sort_direction = -1  # Default to descending (newest first)
+        if sort_field.startswith('-'):
+            sort_field = sort_field[1:]
+        else:
+            sort_direction = 1  # Ascending
+
+        # Get total count for pagination
+        total_activities = mongo.db.activities.count_documents({"user_id": str(current_user['_id'])})
+
+        # Fetch activities with pagination and sorting
+        activities = list(mongo.db.activities.find(
+            {"user_id": str(current_user['_id'])}
+        ).sort(sort_field, sort_direction).skip(skip).limit(limit))
+
+        # Transform ObjectId to string and format datetime for JSON serialization
+        formatted_activities = []
+        for activity in activities:
+            # Convert ObjectId to string
+            activity['_id'] = str(activity['_id'])
+
+            # Convert datetime fields to ISO strings for serialization
+            for key in ['timestamp', 'startTime', 'endTime', 'expectedTime', 'completedTime']:
+                if key in activity and isinstance(activity[key], datetime):
+                    activity[key] = activity[key].isoformat()
+
+            # Normalize type field for consistency
+            if 'type' not in activity:
+                activity['type'] = 'expected' if activity.get('expectedTime') else 'completed'
+
+            # Add level label
+            if 'level' in activity:
+                for level_info in Constants.ACTIVITY_LEVELS:
+                    if level_info['value'] == activity['level']:
+                        activity['levelLabel'] = level_info['label']
+                        break
+
+            # Add to result list
+            formatted_activities.append(activity)
+
+        return jsonify(formatted_activities), 200
+
+    except Exception as e:
+        logger.error(f"Error getting activities: {str(e)}")
+        return jsonify({"error": str(e)}), 500

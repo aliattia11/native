@@ -71,84 +71,189 @@
   color: white;
 }
 
-.controls {
-  margin-bottom: 20px;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 20px;
+/* Updated Compact Controls Styling - HORIZONTAL LAYOUT with options under activity */
+.activity-visualization .controls {
+  display: flex !important; /* Override the grid display */
+  flex-direction: row !important; /* Make controls horizontal */
+  flex-wrap: wrap !important; /* Allow wrapping on smaller screens */
+  gap: 10px !important;
+  margin-bottom: 15px;
+  border-radius: 6px;
+  background-color: #f8f9fa;
+  padding: 12px;
+  border: 1px solid #e9ecef;
+  grid-template-columns: none !important; /* Disable grid layout */
+  align-items: flex-start;
+  justify-content: space-between;
 }
 
-.activity-level-filters {
-  background-color: #f0f0f0;
-  padding: 10px;
-  border-radius: 4px;
-}
-
-.filter-header {
-  font-weight: bold;
-  margin-bottom: 8px;
-}
-
-.filter-options {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.filter-option {
+/* Style the date range control */
+.activity-visualization .date-range-control {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
-  margin-right: 10px;
+  gap: 10px;
+  min-width: 320px;
 }
 
-.filter-option input {
-  margin-right: 5px;
-}
-
-.display-options {
-  background-color: #f0f0f0;
-  padding: 10px;
+/* Keep update button linked with date range */
+.activity-visualization .update-btn {
+  padding: 4px 12px;
+  font-size: 0.85rem;
+  background-color: #4285f4;
+  color: white;
+  border: none;
   border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  min-width: 100px;
+}
+
+.activity-visualization .update-btn:hover {
+  background-color: #3367d6;
+}
+
+/* Right side container for activity filters and display options */
+.activity-visualization .filters-and-options {
+  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 
-.display-option {
+/* Activity Level Filters - make it more compact */
+.activity-visualization .activity-level-filters {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 8px 12px;
+  background-color: #f0f0f8;
+  border-radius: 4px;
+  border: 1px solid #e0e0f0;
+  border-left: 3px solid #6a5acd;
+}
+
+.activity-visualization .filter-header {
+  font-weight: 500;
+  font-size: 0.85rem;
+  margin-right: 10px;
+  white-space: nowrap;
+}
+
+.activity-visualization .filter-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.activity-visualization .filter-option {
   display: flex;
   align-items: center;
-}
-
-.display-option input {
-  margin-right: 8px;
-}
-
-.future-hours, .effect-duration {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.future-hours input, .effect-duration input {
-  width: 60px;
-  padding: 4px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-}
-
-.update-btn {
-  background-color: #28a745;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  padding: 10px 20px;
+  gap: 4px;
+  font-size: 0.85rem;
   cursor: pointer;
-  font-weight: bold;
-  transition: background-color 0.3s;
+  padding: 2px 6px;
+  background-color: #f9f9f9;
+  border-radius: 4px;
+  border: 1px solid #e0e0e0;
+  margin-right: 0;
 }
 
-.update-btn:hover {
-  background-color: #218838;
+.activity-visualization .filter-option:hover {
+  background-color: #eaeaea;
+}
+
+/* Display Options - now under activity filters */
+.activity-visualization .display-options {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 12px;
+  background-color: #f0f8f8;
+  border-radius: 4px;
+  border: 1px solid #e0e0f0;
+  border-left: 3px solid #4db6ac;
+  flex-direction: row; /* Override column display */
+}
+
+.activity-visualization .display-option,
+.activity-visualization .future-hours,
+.activity-visualization .effect-duration {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.activity-visualization .future-hours input,
+.activity-visualization .effect-duration input {
+  width: 45px;
+  padding: 3px;
+  font-size: 0.85rem;
+  border-radius: 3px;
+  border: 1px solid #ced4da;
+}
+
+.activity-visualization .future-hours label,
+.activity-visualization .effect-duration label {
+  white-space: nowrap;
+}
+
+/* Style for the TimeInput component specifically */
+.activity-visualization .time-input-container {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.activity-visualization .time-input-container label {
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.activity-visualization .time-input-container input {
+  width: 130px;
+  padding: 4px;
+  font-size: 0.85rem;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+}
+
+/* Adjustments to timeline input component */
+.activity-visualization .date-range-control .time-range-inputs {
+  display: flex;
+  gap: 8px;
+}
+
+.activity-visualization .date-range-control .time-range-inputs input {
+  width: 130px;
+  padding: 4px;
+  font-size: 0.85rem;
+}
+
+/* Quick date presets if needed */
+.activity-visualization .date-presets {
+  display: flex;
+  gap: 4px;
+  margin-left: 10px;
+}
+
+.activity-visualization .date-presets button {
+  padding: 4px 8px;
+  font-size: 0.8rem;
+  background-color: #e9ecef;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.activity-visualization .date-presets button:hover {
+  background-color: #dee2e6;
 }
 
 .error-message {
@@ -388,4 +493,11 @@
 
 .negative-effect {
   color: #00C851; /* Green for decrease */
+}
+
+/* Media queries for better responsiveness */
+@media (max-width: 960px) {
+  .activity-visualization .controls {
+    flex-direction: column !important;
+  }
 }

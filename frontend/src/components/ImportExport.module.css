@@ -1,0 +1,334 @@
+.container {
+  position: relative;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+  background-color: #f9f9f9;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.title {
+  text-align: center;
+  margin-bottom: 30px;
+  color: #2c3e50;
+  border-bottom: 2px solid #eee;
+  padding-bottom: 10px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 30px;
+}
+
+@media (max-width: 768px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.section {
+  background-color: white;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #eee;
+}
+
+.icon {
+  font-size: 24px;
+  margin-right: 10px;
+  color: #3498db;
+}
+
+.sectionHeader h3 {
+  font-size: 1.3rem;
+  margin: 0;
+  color: #2c3e50;
+}
+
+.formGroup {
+  margin-bottom: 20px;
+}
+
+.formGroup label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 600;
+  color: #555;
+}
+
+.formGroup select,
+.formGroup input[type="date"],
+.formGroup input[type="file"] {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 16px;
+  color: #333;
+}
+
+.formGroup select:focus,
+.formGroup input:focus {
+  outline: none;
+  border-color: #3498db;
+  box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+}
+
+.fileInputWrapper {
+  position: relative;
+}
+
+.fileFormats {
+  margin-top: 5px;
+  color: #777;
+}
+
+.dateRangeInputs {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dateRangeInputs span {
+  color: #777;
+}
+
+.templateButton,
+.exportButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 12px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background-color 0.2s;
+  color: white;
+}
+
+.templateButton {
+  background-color: #27ae60;
+}
+
+.exportButton {
+  background-color: #3498db;
+}
+
+.templateButton:hover {
+  background-color: #219653;
+}
+
+.exportButton:hover {
+  background-color: #2980b9;
+}
+
+.templateButton:disabled,
+.exportButton:disabled {
+  background-color: #95a5a6;
+  cursor: not-allowed;
+}
+
+.buttonIcon {
+  margin-right: 8px;
+}
+
+.info {
+  display: flex;
+  align-items: flex-start;
+  background-color: #edf7ff;
+  padding: 15px;
+  border-radius: 4px;
+  margin-top: 20px;
+}
+
+.infoIcon {
+  color: #3498db;
+  font-size: 18px;
+  margin-right: 10px;
+  margin-top: 2px;
+}
+
+.info p {
+  margin: 0;
+  font-size: 14px;
+  color: #555;
+}
+
+.validationResults {
+  margin-top: 20px;
+  padding: 15px;
+  border-radius: 4px;
+  background-color: #f8f9fa;
+  border: 1px solid #e9ecef;
+}
+
+.validationResults h4 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  font-size: 16px;
+  color: #2c3e50;
+}
+
+.validTrue, .validFalse {
+  display: flex;
+  align-items: center;
+  padding: 10px;
+  border-radius: 4px;
+  margin-bottom: 15px;
+}
+
+.validTrue {
+  background-color: #d4edda;
+  color: #155724;
+}
+
+.validFalse {
+  background-color: #f8d7da;
+  color: #721c24;
+}
+
+.validIcon, .invalidIcon {
+  margin-right: 8px;
+  font-size: 18px;
+}
+
+.validIcon {
+  color: #28a745;
+}
+
+.invalidIcon {
+  color: #dc3545;
+}
+
+.counts {
+  margin: 15px 0;
+  padding: 15px;
+  background-color: #f0f0f0;
+  border-radius: 4px;
+}
+
+.counts p {
+  margin: 5px 0;
+  font-size: 14px;
+}
+
+.errorList, .warningList {
+  margin-top: 15px;
+  padding: 15px;
+  border-radius: 4px;
+}
+
+.errorList {
+  background-color: #fff5f5;
+  border-left: 4px solid #dc3545;
+}
+
+.warningList {
+  background-color: #fff9e6;
+  border-left: 4px solid #ffc107;
+}
+
+.errorList h5, .warningList h5 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  font-size: 15px;
+}
+
+.errorList ul, .warningList ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.errorList li, .warningList li {
+  margin-bottom: 5px;
+  font-size: 14px;
+}
+
+.statusMessage {
+  margin-top: 25px;
+  padding: 15px;
+  border-radius: 4px;
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+.success {
+  background-color: #d4edda;
+  color: #155724;
+  border-left: 4px solid #28a745;
+}
+
+.error {
+  background-color: #f8d7da;
+  color: #721c24;
+  border-left: 4px solid #dc3545;
+}
+
+.info {
+  background-color: #e2f0fb;
+  color: #0c5460;
+  border-left: 4px solid #17a2b8;
+}
+
+.statusMessage h4 {
+  margin-top: 0;
+  margin-bottom: 5px;
+  font-size: 16px;
+}
+
+.details {
+  font-family: monospace;
+  background-color: rgba(255, 255, 255, 0.5);
+  padding: 10px;
+  margin-top: 10px;
+  border-radius: 4px;
+  white-space: pre-wrap;
+  font-size: 14px;
+  overflow-x: auto;
+}
+
+.loadingOverlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(255, 255, 255, 0.85);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  border-radius: 8px;
+  z-index: 10;
+}
+
+.spinner {
+  border: 3px solid rgba(0, 0, 0, 0.1);
+  border-top: 3px solid #3498db;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  animation: spin 1s linear infinite;
+  margin-bottom: 10px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
