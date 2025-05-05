@@ -162,3 +162,139 @@ td button {
 td button:hover {
   background-color: #e0e0e0;
 }
+
+/* MealHistory.css */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background-color: white;
+  border-radius: 5px;
+  width: 80%;
+  max-width: 600px;
+  max-height: 90%;
+  overflow-y: auto;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px;
+  border-bottom: 1px solid #eee;
+}
+
+.modal-header h3 {
+  margin: 0;
+}
+
+.modal-header button {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+}
+
+.modal-body {
+  padding: 15px;
+}
+
+.meal-metrics {
+  margin-bottom: 20px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+/* Filter styling */
+.action-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  flex-wrap: wrap;
+}
+
+.filter-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.filter-label {
+  margin-right: 10px;
+  font-weight: bold;
+}
+
+.filter-buttons {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.filter-button {
+  padding: 6px 12px;
+  background-color: #f0f0f0;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9em;
+  transition: all 0.2s;
+}
+
+.filter-button:hover {
+  background-color: #e6f7ff;
+  border-color: #91d5ff;
+}
+
+.filter-button.active {
+  background-color: #1890ff;
+  border-color: #1890ff;
+  color: white;
+}
+
+/* Show color indicators for different entry types */
+.entry-meal {
+  border-left: 4px solid #52c41a;
+}
+
+.entry-blood-sugar {
+  border-left: 4px solid #faad14;
+}
+
+.entry-activity {
+  border-left: 4px solid #1890ff;
+}
+
+.entry-insulin {
+  border-left: 4px solid #f5222d;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .action-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .filter-controls {
+    margin-bottom: 10px;
+    width: 100%;
+  }
+
+  .action-buttons {
+    width: 100%;
+  }
+}

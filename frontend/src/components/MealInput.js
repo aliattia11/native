@@ -17,6 +17,19 @@ import { recommendInsulinType } from '../utils/insulinUtils';
 import styles from './MealInput.module.css';
 import moment from 'moment';
 
+// Helper function to determine entry type
+const determineEntryType = (meal) => {
+  if (meal.mealType === 'blood_sugar_only' || (meal.bloodSugar && !meal.foodItems?.length && !meal.intendedInsulin)) {
+    return 'blood_sugar';
+  } else if (meal.activities?.length > 0 && !meal.foodItems?.length && !meal.intendedInsulin && !meal.bloodSugar) {
+    return 'activity';
+  } else if (meal.intendedInsulin && !meal.foodItems?.length && !meal.activities?.length) {
+    return 'insulin';
+  } else {
+    return 'meal'; // Default is meal (includes food)
+  }
+};
+
 const MealInput = () => {
   const { patientConstants, loading, error, refreshConstants } = useConstants();
   const [mealType, setMealType] = useState('');
@@ -137,38 +150,50 @@ const MealInput = () => {
     };
   }, [refreshConstants]);
 
-  // Fetch recent meals
-  const fetchRecentMeals = useCallback(async () => {
-    try {
-      setIsLoadingMeals(true);
-      const token = localStorage.getItem('token');
-      if (!token) {
-        console.warn('No authentication token found');
-        return;
-      }
-
-      const response = await axios.get(
-        'http://localhost:5000/api/meals',
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          },
-          params: {
-            limit: 5
-          }
-        }
-      );
-
-      if (response.data && response.data.meals) {
-        setRecentMeals(response.data.meals);
-      }
-    } catch (error) {
-      console.error('Error fetching recent meals:', error);
-      setMessage('Failed to load recent meals');
-    } finally {
-      setIsLoadingMeals(false);
+  // Fetch recent meals - updated to get 10 meals and filter only actual meal records
+ const fetchRecentMeals = useCallback(async () => {
+  try {
+    setIsLoadingMeals(true);
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.warn('No authentication token found');
+      return;
     }
-  }, []);
+
+    console.log('Fetching from meals-only endpoint...');
+    const response = await axios.get(
+      'http://localhost:5000/api/meals-only',
+      {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        params: {
+          limit: 10
+        }
+      }
+    );
+
+    if (response.data && response.data.meals) {
+      console.log('Meals-only response:', response.data);
+      setRecentMeals(response.data.meals);
+
+      // Debug the calculation summary data
+      response.data.meals.forEach((meal, index) => {
+        console.log(`Meal ${index + 1}:`, {
+          id: meal.id,
+          mealType: meal.mealType,
+          hasCalculationSummary: !!meal.calculation_summary,
+          meal_only_suggested_insulin: meal.calculation_summary?.meal_only_suggested_insulin
+        });
+      });
+    }
+  } catch (error) {
+    console.error('Error fetching from meals-only endpoint:', error);
+    setMessage('Failed to load recent meals');
+  } finally {
+    setIsLoadingMeals(false);
+  }
+}, []);
 
   // Toggle recent meals view
   const toggleRecentMeals = () => {
@@ -580,72 +605,101 @@ const MealInput = () => {
         </div>
       )}
 
-      {/* Recent Meals Section */}
-      {showRecentMeals && (
-        <div className={styles.recentMeals}>
-          <h3>Recent Meals</h3>
-          {isLoadingMeals ? (
-            <div className={styles.loadingMeals}>Loading recent meals...</div>
-          ) : recentMeals.length > 0 ? (
-            <div className={styles.mealsList}>
-              {recentMeals.map((meal) => (
-                <div key={meal.id} className={styles.mealItem}>
-                  <div className={styles.mealHeader}>
-                    <span className={styles.mealType}>
-                      {meal.mealType.charAt(0).toUpperCase() + meal.mealType.slice(1)}
-                    </span>
-                    <span className={styles.mealTimestamp}>
-                      {new Date(meal.timestamp).toLocaleString()}
-                    </span>
-                  </div>
-                  <div className={styles.mealDetails}>
-                    <div className={styles.foodItems}>
-                      {meal.foodItems.length > 0 ? (
-                        <div>
-                          {meal.foodItems.slice(0, 3).map((food, idx) => (
-                            <span key={idx} className={styles.foodItem}>
-                              {food.name}
-                            </span>
-                          ))}
-                          {meal.foodItems.length > 3 && (
-                            <span className={styles.moreFoods}>
-                              +{meal.foodItems.length - 3} more
-                            </span>
-                          )}
-                        </div>
-                      ) : (
-                        <span className={styles.noFoods}>No food items</span>
-                      )}
-                    </div>
-                    <div className={styles.mealNutrition}>
-                      <span>{meal.nutrition?.carbs || 0}g carbs</span>
-                      <span>{meal.nutrition?.protein || 0}g protein</span>
-                      <span>{meal.nutrition?.fat || 0}g fat</span>
-                    </div>
-                    {meal.bloodSugar && (
-                      <div className={styles.mealBloodSugar}>
-                        Blood sugar: {meal.bloodSugar} mg/dL
-                      </div>
-                    )}
-                    {meal.intendedInsulin && (
-                      <div className={styles.mealInsulin}>
-                        Insulin: {meal.intendedInsulin} units {meal.intendedInsulinType?.replace(/_/g, ' ')}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
+      {/* Recent Meals Section - Updated to show meal count */}
+   {showRecentMeals && (
+  <div className={styles.recentMeals}>
+    <h3>Recent Meals ({recentMeals.length})</h3>
+    {isLoadingMeals ? (
+      <div className={styles.loadingMeals}>Loading recent meals...</div>
+    ) : recentMeals.length > 0 ? (
+      <div className={styles.mealsList}>
+        {recentMeals.map((meal) => (
+          <div key={meal.id} className={styles.mealItem}>
+            <div className={styles.mealHeader}>
+              <span className={styles.mealType}>
+                {meal.mealType.charAt(0).toUpperCase() + meal.mealType.slice(1)}
+              </span>
+              <span className={styles.mealTimestamp}>
+                {new Date(meal.timestamp).toLocaleString()}
+              </span>
             </div>
-          ) : (
-            <p className={styles.noMeals}>No recent meals found</p>
-          )}
-          <div className={styles.mealsFooter}>
-            <span className={styles.importNote}>
-              Need to import multiple meals? Click the <FaFileImport className={styles.inlineIcon} /> import button above.
-            </span>
+            <div className={styles.mealDetails}>
+              <div className={styles.foodItems}>
+                {meal.foodItems.length > 0 ? (
+                  <div>
+                    {meal.foodItems.slice(0, 3).map((food, idx) => (
+                      <span key={idx} className={styles.foodItem}>
+                        {food.name}
+                      </span>
+                    ))}
+                    {meal.foodItems.length > 3 && (
+                      <span className={styles.moreFoods}>
+                        +{meal.foodItems.length - 3} more
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <span className={styles.noFoods}>No food items</span>
+                )}
+              </div>
+              <div className={styles.mealNutrition}>
+                <span>{meal.nutrition?.carbs || 0}g carbs</span>
+                <span>{meal.nutrition?.protein || 0}g protein</span>
+                <span>{meal.nutrition?.fat || 0}g fat</span>
+              </div>
+
+              {/* Prominently display calculation summary with meal_only_suggested_insulin */}
+              {meal.calculation_summary && (
+                <div className={styles.mealCalculationSummary}>
+                  <div className={styles.calcRow}>
+                    <span className={styles.calcLabel}>Base Units:</span>
+                    <span className={styles.calcValue}>{meal.calculation_summary.base_insulin?.toFixed(1) || 'N/A'}</span>
+                  </div>
+
+                  {meal.calculation_summary.adjustment_factors && (
+                    <div className={styles.calcRow}>
+                      <span className={styles.calcLabel}>Adjustments:</span>
+                      <span className={styles.calcValue}>
+                        <span className={styles.adjFactor}>
+                          Abs: {((meal.calculation_summary.adjustment_factors.absorption_rate - 1) * 100).toFixed(0)}%
+                        </span>
+                        <span className={styles.adjFactor}>
+                          Timing: {((meal.calculation_summary.adjustment_factors.meal_timing - 1) * 100).toFixed(0)}%
+                        </span>
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Prominently display meal_only_suggested_insulin */}
+                  {meal.calculation_summary.meal_only_suggested_insulin !== undefined && (
+                    <div className={`${styles.calcRow} ${styles.suggestedInsulinRow}`}>
+                      <span className={styles.calcLabel}>Meal Only Suggested Insulin:</span>
+                      <span className={styles.suggestedValue}>
+                        {meal.calculation_summary.meal_only_suggested_insulin.toFixed(1)} units
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        ))}
+      </div>
+    ) : (
+      <p className={styles.noMeals}>No recent meals found</p>
+    )}
+    <div className={styles.mealsFooter}>
+      <span className={styles.viewAllMeals}>
+        <a href="#" onClick={(e) => {
+          e.preventDefault();
+          window.location.href = '/meal-history';
+        }}>
+          View all meals →
+        </a>
+      </span>
+    </div>
+  </div>
+)}
             <form className={styles.form} onSubmit={handleSubmit} onKeyDown={preventFormSubmission}>
         <div className={styles.formField}>
           <label htmlFor="mealType">Meal Type</label>

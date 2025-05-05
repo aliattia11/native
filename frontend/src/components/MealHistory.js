@@ -28,21 +28,48 @@ const formatFoodItems = (foodItems) => {
   return formattedItems.length ? formattedItems.join(", ") : "No items";
 };
 
+// Entry type determination function
+const determineEntryType = (meal) => {
+  if (meal.mealType === 'blood_sugar_only' || (meal.bloodSugar && !meal.foodItems?.length && !meal.intendedInsulin)) {
+    return 'blood_sugar';
+  } else if (meal.activities?.length > 0 && !meal.foodItems?.length && !meal.intendedInsulin && !meal.bloodSugar) {
+    return 'activity';
+  } else if (meal.intendedInsulin && !meal.foodItems?.length && !meal.activities?.length) {
+    return 'insulin';
+  } else {
+    return 'meal'; // Default is meal (includes food)
+  }
+};
+
 const MealHistory = ({ isDoctor = false, patientId = null }) => {
-  const [data, setData] = useState([]);
+  const [allRecords, setAllRecords] = useState([]); // Store all fetched records
+  const [filteredData, setFilteredData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedMeal, setSelectedMeal] = useState(null);
   const [userTimeZone, setUserTimeZone] = useState('');
   const [debug, setDebug] = useState({});
 
+  // Filter state
+  const [activeFilter, setActiveFilter] = useState('all');
+
+  // Pagination state
+  const [pagination, setPagination] = useState({
+    total: 0,  // Total records in the database
+    filteredTotal: 0,  // Total records after filtering
+    limit: 20, // Records per page
+    fetchLimit: 200 // For initial large fetch when filtering
+  });
+
   // Get user's time zone on component mount
   useEffect(() => {
     setUserTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
   }, []);
 
-  const fetchMealHistory = async () => {
+  // Function to fetch all records (or a large batch) for client-side filtering
+  const fetchAllRecords = async () => {
     try {
+      setLoading(true);
       const token = localStorage.getItem('token');
       if (!token) {
         throw new Error('Authentication token not found');
@@ -53,28 +80,36 @@ const MealHistory = ({ isDoctor = false, patientId = null }) => {
         url = `http://localhost:5000/api/doctor/meal-history/${patientId}`;
       }
 
-      console.log('Fetching from URL:', url); // Debug log
+      console.log(`Fetching larger batch of records for filtering from URL: ${url} with limit=${pagination.fetchLimit}`);
 
       const response = await axios.get(url, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
+        params: {
+          skip: 0,
+          limit: pagination.fetchLimit
+        }
       });
 
-      console.log('Response data:', response.data); // Debug log
-      setDebug(response.data); // Store full response for debugging
+      console.log('Response data:', response.data);
+      setDebug(response.data);
 
-      // Ensure we're handling the response data correctly
-      const meals = Array.isArray(response.data) ? response.data : response.data.meals || [];
-      console.log(`Found ${meals.length} meals in response`);
-
-      if (meals.length === 0) {
-        console.log('No meals found in response data:', response.data);
-      } else {
-        console.log('First meal sample:', meals[0]);
+      // Get total count from pagination info
+      if (response.data.pagination) {
+        setPagination(prev => ({
+          ...prev,
+          total: response.data.pagination.total
+        }));
+        console.log(`Total records in database: ${response.data.pagination.total}`);
       }
+
+      // Process all fetched records
+      const meals = Array.isArray(response.data) ? response.data : response.data.meals || [];
+      console.log(`Fetched ${meals.length} meals for filtering`);
 
       // Process data to enhance with additional formatting
       const processedMeals = meals.map(meal => {
-        // Ensure all required fields exist
+        const entryType = determineEntryType(meal);
+
         return {
           ...meal,
           formattedTimestamp: formatDateTime(meal.timestamp),
@@ -83,14 +118,19 @@ const MealHistory = ({ isDoctor = false, patientId = null }) => {
           foodItems: meal.foodItems || [],
           activities: meal.activities || [],
           nutrition: meal.nutrition || {},
-          // Add fallbacks for potentially missing fields
           id: meal.id || `temp_${Math.random().toString(36).substr(2, 9)}`,
           suggestedInsulin: meal.suggestedInsulin !== undefined ? meal.suggestedInsulin : 0,
-          intendedInsulin: meal.intendedInsulin
+          intendedInsulin: meal.intendedInsulin,
+          entryType: entryType
         };
       });
 
-      setData(processedMeals);
+      // Store all records and apply filtering
+      setAllRecords(processedMeals);
+
+      // Initial filtering based on active filter
+      applyFilter(activeFilter, processedMeals);
+
       setLoading(false);
     } catch (err) {
       console.error('Error fetching meal history:', err);
@@ -99,10 +139,46 @@ const MealHistory = ({ isDoctor = false, patientId = null }) => {
     }
   };
 
+  // Function to apply filter to records
+  const applyFilter = (filterType, records = allRecords) => {
+    let filtered;
+
+    if (filterType === 'all') {
+      filtered = records;
+    } else {
+      filtered = records.filter(record => record.entryType === filterType);
+    }
+
+    // Update filtered data and pagination information
+    setFilteredData(filtered);
+    setPagination(prev => ({
+      ...prev,
+      filteredTotal: filtered.length
+    }));
+
+    console.log(`Applied filter '${filterType}': ${filtered.length} records match`);
+  };
+
+  // Initial data fetching on component mount
   useEffect(() => {
-    fetchMealHistory();
+    fetchAllRecords();
   }, [isDoctor, patientId]);
 
+  // Handle filter changes
+  const handleFilterChange = (newFilter) => {
+    setActiveFilter(newFilter);
+    applyFilter(newFilter);
+
+    // Reset current page when filter changes
+    if (tableInstance.current) {
+      tableInstance.current.gotoPage(0);
+    }
+  };
+
+  // Create a ref to access table instance methods
+  const tableInstance = React.useRef(null);
+
+  // Table columns definition
   const columns = React.useMemo(
     () => [
       {
@@ -110,9 +186,16 @@ const MealHistory = ({ isDoctor = false, patientId = null }) => {
         accessor: 'formattedTimestamp',
       },
       {
-        Header: 'Meal Type',
-        accessor: 'mealType',
-        Cell: ({ value }) => value?.charAt(0).toUpperCase() + value?.slice(1).toLowerCase() || 'N/A'
+        Header: 'Type',
+        accessor: (row) => {
+          switch(row.entryType) {
+            case 'blood_sugar': return 'Blood Sugar';
+            case 'activity': return 'Activity';
+            case 'insulin': return 'Insulin';
+            case 'meal': return row.mealType?.charAt(0).toUpperCase() + row.mealType?.slice(1).toLowerCase() || 'Meal';
+            default: return row.mealType?.charAt(0).toUpperCase() + row.mealType?.slice(1).toLowerCase() || 'N/A';
+          }
+        }
       },
       {
         Header: 'Food Items',
@@ -150,6 +233,7 @@ const MealHistory = ({ isDoctor = false, patientId = null }) => {
     []
   );
 
+  // Table instance
   const {
     getTableProps,
     getTableBodyProps,
@@ -168,12 +252,28 @@ const MealHistory = ({ isDoctor = false, patientId = null }) => {
   } = useTable(
     {
       columns,
-      data,
-      initialState: { pageIndex: 0, pageSize: 10 },
+      data: filteredData,
+      initialState: {
+        pageIndex: 0,
+        pageSize: pagination.limit,
+        sortBy: [{ id: 'formattedTimestamp', desc: true }] // Default sort by timestamp descending
+      }
     },
     useSortBy,
     usePagination
   );
+
+  // Assign table instance to ref
+  React.useEffect(() => {
+    tableInstance.current = {
+      gotoPage,
+      nextPage,
+      previousPage,
+      setPageSize,
+      pageCount,
+      pageIndex
+    };
+  }, [gotoPage, nextPage, previousPage, setPageSize, pageCount, pageIndex]);
 
   // Modal Component
   const MealDetailsModal = ({ meal, onClose }) => {
@@ -183,37 +283,60 @@ const MealHistory = ({ isDoctor = false, patientId = null }) => {
       <div className="modal-overlay" onClick={onClose}>
         <div className="modal-content" onClick={e => e.stopPropagation()}>
           <div className="modal-header">
-            <h3>{meal.mealType} - {meal.formattedTimestamp}</h3>
+            <h3>
+              {meal.entryType === 'blood_sugar' ? 'Blood Sugar Reading' :
+               meal.entryType === 'activity' ? 'Activity Record' :
+               meal.entryType === 'insulin' ? 'Insulin Record' :
+               `${meal.mealType} - ${meal.formattedTimestamp}`}
+            </h3>
             <button onClick={onClose}>&times;</button>
           </div>
           <div className="modal-body">
             <div className="meal-metrics">
-              <div>
-                Blood Sugar: {meal.bloodSugar || 'N/A'} mg/dL
-                {meal.bloodSugarTimestamp && (
-                  <div className="timestamp-info">
-                    Reading time: {formatDateTime(meal.bloodSugarTimestamp)}
-                  </div>
-                )}
-              </div>
-              <div>Suggested Insulin: {meal.suggestedInsulin || 'N/A'} units</div>
-              <div>Intended Insulin: {meal.intendedInsulin || 'N/A'} units</div>
+              {meal.bloodSugar && (
+                <div>
+                  Blood Sugar: {meal.bloodSugar || 'N/A'} mg/dL
+                  {meal.bloodSugarTimestamp && (
+                    <div className="timestamp-info">
+                      Reading time: {formatDateTime(meal.bloodSugarTimestamp)}
+                    </div>
+                  )}
+                </div>
+              )}
+              {meal.suggestedInsulin && <div>Suggested Insulin: {meal.suggestedInsulin || 'N/A'} units</div>}
+              {meal.intendedInsulin && <div>Intended Insulin: {meal.intendedInsulin || 'N/A'} units</div>}
               {meal.imported_at && (
                 <div className="imported-info">
                   Imported on: {formatDateTime(meal.imported_at)}
                 </div>
               )}
             </div>
-            <h4>Food Items</h4>
-            {meal.foodItems && meal.foodItems.length > 0 ? (
-              <ul>
-                {meal.foodItems.map((item, idx) => (
-                  <li key={idx}>{item.portion?.amount} {item.portion?.unit} {item.name}</li>
-                ))}
-              </ul>
-            ) : (
-              <p>No food items recorded</p>
+
+            {meal.foodItems && meal.foodItems.length > 0 && (
+              <>
+                <h4>Food Items</h4>
+                <ul>
+                  {meal.foodItems.map((item, idx) => (
+                    <li key={idx}>{item.portion?.amount} {item.portion?.unit} {item.name}</li>
+                  ))}
+                </ul>
+              </>
             )}
+
+            {meal.activities && meal.activities.length > 0 && (
+              <>
+                <h4>Activities</h4>
+                <ul>
+                  {meal.activities.map((activity, idx) => (
+                    <li key={idx}>
+                      Level: {activity.level}, Duration: {activity.duration}
+                      {activity.type && `, Type: ${activity.type}`}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+
             {meal.notes && (
               <>
                 <h4>Notes</h4>
@@ -226,12 +349,12 @@ const MealHistory = ({ isDoctor = false, patientId = null }) => {
     );
   };
 
+  // Refresh data
   const handleRefresh = () => {
-    setLoading(true);
-    fetchMealHistory();
+    fetchAllRecords();
   };
 
-  if (loading) return <div>Loading meal history...</div>;
+  if (loading && filteredData.length === 0) return <div>Loading meal history...</div>;
 
   return (
     <div>
@@ -243,22 +366,73 @@ const MealHistory = ({ isDoctor = false, patientId = null }) => {
         <span className="timezone-note"> (all times displayed in your local timezone)</span>
       </div>
 
-      <div className="action-buttons">
-        <button onClick={handleRefresh} className="refresh-button">
-          Refresh Data
-        </button>
+      <div className="action-row">
+        <div className="filter-controls">
+          <span className="filter-label">Filter by: </span>
+          <div className="filter-buttons">
+            <button
+              className={`filter-button ${activeFilter === 'all' ? 'active' : ''}`}
+              onClick={() => handleFilterChange('all')}
+            >
+              All Records
+            </button>
+            <button
+              className={`filter-button ${activeFilter === 'meal' ? 'active' : ''}`}
+              onClick={() => handleFilterChange('meal')}
+            >
+              Meals
+            </button>
+            <button
+              className={`filter-button ${activeFilter === 'blood_sugar' ? 'active' : ''}`}
+              onClick={() => handleFilterChange('blood_sugar')}
+            >
+              Blood Sugar
+            </button>
+            <button
+              className={`filter-button ${activeFilter === 'activity' ? 'active' : ''}`}
+              onClick={() => handleFilterChange('activity')}
+            >
+              Activity
+            </button>
+            <button
+              className={`filter-button ${activeFilter === 'insulin' ? 'active' : ''}`}
+              onClick={() => handleFilterChange('insulin')}
+            >
+              Insulin
+            </button>
+          </div>
+        </div>
+
+        <div className="action-buttons">
+          <button onClick={handleRefresh} className="refresh-button" disabled={loading}>
+            {loading ? "Loading..." : "Refresh Data"}
+          </button>
+        </div>
       </div>
 
       {/* Add counter for total records */}
       <div className="records-info">
-        {debug.pagination && (
-          <span>Total records: {debug.pagination.total}</span>
+        <span>
+          {loading
+            ? "Loading records..."
+            : `Showing ${filteredData.length} ${activeFilter !== 'all' ? activeFilter : ''} records`}
+        </span>
+        <span> (Total in database: {pagination.total})</span>
+        {pagination.filteredTotal < pagination.total && activeFilter !== 'all' && (
+          <span className="filter-info">
+            {` — ${pagination.filteredTotal} match your filter`}
+          </span>
+        )}
+        {pagination.filteredTotal >= pagination.fetchLimit && (
+          <span className="warning-info">
+            {` — showing first ${pagination.fetchLimit} records only`}
+          </span>
         )}
       </div>
 
       {error && <div className="error-message">{error}</div>}
 
-      <div>
+      <div className="table-container">
         <table {...getTableProps()} style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             {headerGroups.map(headerGroup => {
@@ -279,6 +453,13 @@ const MealHistory = ({ isDoctor = false, patientId = null }) => {
                         }}
                       >
                         {column.render('Header')}
+                        <span>
+                          {column.isSorted
+                            ? column.isSortedDesc
+                              ? ' 🔽'
+                              : ' 🔼'
+                            : ''}
+                        </span>
                       </th>
                     );
                   })}
@@ -298,15 +479,24 @@ const MealHistory = ({ isDoctor = false, patientId = null }) => {
             {page.length === 0 ? (
               <tr>
                 <td colSpan={columns.length + 1} style={{ textAlign: 'center', padding: '20px' }}>
-                  No meal records found
+                  {loading ?
+                    "Loading records..." :
+                    `No records found ${activeFilter !== 'all' ? `for filter: ${activeFilter}` : ''}`
+                  }
                 </td>
               </tr>
             ) : (
               page.map(row => {
                 prepareRow(row);
                 const { key: rowKey, ...rowProps } = row.getRowProps();
+                const entryTypeClass = `entry-${row.original.entryType.replace('_', '-')}`;
+
                 return (
-                  <tr key={rowKey} {...rowProps} className={row.original.imported_at ? 'imported-row' : ''}>
+                  <tr
+                    key={rowKey}
+                    {...rowProps}
+                    className={`${row.original.imported_at ? 'imported-row' : ''} ${entryTypeClass}`}
+                  >
                     {row.cells.map(cell => {
                       const { key, ...cellProps } = cell.getCellProps();
                       return (
@@ -328,10 +518,7 @@ const MealHistory = ({ isDoctor = false, patientId = null }) => {
                     }}>
                       <button
                         onClick={() => setSelectedMeal(row.original)}
-                        style={{
-                          padding: '4px 8px',
-                          cursor: 'pointer'
-                        }}
+                        className="details-button"
                       >
                         Details
                       </button>
@@ -343,24 +530,44 @@ const MealHistory = ({ isDoctor = false, patientId = null }) => {
           </tbody>
         </table>
       </div>
-      <div style={{ marginTop: '20px', display: 'flex', gap: '10px', alignItems: 'center' }}>
-        <button onClick={() => gotoPage(0)} disabled={!canPreviousPage}>{'<<'}</button>
-        <button onClick={() => previousPage()} disabled={!canPreviousPage}>{'<'}</button>
-        <button onClick={() => nextPage()} disabled={!canNextPage}>{'>'}</button>
-        <button onClick={() => gotoPage(pageCount - 1)} disabled={!canNextPage}>{'>>'}</button>
-        <span>
-          Page {pageIndex + 1} of {pageOptions.length || 1}
-        </span>
-        <select
-          value={pageSize}
-          onChange={e => setPageSize(Number(e.target.value))}
-        >
-          {[10, 20, 30, 40, 50].map(pageSize => (
-            <option key={pageSize} value={pageSize}>
-              Show {pageSize}
-            </option>
-          ))}
-        </select>
+
+      {/* Enhanced pagination controls */}
+      <div className="pagination-controls">
+        <div>
+          <button onClick={() => gotoPage(0)} disabled={!canPreviousPage || loading}>
+            {'<<'}
+          </button>
+          <button onClick={() => previousPage()} disabled={!canPreviousPage || loading}>
+            {'<'}
+          </button>
+          <button onClick={() => nextPage()} disabled={!canNextPage || loading}>
+            {'>'}
+          </button>
+          <button onClick={() => gotoPage(pageCount - 1)} disabled={!canNextPage || loading}>
+            {'>>'}
+          </button>
+          <span>
+            Page{' '}
+            <strong>
+              {pageIndex + 1} of {pageOptions.length || 1}
+            </strong>
+          </span>
+        </div>
+        <div className="page-size-selector">
+          <span>Show </span>
+          <select
+            value={pageSize}
+            onChange={e => setPageSize(Number(e.target.value))}
+            disabled={loading}
+          >
+            {[10, 20, 50, 100].map(size => (
+              <option key={size} value={size}>
+                {size}
+              </option>
+            ))}
+          </select>
+          <span> records per page</span>
+        </div>
       </div>
 
       {selectedMeal && (
@@ -406,6 +613,54 @@ const MealHistory = ({ isDoctor = false, patientId = null }) => {
           margin-top: 3px;
         }
 
+        .action-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 15px;
+          flex-wrap: wrap;
+        }
+
+        .filter-controls {
+          display: flex;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 10px;
+          margin-bottom: 10px;
+        }
+
+        .filter-label {
+          margin-right: 10px;
+          font-weight: bold;
+        }
+
+        .filter-buttons {
+          display: flex;
+          gap: 5px;
+          flex-wrap: wrap;
+        }
+
+        .filter-button {
+          padding: 6px 12px;
+          background-color: #f0f0f0;
+          border: 1px solid #d9d9d9;
+          border-radius: 4px;
+          cursor: pointer;
+          font-size: 0.9em;
+          transition: all 0.2s;
+        }
+
+        .filter-button:hover {
+          background-color: #e6f7ff;
+          border-color: #91d5ff;
+        }
+
+        .filter-button.active {
+          background-color: #1890ff;
+          border-color: #1890ff;
+          color: white;
+        }
+
         .action-buttons {
           margin-bottom: 15px;
         }
@@ -419,8 +674,13 @@ const MealHistory = ({ isDoctor = false, patientId = null }) => {
           cursor: pointer;
         }
 
-        .refresh-button:hover {
+        .refresh-button:hover:not(:disabled) {
           background-color: #40a9ff;
+        }
+        
+        .refresh-button:disabled {
+          background-color: #bfbfbf;
+          cursor: not-allowed;
         }
 
         .error-message {
@@ -436,6 +696,91 @@ const MealHistory = ({ isDoctor = false, patientId = null }) => {
           margin-bottom: 10px;
           font-size: 0.9em;
           color: #666;
+        }
+        
+        .filter-info {
+          color: #1890ff;
+        }
+        
+        .warning-info {
+          color: #fa8c16;
+        }
+        
+        .details-button {
+          padding: 4px 8px;
+          background-color: #f0f0f0;
+          border: 1px solid #d9d9d9;
+          border-radius: 4px;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+        
+        .details-button:hover {
+          background-color: #1890ff;
+          border-color: #1890ff;
+          color: white;
+        }
+        
+        /* Table container with potential horizontal scroll */
+        .table-container {
+          overflow-x: auto;
+        }
+        
+        /* Pagination controls styling */
+        .pagination-controls {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-top: 20px;
+          flex-wrap: wrap;
+        }
+        
+        .pagination-controls button {
+          margin: 0 5px;
+          padding: 5px 10px;
+          border: 1px solid #d9d9d9;
+          background-color: white;
+          cursor: pointer;
+          border-radius: 4px;
+        }
+        
+        .pagination-controls button:disabled {
+          color: #d9d9d9;
+          cursor: not-allowed;
+        }
+        
+        .pagination-controls button:not(:disabled):hover {
+          background-color: #e6f7ff;
+          border-color: #1890ff;
+        }
+        
+        .page-size-selector {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+        }
+        
+        .page-size-selector select {
+          padding: 5px;
+          border-radius: 4px;
+          border: 1px solid #d9d9d9;
+        }
+        
+        /* Entry type color indicators */
+        .entry-meal {
+          border-left: 4px solid #52c41a;
+        }
+        
+        .entry-blood-sugar {
+          border-left: 4px solid #faad14;
+        }
+        
+        .entry-activity {
+          border-left: 4px solid #1890ff;
+        }
+        
+        .entry-insulin {
+          border-left: 4px solid #f5222d;
         }
       `}</style>
     </div>

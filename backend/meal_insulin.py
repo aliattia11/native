@@ -1,15 +1,17 @@
 from flask import Blueprint, request, jsonify, current_app
 from bson.objectid import ObjectId
 from datetime import datetime
-import json  # Add this import
+import json  # Add this import - it was missing
+from json import dumps
 from flask_cors import cross_origin
 from utils.auth import token_required
 from utils.error_handler import api_error_handler
 from constants import Constants
 from services.food_service import get_food_details
 from config import mongo
-from datetime import datetime, timedelta  # Add timedelta import
-import logging  # Add this import
+from datetime import datetime, timedelta
+import logging
+
 
 logger = logging.getLogger(__name__)
 meal_insulin_bp = Blueprint('meal_insulin', __name__)
@@ -478,8 +480,51 @@ def submit_meal(current_user):
 
         # Insert meal document
         result = mongo.db.meals.insert_one(meal_doc)
-        logger.info(
-            f"Meal document created with ID: {result.inserted_id}, including bloodSugarTimestamp: {blood_sugar_timestamp}")
+        meal_id = str(result.inserted_id)
+        logger.info(f"Meal document created with ID: {meal_id}")
+
+        # Get the core insulin calculation factors we need for meals-only
+        base_insulin = insulin_calc['breakdown'].get('base_insulin', 0)
+        absorption_factor = insulin_calc['breakdown'].get('absorption_factor', 1.0)
+        meal_timing_factor = insulin_calc['breakdown'].get('meal_timing_factor', 1.0)
+
+        # Calculate suggested insulin without health multipliers
+        # This only uses base insulin × absorption factor × meal timing factor
+        meal_only_suggested_insulin = base_insulin * absorption_factor * meal_timing_factor
+
+        # Extract only the requested calculation factors
+        calculation_summary = {
+            'base_insulin': base_insulin,  # Total Base Units
+            'adjustment_factors': {
+                'absorption_rate': absorption_factor,
+                'meal_timing': meal_timing_factor
+            },
+            'meal_only_suggested_insulin': round(meal_only_suggested_insulin, 1)  # Meal only suggested insulin
+        }
+
+        # Create and insert meals_only document with ONLY meal-related data
+        meals_only_doc = {
+            'user_id': str(current_user['_id']),
+            'timestamp': current_time,
+            'mealType': data['mealType'],
+            'foodItems': data['foodItems'],
+            'nutrition': nutrition,
+            'notes': data.get('notes', ''),
+            'meal_id': meal_id,  # Reference to the full meal record
+            'source': 'meal_submission',
+            'calculation_summary': calculation_summary
+        }
+
+        # Insert into meals_only collection
+        meals_only_result = mongo.db.meals_only.insert_one(meals_only_doc)
+        meals_only_id = str(meals_only_result.inserted_id)
+        logger.info(f"Meals-only document created with ID: {meals_only_id}")
+
+        # Update the main meal document with reference to meals_only
+        mongo.db.meals.update_one(
+            {"_id": result.inserted_id},
+            {"$set": {"meals_only_id": meals_only_id}}
+        )
 
         # Check if we should skip activity duplication
         should_skip_activity_duplication = data.get('skipActivityDuplication', False)
@@ -498,7 +543,7 @@ def submit_meal(current_user):
                     'level': activity.get('level', 0),
                     'impact': activity.get('impact', 1.0),
                     'duration': activity.get('duration', '00:00'),
-                    'meal_id': str(result.inserted_id)  # Reference to the meal record
+                    'meal_id': meal_id  # Reference to the meal record
                 }
 
                 # Handle time fields based on the activity's structure
@@ -526,9 +571,9 @@ def submit_meal(current_user):
                 try:
                     activities_collection.update_one(
                         {'_id': ObjectId(activity_id)},
-                        {'$set': {'meal_id': str(result.inserted_id)}}
+                        {'$set': {'meal_id': meal_id}}
                     )
-                    logger.info(f"Linked existing activity {activity_id} to meal {result.inserted_id}")
+                    logger.info(f"Linked existing activity {activity_id} to meal {meal_id}")
                 except Exception as e:
                     logger.warning(f"Failed to link existing activity {activity_id}: {e}")
 
@@ -559,7 +604,7 @@ def submit_meal(current_user):
                     'bloodSugarTimestamp': blood_sugar_timestamp,  # When the reading was taken
                     'notes': data.get('notes', ''),
                     'source': 'meal_record',  # Note that this came from a meal record
-                    'meal_id': str(result.inserted_id),  # Reference to the meal record
+                    'meal_id': meal_id,  # Reference to the meal record
                     'mealType': data['mealType']  # Include meal type for context
                 }
 
@@ -568,7 +613,7 @@ def submit_meal(current_user):
                 blood_sugar_id = str(bs_result.inserted_id)
 
                 logger.info(
-                    f"Blood sugar record created with ID: {blood_sugar_id}, linked to meal ID: {result.inserted_id}")
+                    f"Blood sugar record created with ID: {blood_sugar_id}, linked to meal ID: {meal_id}")
 
                 # Update the meal document with the blood sugar ID reference
                 mongo.db.meals.update_one(
@@ -593,7 +638,7 @@ def submit_meal(current_user):
                 'created_by': str(current_user['_id']),
                 'notes': data.get('notes', ''),
                 'is_insulin': True,
-                'meal_id': str(result.inserted_id),
+                'meal_id': meal_id,
                 'meal_type': data['mealType'],
                 'blood_sugar': data.get('bloodSugar'),
                 'blood_sugar_timestamp': blood_sugar_timestamp,
@@ -666,7 +711,8 @@ def submit_meal(current_user):
 
         return jsonify({
             "message": "Meal logged successfully",
-            "id": str(result.inserted_id),
+            "id": meal_id,
+            "meals_only_id": meals_only_id,
             "blood_sugar_id": blood_sugar_id,  # Include the blood sugar ID if created
             "nutrition": nutrition,
             "insulinCalculation": insulin_calc,
@@ -681,7 +727,6 @@ def submit_meal(current_user):
     except Exception as e:
         logger.error(f"Error in submit_meal: {str(e)}")
         return jsonify({"error": str(e)}), 400
-
 
 @meal_insulin_bp.route('/api/meals', methods=['GET'])
 @token_required
@@ -1007,4 +1052,97 @@ def import_meals(current_user):
 
     except Exception as e:
         logger.error(f"Error importing meals: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
+@meal_insulin_bp.route('/api/meals-only', methods=['GET'])
+@token_required
+@api_error_handler
+def get_meals_only(current_user):
+    try:
+        # Parse query parameters
+        limit = int(request.args.get('limit', 10))
+        skip = int(request.args.get('skip', 0))
+        start_date_str = request.args.get('start_date')
+        end_date_str = request.args.get('end_date')
+        filter_by = request.args.get('filter_by', 'timestamp')
+
+        # Determine user ID (allow doctors to view patient data)
+        patient_id = request.args.get('patient_id')
+        if patient_id and current_user.get('user_type') != 'doctor':
+            return jsonify({"error": "Unauthorized to view patient data"}), 403
+
+        user_id = patient_id if patient_id else str(current_user['_id'])
+
+        # Base query - always filter by user
+        query = {"user_id": user_id}
+
+        # Handle filtering based on time parameters
+        if start_date_str or end_date_str:
+            # Parse the provided time parameters
+            start_datetime = None
+            end_datetime = None
+
+            if start_date_str:
+                try:
+                    start_datetime = datetime.strptime(start_date_str, '%Y-%m-%d')
+                    logger.debug(f"Using start date: {start_datetime}")
+                except Exception as e:
+                    logger.error(f"Error parsing start date '{start_date_str}': {e}")
+                    return jsonify({"error": f"Invalid start_date format: {start_date_str}"}), 400
+
+            if end_date_str:
+                try:
+                    # Add one day to include full end date
+                    end_datetime = datetime.strptime(end_date_str, '%Y-%m-%d') + timedelta(days=1)
+                    logger.debug(f"Using end date: {end_datetime}")
+                except Exception as e:
+                    logger.error(f"Error parsing end date '{end_date_str}': {e}")
+                    return jsonify({"error": f"Invalid end_date format: {end_date_str}"}), 400
+
+            # Add date range to query
+            time_filter = {}
+            if start_datetime:
+                time_filter["$gte"] = start_datetime
+            if end_datetime:
+                time_filter["$lt"] = end_datetime
+
+            if time_filter:
+                query[filter_by] = time_filter
+
+        # Get total count for pagination
+        total_meals = mongo.db.meals_only.count_documents(query)
+
+        # Execute the query with pagination
+        meals = list(mongo.db.meals_only.find(query).sort("timestamp", -1).skip(skip).limit(limit))
+
+        # Format results
+        formatted_meals = []
+        for meal in meals:
+            formatted_meal = {
+                "id": str(meal["_id"]),
+                "timestamp": meal["timestamp"].isoformat(),
+                "mealType": meal.get("mealType", "normal"),
+                "foodItems": meal.get("foodItems", []),
+                "nutrition": meal.get("nutrition", {}),
+                "notes": meal.get("notes", "")
+            }
+
+            # Include related IDs if present
+            if "meal_id" in meal:
+                formatted_meal["meal_id"] = meal["meal_id"]
+
+            formatted_meals.append(formatted_meal)
+
+        return jsonify({
+            "meals": formatted_meals,
+            "pagination": {
+                "total": total_meals,
+                "limit": limit,
+                "skip": skip
+            }
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error retrieving meals-only data: {str(e)}")
         return jsonify({"error": str(e)}), 500

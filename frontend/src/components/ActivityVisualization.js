@@ -1139,7 +1139,7 @@ const CustomTooltip = useCallback(({ active, payload }) => {
                     <YAxis
                       yAxisId="activityLevel"
                       orientation={showActualBloodSugar ? "right" : "left"}
-                      domain={[-10, 2]} // Balanced domain for bidirectional display
+                      domain={[-20, 2]} // Balanced domain for bidirectional display
                       ticks={[-2, -1, 0, 1, 2]} // Ticks representing activity directions
                       label={{
                         value: 'Activity Level',
@@ -1154,7 +1154,9 @@ const CustomTooltip = useCallback(({ active, payload }) => {
                     <YAxis
                       yAxisId="activityEffect"
                       orientation="right"
-                      domain={[-2, 1]}
+                      domain={[-4, 1]}
+                      ticks={[-1, -0.5, 0, 0.5, 1]} // Ticks representing activity effect
+
                       label={{ value: 'Activity Effect', angle: -90, position: 'insideRight' }}
                     />
                   )}
