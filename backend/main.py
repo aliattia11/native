@@ -48,6 +48,7 @@ def create_app():
         from blood_sugar import blood_sugar_bp
         from routes.medication_routes import medication_routes
         from routes.insulin_routes import insulin_routes
+        from routes.meal_routes import meal_bp  # Import the meal routes blueprint
         from routes.import_routes import import_routes
         # Register blueprints
         blueprints = [
@@ -62,6 +63,7 @@ def create_app():
             (medication_routes, ''),
             (insulin_routes, ''),
             (import_routes, ''),
+            (meal_bp, ''),
         ]
 
         for blueprint, url_prefix in blueprints:

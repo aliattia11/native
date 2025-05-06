@@ -1,0 +1,747 @@
+/* MealVisualization.css */
+
+.meal-visualization {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
+    Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+  padding: 20px;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  margin-bottom: 20px;
+}
+
+.meal-visualization.embedded {
+  padding: 0;
+  box-shadow: none;
+  background-color: transparent;
+}
+
+.meal-visualization .title {
+  font-size: 1.8rem;
+  margin-top: 0;
+  margin-bottom: 20px;
+  color: #343a40;
+  border-bottom: 2px solid #dee2e6;
+  padding-bottom: 10px;
+}
+
+.timezone-info {
+  font-size: 0.8rem;
+  color: #6c757d;
+  margin-bottom: 15px;
+}
+
+.timezone-note {
+  font-style: italic;
+}
+
+/* View toggle buttons */
+.view-toggle {
+  display: flex;
+  margin-bottom: 20px;
+}
+
+.toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background-color: #e9ecef;
+  border: 1px solid #ced4da;
+  color: #495057;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.toggle-btn:first-child {
+  border-radius: 4px 0 0 4px;
+}
+
+.toggle-btn:last-child {
+  border-radius: 0 4px 4px 0;
+}
+
+.toggle-btn.active {
+  background-color: #007bff;
+  border-color: #007bff;
+  color: white;
+}
+
+.toggle-btn:hover:not(.active) {
+  background-color: #dee2e6;
+}
+
+/* Controls section */
+.controls {
+  margin-bottom: 20px;
+}
+
+.date-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+  margin-bottom: 15px;
+  align-items: center;
+}
+
+.date-range-inputs {
+  flex: 1;
+  min-width: 300px;
+}
+
+.quick-ranges {
+  display: flex;
+  gap: 10px;
+}
+
+.quick-ranges button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background-color: #e9ecef;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  color: #495057;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.quick-ranges button:hover {
+  background-color: #dee2e6;
+}
+
+.filter-controls {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 15px;
+  margin-bottom: 15px;
+  align-items: center;
+}
+
+.meal-type-filter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.meal-type-filter label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 500;
+}
+
+.meal-type-filter select {
+  padding: 8px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  background-color: white;
+}
+
+.update-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background-color: #28a745;
+  border: none;
+  border-radius: 4px;
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.update-btn:hover {
+  background-color: #218838;
+}
+
+.update-btn:disabled {
+  background-color: #6c757d;
+  cursor: not-allowed;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.chart-type-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.chart-type-btn {
+  padding: 8px 16px;
+  background-color: #e9ecef;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  color: #495057;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.chart-type-btn.active {
+  background-color: #007bff;
+  border-color: #007bff;
+  color: white;
+}
+
+.chart-type-btn:hover:not(.active) {
+  background-color: #dee2e6;
+}
+
+/* Content container */
+.content-container {
+  min-height: 400px;
+}
+
+/* Chart styles */
+.chart-container {
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  padding: 15px;
+  margin-bottom: 20px;
+  height: 450px;
+}
+
+/* Custom tooltip styles */
+.custom-tooltip {
+  background-color: rgba(255, 255, 255, 0.95);
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  padding: 10px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+.tooltip-time {
+  font-weight: bold;
+  margin-top: 0;
+  margin-bottom: 5px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.tooltip-label {
+  margin: 3px 0;
+}
+
+.tooltip-carbs {
+  color: #8884d8;
+  margin: 3px 0;
+}
+
+.tooltip-protein {
+  color: #82ca9d;
+  margin: 3px 0;
+}
+
+.tooltip-fat {
+  color: #ffc658;
+  margin: 3px 0;
+}
+
+.tooltip-calories {
+  color: #ff7300;
+  margin: 3px 0;
+  font-weight: 500;
+}
+
+.tooltip-insulin {
+  color: #ff4444;
+  margin: 3px 0;
+  font-weight: 500;
+}
+
+/* Table styles */
+.table-container {
+  overflow-x: auto;
+}
+
+.meal-table {
+  width: 100%;
+  border-collapse: collapse;
+  background-color: white;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.meal-table th {
+  background-color: #f1f3f5;
+  padding: 12px;
+  text-align: left;
+  font-weight: 600;
+  color: #495057;
+  border-bottom: 2px solid #dee2e6;
+  position: relative;
+  cursor: pointer;
+}
+
+.meal-table th:hover {
+  background-color: #e9ecef;
+}
+
+.meal-table td {
+  padding: 12px;
+  border-bottom: 1px solid #dee2e6;
+  color: #212529;
+}
+
+.meal-row:hover {
+  background-color: #f8f9fa;
+}
+
+.meal-row.meal-type-breakfast {
+  border-left: 4px solid #ffc107;
+}
+
+.meal-row.meal-type-lunch {
+  border-left: 4px solid #17a2b8;
+}
+
+.meal-row.meal-type-dinner {
+  border-left: 4px solid #6f42c1;
+}
+
+.meal-row.meal-type-snack {
+  border-left: 4px solid #20c997;
+}
+
+.meal-row.meal-type-normal {
+  border-left: 4px solid #6c757d;
+}
+
+.meal-date {
+  font-weight: 500;
+}
+
+.meal-type {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 4px;
+  color: white;
+  font-weight: 500;
+  text-align: center;
+}
+
+.meal-type.breakfast {
+  background-color: #ffc107;
+}
+
+.meal-type.lunch {
+  background-color: #17a2b8;
+}
+
+.meal-type.dinner {
+  background-color: #6f42c1;
+}
+
+.meal-type.snack {
+  background-color: #20c997;
+}
+
+.meal-type.normal {
+  background-color: #6c757d;
+}
+
+.view-details-btn {
+  padding: 5px 10px;
+  background-color: #007bff;
+  border: none;
+  border-radius: 4px;
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.view-details-btn:hover {
+  background-color: #0069d9;
+}
+
+/* Pagination */
+.pagination {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 15px 0;
+  align-items: center;
+}
+
+.pagination button {
+  padding: 5px 10px;
+  border: 1px solid #ced4da;
+  background-color: white;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.pagination button:disabled {
+  color: #adb5bd;
+  cursor: not-allowed;
+}
+
+.pagination button:not(:disabled):hover {
+  background-color: #e9ecef;
+}
+
+.pagination input {
+  width: 50px;
+  padding: 5px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  text-align: center;
+}
+
+.pagination select {
+  padding: 5px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+}
+
+/* Detail view */
+.meal-detail-view {
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  padding: 20px;
+}
+
+.meal-detail-view h3 {
+  margin-top: 0;
+  margin-bottom: 20px;
+  color: #343a40;
+  border-bottom: 2px solid #dee2e6;
+  padding-bottom: 10px;
+}
+
+.meal-detail-view h4 {
+  margin-top: 20px;
+  margin-bottom: 10px;
+  color: #495057;
+  font-weight: 600;
+}
+
+.meal-detail-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 15px;
+}
+
+.meal-time, .meal-type {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.label {
+  font-weight: 600;
+  color: #495057;
+}
+
+.meal-nutrition-summary {
+  background-color: #f8f9fa;
+  padding: 15px;
+  border-radius: 6px;
+  margin-bottom: 20px;
+}
+
+.nutrition-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 15px;
+}
+
+.nutrition-item {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.percentage-bar {
+  width: 100%;
+  height: 10px;
+  background-color: #dee2e6;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.percentage-fill {
+  height: 100%;
+  border-radius: 10px;
+}
+
+.percentage-fill.carbs {
+  background-color: #8884d8;
+}
+
+.percentage-fill.protein {
+  background-color: #82ca9d;
+}
+
+.percentage-fill.fat {
+  background-color: #ffc658;
+}
+
+.food-items-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 20px;
+}
+
+.food-items-table th {
+  background-color: #f1f3f5;
+  padding: 8px;
+  text-align: left;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.food-items-table td {
+  padding: 8px;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.meal-insulin {
+  background-color: #f8f9fa;
+  padding: 15px;
+  border-radius: 6px;
+  margin-bottom: 20px;
+}
+
+.insulin-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 15px;
+}
+
+.insulin-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.insulin-factors {
+  grid-column: 1 / -1;
+  margin-top: 10px;
+}
+
+.insulin-factors h5 {
+  margin-top: 10px;
+  margin-bottom: 5px;
+}
+
+.factors-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px;
+}
+
+.factor-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.factor-label {
+  font-size: 0.85em;
+  color: #6c757d;
+}
+
+.factor-value {
+  font-weight: 500;
+}
+
+.meal-blood-glucose {
+  margin-bottom: 20px;
+}
+
+.blood-glucose-value {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.meal-activities {
+  background-color: #f8f9fa;
+  padding: 15px;
+  border-radius: 6px;
+  margin-bottom: 20px;
+}
+
+.activities-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+}
+
+.activity-item {
+  padding: 10px;
+  background-color: white;
+  border-radius: 6px;
+  border: 1px solid #dee2e6;
+  min-width: 200px;
+}
+
+.meal-notes {
+  margin-bottom: 20px;
+}
+
+.notes-content {
+  background-color: #f8f9fa;
+  padding: 15px;
+  border-radius: 6px;
+  white-space: pre-line;
+}
+
+.detail-actions {
+  margin-top: 30px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.back-button {
+  padding: 8px 16px;
+  background-color: #6c757d;
+  border: none;
+  border-radius: 4px;
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.back-button:hover {
+  background-color: #5a6268;
+}
+
+.no-detail-message {
+  background-color: #f8f9fa;
+  padding: 40px;
+  text-align: center;
+  border-radius: 8px;
+  color: #6c757d;
+}
+
+.no-data-message {
+  background-color: white;
+  padding: 40px;
+  text-align: center;
+  border-radius: 8px;
+  color: #6c757d;
+  font-size: 1.1rem;
+  margin-bottom: 20px;
+}
+
+/* Loading and error states */
+.loading {
+  background-color: #f8f9fa;
+  padding: 40px;
+  text-align: center;
+  border-radius: 8px;
+  color: #6c757d;
+  font-size: 1.1rem;
+}
+
+.error-message {
+  background-color: #f8d7da;
+  padding: 15px;
+  text-align: center;
+  border-radius: 8px;
+  color: #721c24;
+  margin-bottom: 20px;
+}
+
+/* Statistics summary */
+.meal-statistics {
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  padding: 15px;
+  margin-top: 20px;
+}
+
+.meal-statistics h3 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  color: #343a40;
+  font-size: 1.3rem;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 15px;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.stat-label {
+  font-size: 0.9rem;
+  color: #6c757d;
+}
+
+.stat-value {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: #212529;
+}
+
+/* Responsive adjustments */
+@media screen and (max-width: 768px) {
+  .date-controls,
+  .filter-controls,
+  .chart-type-controls {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .date-range-inputs,
+  .quick-ranges,
+  .meal-type-filter {
+    width: 100%;
+  }
+  
+  .nutrition-grid,
+  .insulin-details,
+  .stats-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  
+  .activities-list {
+    flex-direction: column;
+  }
+  
+  .activity-item {
+    width: 100%;
+  }
+}
+
+@media screen and (max-width: 480px) {
+  .nutrition-grid,
+  .insulin-details,
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .meal-detail-header {
+    flex-direction: column;
+  }
+}

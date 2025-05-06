@@ -7,6 +7,8 @@ import InsulinVisualization from './InsulinVisualization';
 import CombinedGlucoseInsulinChart from './CombinedGlucoseInsulinChart';
 import ActivityRecording from './ActivityRecording';
 import ActivityVisualization from './ActivityVisualization';
+import MealVisualization from './MealVisualization';
+
 import FoodDatabase from './FoodDatabase';
 import PatientConstants from './PatientConstants';
 import InsulinInput from './InsulinInput';
@@ -73,7 +75,9 @@ const PatientDashboard = ({ handleLogout }) => {
         return <CombinedGlucoseInsulinChart key="combined-glucose-insulin-chart" />;
       case 'InsulinVisualization':
         return <InsulinVisualization key="insulin-visualization" />;
-      case 'activityRecording':
+      case 'MealVisualization':
+        return <MealVisualization key="Meal-Visualization" userType="patient" />;
+              case 'activityRecording':
         return <ActivityRecording key="activity-recording" userType="patient" />;
       case 'ActivityVisualization':
         return <ActivityVisualization key="activity-visualization" userType="patient" />;
@@ -141,6 +145,8 @@ const PatientDashboard = ({ handleLogout }) => {
             { name: 'mealHistory', label: 'Meal History' },
             { name: 'BloodSugarVisualization', label: 'Blood Glucose Visualization' },
             { name: 'CombinedGlucoseInsulinChart', label: 'Glucose Insulin Analytics' },
+            { name: 'MealVisualization', label: 'Meal Analytics' },
+
             { name: 'InsulinVisualization', label: 'Insulin Visualization' },
             { name: 'ActivityVisualization', label: 'Activity Visualization' }
           ].map(({ name, label }) => (

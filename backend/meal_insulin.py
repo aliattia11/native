@@ -1233,3 +1233,5 @@ def delete_meal(current_user, meal_id):
     except Exception as e:
         logger.error(f"Error deleting meal: {str(e)}")
         return jsonify({"error": f"Failed to delete record: {str(e)}"}), 500
+
+

@@ -7,6 +7,7 @@ import DoctorDashboard from './components/DoctorDashboard';
 import { ConstantsProvider } from './contexts/ConstantsContext';
 import { BloodSugarDataProvider } from './contexts/BloodSugarDataContext';
 import { TimeProvider } from './contexts/TimeContext';
+import MealVisualization from './components/MealVisualization'; // Add the import for MealVisualization
 import './App.css';
 
 function App() {
@@ -50,6 +51,16 @@ function App() {
                   ) : (
                     <Navigate to="/login" />
                   )
+                } />
+                {/* Add route for meal history/visualization */}
+                <Route path="/meal-history" element={
+                  loggedIn ? <MealVisualization /> : <Navigate to="/login" />
+                } />
+                {/* Add route for doctor to view a specific patient's meal history */}
+                <Route path="/patient/:patientId/meal-history" element={
+                  loggedIn && userType === 'doctor' ?
+                    <MealVisualization isDoctor={true} /> :
+                    <Navigate to="/login" />
                 } />
                 <Route path="/" element={<Navigate to="/login" />} />
               </Routes>
