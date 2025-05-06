@@ -745,3 +745,260 @@
     flex-direction: column;
   }
 }
+
+/* Add these new styles to MealVisualization.css */
+
+/* Carb equivalent info styling */
+.carb-equivalent-info {
+  margin-bottom: 15px;
+  position: relative;
+}
+
+.info-button {
+  background-color: #f8f9fa;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.info-button:hover {
+  background-color: #e9ecef;
+}
+
+.info-panel {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  width: 400px;
+  background-color: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 15px;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+  z-index: 100;
+  margin-top: 10px;
+}
+
+.info-panel h4 {
+  margin-top: 0;
+  color: #495057;
+}
+
+.info-panel ul {
+  padding-left: 20px;
+}
+
+.info-panel li {
+  margin-bottom: 8px;
+}
+
+.close-button {
+  background-color: #6c757d;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 5px 10px;
+  margin-top: 10px;
+  cursor: pointer;
+}
+
+.close-button:hover {
+  background-color: #5a6268;
+}
+
+/* Carb equivalent display in meal details */
+.carb-equivalent {
+  display: inline-block;
+  font-size: 0.85em;
+  color: #6c757d;
+  margin-left: 5px;
+}
+
+.total-carb-equivalent {
+  font-weight: bold;
+  color: #495057;
+}
+
+/* Tooltip enhancements */
+.custom-tooltip .tooltip-total-carb-equiv {
+  border-top: 1px dashed #ddd;
+  padding-top: 5px;
+  margin-top: 3px;
+}
+
+/* Highlight carb equivalents in table */
+td[data-column-id="carbEquivalent"] {
+  font-weight: bold;
+  background-color: rgba(136, 132, 216, 0.1);
+}
+
+/* Stack bar chart enhancements */
+.recharts-layer.recharts-bar-rectangle[name="Protein as Carbs (0.5x)"] rect,
+.recharts-layer.recharts-bar-rectangle[name="Fat as Carbs (0.2x)"] rect {
+  opacity: 0.9;
+}
+/* Meal effect visualization styling */
+
+/* Absorption type indicators */
+.absorption-type {
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.85em;
+  font-weight: 500;
+}
+
+.absorption-type.fast {
+  background-color: rgba(255, 99, 71, 0.2);
+  color: #cc3300;
+}
+
+.absorption-type.medium {
+  background-color: rgba(65, 105, 225, 0.2);
+  color: #1a56db;
+}
+
+.absorption-type.slow {
+  background-color: rgba(60, 179, 113, 0.2);
+  color: #157347;
+}
+
+.absorption-type.very_slow {
+  background-color: rgba(138, 43, 226, 0.2);
+  color: #6610f2;
+}
+
+/* Absorption info panel */
+.absorption-info {
+  margin-bottom: 15px;
+  position: relative;
+}
+
+.effect-controls {
+  display: flex;
+  margin-top: 10px;
+  padding: 10px;
+  background-color: #f8f9fa;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.timeline-interval {
+  display: flex;
+  align-items: center;
+}
+
+.timeline-interval label {
+  margin-right: 10px;
+  font-weight: 500;
+}
+
+.timeline-interval select {
+  padding: 4px 8px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+}
+
+/* Meal effect chart tooltip */
+.effect-tooltip {
+  max-width: 300px;
+}
+
+.tooltip-total-effect {
+  font-size: 1.1em;
+  font-weight: bold;
+  margin-bottom: 8px;
+  border-bottom: 1px solid #ddd;
+  padding-bottom: 4px;
+}
+
+.tooltip-contributions {
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.tooltip-meal-list {
+  list-style-type: none;
+  padding-left: 0;
+  margin: 0;
+}
+
+.tooltip-meal-item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px 0;
+  border-bottom: 1px dotted #eee;
+}
+
+.tooltip-meal-time {
+  font-size: 0.85em;
+  color: #666;
+}
+
+.tooltip-meal-type {
+  padding: 1px 4px;
+  border-radius: 3px;
+  background-color: #e9ecef;
+}
+
+.tooltip-meal-absorption {
+  font-style: italic;
+  font-size: 0.85em;
+  color: #666;
+}
+
+.tooltip-meal-effect {
+  margin-left: auto;
+  font-weight: bold;
+}
+
+/* Individual meal effect visualization in detail view */
+.meal-effect-visualization {
+  grid-column: 1 / -1;
+  margin-top: 15px;
+  padding-top: 15px;
+  border-top: 1px solid #eee;
+}
+
+.mini-effect-chart {
+  background-color: #f8f9fa;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 10px;
+  margin: 10px 0;
+}
+
+.effect-explanation {
+  font-size: 0.9em;
+  color: #555;
+  padding: 8px;
+  background-color: #f0f0f0;
+  border-radius: 4px;
+}
+
+/* Chart type buttons */
+.chart-type-btn[data-type="effect"] {
+  background-color: #6c757d;
+  color: white;
+}
+
+.chart-type-btn[data-type="effect"].active {
+  background-color: #495057;
+}
+
+/* Make absorption column more readable */
+td[data-column-id="absorptionType"] {
+  white-space: nowrap;
+}
+
+/* Meal type color indicators in effect chart */
+.tooltip-meal-item.breakfast .tooltip-meal-type { background-color: #ffc107; color: #212529; }
+.tooltip-meal-item.lunch .tooltip-meal-type { background-color: #fd7e14; color: #fff; }
+.tooltip-meal-item.dinner .tooltip-meal-type { background-color: #6f42c1; color: #fff; }
+.tooltip-meal-item.snack .tooltip-meal-type { background-color: #20c997; color: #212529; }
+.tooltip-meal-item.normal .tooltip-meal-type { background-color: #6c757d; color: #fff; }

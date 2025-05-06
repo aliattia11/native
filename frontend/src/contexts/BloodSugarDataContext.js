@@ -3,6 +3,7 @@ import axios from 'axios';
 import moment from 'moment';
 import TimeManager from '../utils/TimeManager';
 import TimeContext from '../contexts/TimeContext';
+import TimeEffect from '../utils/TimeEffect'; // Add this import
 
 // Create the context
 const BloodSugarDataContext = createContext();
@@ -75,6 +76,68 @@ export const BloodSugarDataProvider = ({ children }) => {
     if (bloodSugar < target * 0.7) return statusMap.low;
     if (bloodSugar > target * 1.3) return statusMap.high;
     return statusMap.normal;
+  }, []);
+
+  // Calculate meal's blood glucose impact based on its composition
+  const calculateMealBGImpact = useCallback((meal, patientConstants) => {
+    if (!meal) return null;
+
+    // Extract meal nutrition data or use defaults
+    const {
+      carbs = 0,
+      protein = 0,
+      fat = 0,
+      fiber = 0
+    } = meal.nutrition || {};
+
+    // Get absorption type and glycemic index if available
+    const absorptionType = meal.absorptionType || meal.nutrition?.absorption_type || 'medium';
+    const glycemicIndex = meal.glycemicIndex || meal.nutrition?.glycemicIndex;
+
+    // Define patient-specific factors using constants from context or defaults
+    const patientFactors = {
+      proteinFactor: patientConstants?.insulin_calculation?.protein_factor || 0.5,
+      fatFactor: patientConstants?.insulin_calculation?.fat_factor || 0.2,
+      fiberFactor: 0.1,
+      absorptionFactors: {
+        slow: 0.7,
+        medium: 1.0,
+        fast: 1.3
+      },
+      dawnPhenomenonFactor: patientConstants?.dawn_phenomenon_factor || 1.2
+    };
+
+    // Calculate BG impact using TimeEffect utility
+    const bgImpact = TimeEffect.calculateBGImpact({
+      nutrition: {
+        carbs,
+        protein,
+        fat,
+        fiber,
+        glycemicIndex,
+        absorptionType
+      },
+      timestamp: meal.timestamp || new Date()
+    }, patientFactors);
+
+    // Generate impact curve over time (6 hours, 15-minute intervals)
+    const bgImpactCurve = TimeEffect.calculateBGImpactCurve({
+      nutrition: {
+        carbs,
+        protein,
+        fat,
+        fiber,
+        glycemicIndex,
+        absorptionType
+      },
+      timestamp: meal.timestamp || new Date()
+    }, patientFactors, 6, 15);
+
+    return {
+      ...bgImpact,
+      curve: bgImpactCurve,
+      meal: meal
+    };
   }, []);
 
   // Update local time scale based on date range when not using TimeContext
@@ -427,6 +490,9 @@ export const BloodSugarDataProvider = ({ children }) => {
 
   }, [estimationSettings, targetGlucose, timeScale, filteredData, getBloodSugarStatus, dateRange, getEstimationInterval]);
 
+
+
+
   // Fetch blood sugar data from API
   const fetchBloodSugarData = useCallback(async (patientId = null) => {
     // Avoid fetch if already loading
@@ -624,7 +690,7 @@ useEffect(() => {
   }, [fetchBloodSugarData]);
 
   // Value to be provided by the context - define this AFTER all functions are defined
-  const contextValue = {
+   const contextValue = {
     // Data
     bloodSugarData,
     filteredData,
@@ -654,6 +720,7 @@ useEffect(() => {
     getFilteredData,
     applyInsulinEffect,
     getBloodSugarAtTime,
+    calculateMealBGImpact, // Add this function to the context value
 
     // TimeManager utilities
     TimeManager,

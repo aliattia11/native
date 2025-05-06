@@ -6,7 +6,7 @@ import {
   Tooltip, Legend, ResponsiveContainer, ReferenceLine
 } from 'recharts';
 import moment from 'moment';
-import { FaSync, FaChartBar, FaTable, FaList, FaFilter, FaCalendarAlt } from 'react-icons/fa';
+import { FaSync, FaChartBar, FaTable, FaList, FaFilter, FaCalendarAlt, FaInfoCircle } from 'react-icons/fa';
 
 import { useConstants } from '../contexts/ConstantsContext';
 import { useTime } from '../contexts/TimeContext';
@@ -39,6 +39,7 @@ const MealVisualization = ({
   const [userTimeZone, setUserTimeZone] = useState('');
   const [detailView, setDetailView] = useState(null);
   const [isFetching, setIsFetching] = useState(false);
+  const [showFactorInfo, setShowFactorInfo] = useState(false);
 
   // For custom date range when not using TimeContext
   const [localDateRange, setLocalDateRange] = useState({
@@ -92,6 +93,9 @@ const MealVisualization = ({
       const insulinDose = meal.insulin?.dose || 0;
       const insulinType = meal.insulin?.type || '';
 
+      // Get calculation summary if available
+      const calculationSummary = meal.calculation_summary || null;
+
       return {
         id: meal._id || meal.id,
         timestamp: mealTime.valueOf(),
@@ -116,7 +120,7 @@ const MealVisualization = ({
           calculationFactors: meal.calculationFactors || {}
         },
         notes: meal.notes || '',
-        calculation_summary: meal.calculation_summary || null,
+        calculation_summary: calculationSummary,
         bloodGlucose: meal.bloodGlucose || null,
         activities: meal.activities || []
       };
@@ -165,10 +169,19 @@ const MealVisualization = ({
       setIsFetching(true);
       setLoading(true);
 
-      const token = localStorage.getItem('token');
-      if (!token) {
-        throw new Error('Authentication token not found');
-      }
+        const token = localStorage.getItem('token');
+  if (!token) {
+    throw new Error('Authentication token not found. Please log in again.');
+  }
+
+  // Add token validation check (optional)
+  const tokenData = JSON.parse(atob(token.split('.')[1]));
+  const expTime = tokenData.exp * 1000; // Convert to milliseconds
+
+  if (Date.now() > expTime) {
+    throw new Error('Your session has expired. Please log in again.');
+  }
+
 
       // Determine the appropriate endpoint based on whether we're viewing as doctor
       let url;
@@ -210,11 +223,21 @@ const MealVisualization = ({
         setFilteredMeals([]);
       }
 
-    } catch (err) {
-      console.error('Error fetching meal data:', err);
-      setError(`Failed to fetch meal data: ${err.message || 'Unknown error'}`);
-      setMeals([]);
-      setFilteredMeals([]);
+} catch (err) {
+  console.error('Error fetching meal data:', err);
+
+  // Enhance error message based on error type
+  if (err.response && err.response.status === 401) {
+    setError('Authentication failed. Please log in again to refresh your session.');
+    // Optional: Redirect to login or trigger auth refresh
+    // window.location.href = '/login';
+  } else {
+    setError(`Failed to fetch meal data: ${err.message || 'Unknown error'}`);
+  }
+
+  setMeals([]);
+  setFilteredMeals([]);
+
     } finally {
       setLoading(false);
       setIsFetching(false);
@@ -276,10 +299,10 @@ const MealVisualization = ({
   const applyDatePreset = useCallback((days) => {
     const start = moment().subtract(days, 'days').format('YYYY-MM-DD');
     const end = moment().format('YYYY-MM-DD');
-    
+
     const newRange = { start, end };
     handleDateRangeChange(newRange);
-    
+
     // Refetch data with new date range
     setTimeout(() => fetchMealData(), 0);
   }, [handleDateRangeChange, fetchMealData]);
@@ -333,6 +356,20 @@ const MealVisualization = ({
         Cell: ({ value }) => <span>{value.toFixed(1)}</span>,
       },
       {
+        Header: 'Carb Equivalent',
+        accessor: row => {
+          const carbs = row.nutrition.totalCarbs || 0;
+          const protein = row.nutrition.totalProtein || 0;
+          const fat = row.nutrition.totalFat || 0;
+          const proteinFactor = patientConstants?.protein_factor || 0.5;
+          const fatFactor = patientConstants?.fat_factor || 0.2;
+
+          return carbs + (protein * proteinFactor) + (fat * fatFactor);
+        },
+        id: 'carbEquivalent',
+        Cell: ({ value }) => <span>{value.toFixed(1)}g</span>,
+      },
+      {
         Header: 'Calories',
         accessor: row => row.nutrition.totalCalories,
         id: 'calories',
@@ -351,8 +388,8 @@ const MealVisualization = ({
       {
         Header: 'Actions',
         Cell: ({ row }) => (
-          <button 
-            className="view-details-btn" 
+          <button
+            className="view-details-btn"
             onClick={() => handleMealSelect(row.original)}
           >
             View Details
@@ -360,7 +397,7 @@ const MealVisualization = ({
         ),
       },
     ],
-    [handleMealSelect]
+    [handleMealSelect, patientConstants]
   );
 
   // Set up React Table
@@ -396,28 +433,46 @@ const MealVisualization = ({
     return moment(timestamp).format('MM/DD HH:mm');
   }, []);
 
-  // Generate chart data
+  // Get the patient-specific constants for calculations
+  const proteinFactor = patientConstants?.protein_factor || 0.5;
+  const fatFactor = patientConstants?.fat_factor || 0.2;
+
+  // Generate chart data with carb equivalents
   const chartData = useMemo(() => {
-    return filteredMeals.map(meal => ({
-      timestamp: meal.timestamp,
-      formattedTime: meal.formattedTime,
-      carbs: meal.nutrition.totalCarbs,
-      protein: meal.nutrition.totalProtein,
-      fat: meal.nutrition.totalFat,
-      calories: meal.nutrition.totalCalories,
-      insulin: meal.insulin.dose,
-      mealType: meal.mealType,
-      // Include percentages for pie charts
-      carbPercentage: meal.nutrition.carbPercentage,
-      proteinPercentage: meal.nutrition.proteinPercentage,
-      fatPercentage: meal.nutrition.fatPercentage
-    }));
-  }, [filteredMeals]);
+    return filteredMeals.map(meal => {
+      const carbs = meal.nutrition.totalCarbs || 0;
+      const protein = meal.nutrition.totalProtein || 0;
+      const fat = meal.nutrition.totalFat || 0;
+
+      // Calculate carb equivalents
+      const proteinCarbEquivalent = protein * proteinFactor;
+      const fatCarbEquivalent = fat * fatFactor;
+      const totalCarbEquivalent = carbs + proteinCarbEquivalent + fatCarbEquivalent;
+
+      return {
+        timestamp: meal.timestamp,
+        formattedTime: meal.formattedTime,
+        carbs: carbs,
+        protein: protein,
+        fat: fat,
+        proteinCarbEquivalent: proteinCarbEquivalent,
+        fatCarbEquivalent: fatCarbEquivalent,
+        totalCarbEquivalent: totalCarbEquivalent,
+        calories: meal.nutrition.totalCalories,
+        insulin: meal.insulin.dose,
+        mealType: meal.mealType,
+        // Include percentages for pie charts
+        carbPercentage: meal.nutrition.carbPercentage,
+        proteinPercentage: meal.nutrition.proteinPercentage,
+        fatPercentage: meal.nutrition.fatPercentage
+      };
+    });
+  }, [filteredMeals, proteinFactor, fatFactor]);
 
   // Create nutrition distribution data for bar/pie charts
   const nutritionDistributionData = useMemo(() => {
     if (!filteredMeals.length) return [];
-    
+
     // Aggregate data across all filtered meals
     const totals = filteredMeals.reduce(
       (acc, meal) => {
@@ -428,9 +483,9 @@ const MealVisualization = ({
       },
       { carbs: 0, protein: 0, fat: 0 }
     );
-    
+
     const total = totals.carbs + totals.protein + totals.fat;
-    
+
     return [
       {
         name: 'Carbs',
@@ -452,19 +507,20 @@ const MealVisualization = ({
       }
     ];
   }, [filteredMeals]);
-  
+
   // Custom tooltip for charts
   const CustomTooltip = useCallback(({ active, payload, label }) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
-      
+
       return (
         <div className="custom-tooltip">
           <p className="tooltip-time">{data.formattedTime}</p>
           <p className="tooltip-label">{`Meal Type: ${data.mealType}`}</p>
           <p className="tooltip-carbs">{`Carbs: ${data.carbs.toFixed(1)}g`}</p>
-          <p className="tooltip-protein">{`Protein: ${data.protein.toFixed(1)}g`}</p>
-          <p className="tooltip-fat">{`Fat: ${data.fat.toFixed(1)}g`}</p>
+          <p className="tooltip-protein">{`Protein: ${data.protein.toFixed(1)}g (=${data.proteinCarbEquivalent.toFixed(1)}g carb equiv.)`}</p>
+          <p className="tooltip-fat">{`Fat: ${data.fat.toFixed(1)}g (=${data.fatCarbEquivalent.toFixed(1)}g carb equiv.)`}</p>
+          <p className="tooltip-total-carb-equiv" style={{fontWeight: 'bold'}}>{`Total Carb Equivalent: ${data.totalCarbEquivalent.toFixed(1)}g`}</p>
           <p className="tooltip-calories">{`Calories: ${Math.round(data.calories)}`}</p>
           {data.insulin > 0 && <p className="tooltip-insulin">{`Insulin: ${data.insulin} units`}</p>}
         </div>
@@ -476,7 +532,15 @@ const MealVisualization = ({
   // Render meal detail view
   const renderMealDetail = () => {
     if (!detailView) return <div className="no-detail-message">Select a meal to view details</div>;
-    
+
+    // Calculate carb equivalents for the detail view
+    const carbs = detailView.nutrition.totalCarbs || 0;
+    const protein = detailView.nutrition.totalProtein || 0;
+    const fat = detailView.nutrition.totalFat || 0;
+    const proteinCarbEquivalent = protein * proteinFactor;
+    const fatCarbEquivalent = fat * fatFactor;
+    const totalCarbEquivalent = carbs + proteinCarbEquivalent + fatCarbEquivalent;
+
     return (
       <div className="meal-detail-view">
         <h3>Meal Details</h3>
@@ -492,7 +556,7 @@ const MealVisualization = ({
             </span>
           </div>
         </div>
-        
+
         <div className="meal-nutrition-summary">
           <h4>Nutrition Summary</h4>
           <div className="nutrition-grid">
@@ -500,45 +564,60 @@ const MealVisualization = ({
               <span className="label">Carbs:</span>
               <span className="value">{detailView.nutrition.totalCarbs.toFixed(1)}g</span>
               <div className="percentage-bar">
-                <div 
-                  className="percentage-fill carbs" 
+                <div
+                  className="percentage-fill carbs"
                   style={{ width: `${detailView.nutrition.carbPercentage}%` }}
                 />
               </div>
               <span className="percentage">{detailView.nutrition.carbPercentage}%</span>
             </div>
-            
+
             <div className="nutrition-item">
               <span className="label">Protein:</span>
-              <span className="value">{detailView.nutrition.totalProtein.toFixed(1)}g</span>
+              <span className="value">
+                {detailView.nutrition.totalProtein.toFixed(1)}g
+                <span className="carb-equivalent">
+                  (={proteinCarbEquivalent.toFixed(1)}g carb equiv.)
+                </span>
+              </span>
               <div className="percentage-bar">
-                <div 
-                  className="percentage-fill protein" 
+                <div
+                  className="percentage-fill protein"
                   style={{ width: `${detailView.nutrition.proteinPercentage}%` }}
                 />
               </div>
               <span className="percentage">{detailView.nutrition.proteinPercentage}%</span>
             </div>
-            
+
             <div className="nutrition-item">
               <span className="label">Fat:</span>
-              <span className="value">{detailView.nutrition.totalFat.toFixed(1)}g</span>
+              <span className="value">
+                {detailView.nutrition.totalFat.toFixed(1)}g
+                <span className="carb-equivalent">
+                  (={fatCarbEquivalent.toFixed(1)}g carb equiv.)
+                </span>
+              </span>
               <div className="percentage-bar">
-                <div 
-                  className="percentage-fill fat" 
+                <div
+                  className="percentage-fill fat"
                   style={{ width: `${detailView.nutrition.fatPercentage}%` }}
                 />
               </div>
               <span className="percentage">{detailView.nutrition.fatPercentage}%</span>
             </div>
-            
+
+            <div className="nutrition-item">
+              <span className="label">Total Carb Equivalent:</span>
+              <span className="value total-carb-equivalent">{totalCarbEquivalent.toFixed(1)}g</span>
+            </div>
+
             <div className="nutrition-item">
               <span className="label">Calories:</span>
               <span className="value">{Math.round(detailView.nutrition.totalCalories)}</span>
             </div>
           </div>
         </div>
-        
+
         {detailView.foodItems.length > 0 && (
           <div className="meal-food-items">
             <h4>Food Items</h4>
@@ -570,7 +649,7 @@ const MealVisualization = ({
             </table>
           </div>
         )}
-        
+
         {detailView.insulin.dose > 0 && (
           <div className="meal-insulin">
             <h4>Insulin Information</h4>
@@ -585,7 +664,7 @@ const MealVisualization = ({
                   <span className="value">{detailView.insulin.type}</span>
                 </div>
               )}
-              
+
               {detailView.insulin.calculationFactors && Object.keys(detailView.insulin.calculationFactors).length > 0 && (
                 <div className="insulin-factors">
                   <h5>Calculation Factors:</h5>
@@ -594,8 +673,8 @@ const MealVisualization = ({
                       <div className="factor-item" key={key}>
                         <span className="factor-label">{key.replace(/([A-Z])/g, ' $1').trim()}:</span>
                         <span className="factor-value">
-                          {typeof value === 'number' 
-                            ? value.toFixed(2) 
+                          {typeof value === 'number'
+                            ? value.toFixed(2)
                             : JSON.stringify(value)}
                         </span>
                       </div>
@@ -606,7 +685,7 @@ const MealVisualization = ({
             </div>
           </div>
         )}
-        
+
         {detailView.bloodGlucose && (
           <div className="meal-blood-glucose">
             <h4>Blood Glucose</h4>
@@ -618,7 +697,7 @@ const MealVisualization = ({
             </div>
           </div>
         )}
-        
+
         {detailView.activities && detailView.activities.length > 0 && (
           <div className="meal-activities">
             <h4>Associated Activities</h4>
@@ -642,14 +721,14 @@ const MealVisualization = ({
             </div>
           </div>
         )}
-        
+
         {detailView.notes && (
           <div className="meal-notes">
             <h4>Notes</h4>
             <div className="notes-content">{detailView.notes}</div>
           </div>
         )}
-        
+
         <div className="detail-actions">
           <button className="back-button" onClick={() => setActiveView('table')}>
             Back to List
@@ -667,9 +746,9 @@ const MealVisualization = ({
         margin={{ top: 20, right: 30, bottom: 60, left: 20 }}
       >
         <CartesianGrid strokeDasharray="3 3" />
-        <XAxis 
-          dataKey="timestamp" 
-          tickFormatter={formatXAxis} 
+        <XAxis
+          dataKey="timestamp"
+          tickFormatter={formatXAxis}
           angle={-45}
           textAnchor="end"
           height={70}
@@ -678,8 +757,8 @@ const MealVisualization = ({
         <Tooltip content={<CustomTooltip />} />
         <Legend />
         <Bar dataKey="carbs" name="Carbs (g)" fill="#8884d8" stackId="nutrition" />
-        <Bar dataKey="protein" name="Protein (g)" fill="#82ca9d" stackId="nutrition" />
-        <Bar dataKey="fat" name="Fat (g)" fill="#ffc658" stackId="nutrition" />
+        <Bar dataKey="proteinCarbEquivalent" name={`Protein as Carbs (${proteinFactor}x)`} fill="#82ca9d" stackId="nutrition" />
+        <Bar dataKey="fatCarbEquivalent" name={`Fat as Carbs (${fatFactor}x)`} fill="#ffc658" stackId="nutrition" />
       </BarChart>
     </ResponsiveContainer>
   );
@@ -691,8 +770,8 @@ const MealVisualization = ({
         margin={{ top: 20, right: 30, bottom: 60, left: 20 }}
       >
         <CartesianGrid strokeDasharray="3 3" />
-        <XAxis 
-          dataKey="timestamp" 
+        <XAxis
+          dataKey="timestamp"
           tickFormatter={formatXAxis}
           angle={-45}
           textAnchor="end"
@@ -701,11 +780,11 @@ const MealVisualization = ({
         <YAxis />
         <Tooltip content={<CustomTooltip />} />
         <Legend />
-        <Line 
-          type="monotone" 
-          dataKey="calories" 
+        <Line
+          type="monotone"
+          dataKey="calories"
           name="Calories"
-          stroke="#ff7300" 
+          stroke="#ff7300"
           activeDot={{ r: 8 }}
           strokeWidth={2}
         />
@@ -720,8 +799,8 @@ const MealVisualization = ({
         margin={{ top: 20, right: 30, bottom: 60, left: 20 }}
       >
         <CartesianGrid strokeDasharray="3 3" />
-        <XAxis 
-          dataKey="timestamp" 
+        <XAxis
+          dataKey="timestamp"
           tickFormatter={formatXAxis}
           angle={-45}
           textAnchor="end"
@@ -731,19 +810,19 @@ const MealVisualization = ({
         <YAxis yAxisId="right" orientation="right" />
         <Tooltip content={<CustomTooltip />} />
         <Legend />
-        <Line 
-          type="monotone" 
-          dataKey="insulin" 
+        <Line
+          type="monotone"
+          dataKey="insulin"
           name="Insulin (units)"
-          stroke="#ff4444" 
+          stroke="#ff4444"
           yAxisId="left"
           strokeWidth={2}
         />
-        <Line 
-          type="monotone" 
-          dataKey="carbs" 
-          name="Carbs (g)"
-          stroke="#8884d8" 
+        <Line
+          type="monotone"
+          dataKey="totalCarbEquivalent"
+          name="Total Carb Equivalent (g)"
+          stroke="#8884d8"
           yAxisId="right"
           strokeWidth={2}
         />
@@ -758,7 +837,7 @@ const MealVisualization = ({
   return (
     <div className={`meal-visualization ${embedded ? 'embedded' : ''}`}>
       {!embedded && <h2 className="title">Meal Data Visualization</h2>}
-      
+
       {/* Timezone info display */}
       {!embedded && (
         <div className="timezone-info">
@@ -766,35 +845,35 @@ const MealVisualization = ({
           <span className="timezone-note"> (all times displayed in your local timezone)</span>
         </div>
       )}
-      
+
       {/* View mode toggle */}
       <div className="view-toggle">
-        <button 
+        <button
           className={`toggle-btn ${activeView === 'chart' ? 'active' : ''}`}
           onClick={() => handleViewChange('chart')}
         >
           <FaChartBar /> Chart
         </button>
-        <button 
+        <button
           className={`toggle-btn ${activeView === 'table' ? 'active' : ''}`}
           onClick={() => handleViewChange('table')}
         >
           <FaTable /> Table
         </button>
-        <button 
+        <button
           className={`toggle-btn ${activeView === 'details' ? 'active' : ''}`}
           onClick={() => handleViewChange('details')}
         >
           <FaList /> Details
         </button>
       </div>
-      
+
       {showControls && (
         <div className="controls">
           {/* Date range controls */}
           <div className="date-controls">
             <div className="date-range-inputs">
-              <TimeInput 
+              <TimeInput
                 mode="daterange"
                 value={dateRange}
                 onChange={handleDateRangeChange}
@@ -802,7 +881,7 @@ const MealVisualization = ({
                 showPresets={false}
               />
             </div>
-            
+
             <div className="quick-ranges">
               <button onClick={() => applyDatePreset(1)}>
                 <FaCalendarAlt /> Today
@@ -815,14 +894,14 @@ const MealVisualization = ({
               </button>
             </div>
           </div>
-          
+
           {/* Filter controls */}
           <div className="filter-controls">
             <div className="meal-type-filter">
               <label htmlFor="meal-type-select">
                 <FaFilter /> Meal Type:
               </label>
-              <select 
+              <select
                 id="meal-type-select"
                 value={mealTypeFilter}
                 onChange={handleMealTypeChange}
@@ -835,7 +914,7 @@ const MealVisualization = ({
                 <option value="normal">Normal</option>
               </select>
             </div>
-            
+
             <button
               className={`update-btn ${isFetching ? 'loading' : ''}`}
               onClick={handleUpdateData}
@@ -845,7 +924,7 @@ const MealVisualization = ({
               {isFetching ? 'Updating...' : 'Update Data'}
             </button>
           </div>
-          
+
           {/* Chart type toggle (only shown in chart view) */}
           {activeView === 'chart' && (
             <div className="chart-type-controls">
@@ -871,9 +950,9 @@ const MealVisualization = ({
           )}
         </div>
       )}
-      
+
       {error && <div className="error-message">{error}</div>}
-      
+
       {loading ? (
         <div className="loading">Loading meal data...</div>
       ) : (
@@ -886,12 +965,45 @@ const MealVisualization = ({
             <>
               {activeView === 'chart' && (
                 <div className="chart-container" ref={chartRef}>
+                  {/* Carb equivalent explanation */}
+                  <div className="carb-equivalent-info">
+                    <button
+                      className="info-button"
+                      onClick={() => setShowFactorInfo(!showFactorInfo)}
+                    >
+                      <FaInfoCircle /> About Carb Equivalents
+                    </button>
+
+                    {showFactorInfo && (
+                      <div className="info-panel">
+                        <h4>Carbohydrate Equivalents Explained</h4>
+                        <p>
+                          This visualization shows how protein and fat impact blood glucose and insulin needs:
+                        </p>
+                        <ul>
+                          <li><strong>Protein:</strong> 1g protein = {proteinFactor}g carbohydrate equivalent</li>
+                          <li><strong>Fat:</strong> 1g fat = {fatFactor}g carbohydrate equivalent</li>
+                        </ul>
+                        <p>
+                          These factors are based on your personalized settings and help show the total
+                          insulin impact of each meal, not just from carbohydrates.
+                        </p>
+                        <button
+                          className="close-button"
+                          onClick={() => setShowFactorInfo(false)}
+                        >
+                          Close
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
                   {chartType === 'nutrition' && renderNutritionChart()}
                   {chartType === 'calories' && renderCaloriesChart()}
                   {chartType === 'insulin' && renderInsulinChart()}
                 </div>
               )}
-              
+
               {activeView === 'table' && (
                 <div className="table-container">
                   <table {...getTableProps()} className="meal-table">
@@ -924,8 +1036,8 @@ const MealVisualization = ({
                         prepareRow(row);
                         const { key, ...rowProps } = row.getRowProps();
                         return (
-                          <tr 
-                            key={key || Math.random()} 
+                          <tr
+                            key={key || Math.random()}
                             {...rowProps}
                             className={`meal-row meal-type-${row.original.mealType}`}
                           >
@@ -942,7 +1054,7 @@ const MealVisualization = ({
                       })}
                     </tbody>
                   </table>
-                  
+
                   {/* Pagination */}
                   <div className="pagination">
                     <button onClick={() => gotoPage(0)} disabled={!canPreviousPage}>{'<<'}</button>
@@ -981,7 +1093,7 @@ const MealVisualization = ({
                   </div>
                 </div>
               )}
-              
+
               {activeView === 'details' && (
                 <div className="detail-container">
                   {renderMealDetail()}
@@ -991,7 +1103,7 @@ const MealVisualization = ({
           )}
         </div>
       )}
-      
+
       {/* Statistics summary - shown at bottom of all views */}
       {!loading && filteredMeals.length > 0 && (
         <div className="meal-statistics">
@@ -1001,35 +1113,47 @@ const MealVisualization = ({
               <span className="stat-label">Total Meals:</span>
               <span className="stat-value">{filteredMeals.length}</span>
             </div>
-            
+
             <div className="stat-item">
               <span className="stat-label">Avg. Carbs:</span>
               <span className="stat-value">
                 {(filteredMeals.reduce((sum, meal) => sum + meal.nutrition.totalCarbs, 0) / filteredMeals.length).toFixed(1)}g
               </span>
             </div>
-            
+
             <div className="stat-item">
               <span className="stat-label">Avg. Protein:</span>
               <span className="stat-value">
                 {(filteredMeals.reduce((sum, meal) => sum + meal.nutrition.totalProtein, 0) / filteredMeals.length).toFixed(1)}g
               </span>
             </div>
-            
+
             <div className="stat-item">
               <span className="stat-label">Avg. Fat:</span>
               <span className="stat-value">
                 {(filteredMeals.reduce((sum, meal) => sum + meal.nutrition.totalFat, 0) / filteredMeals.length).toFixed(1)}g
               </span>
             </div>
-            
+
+            <div className="stat-item">
+              <span className="stat-label">Avg. Carb Equivalent:</span>
+              <span className="stat-value">
+                {(filteredMeals.reduce((sum, meal) => {
+                  const carbs = meal.nutrition.totalCarbs || 0;
+                  const protein = meal.nutrition.totalProtein || 0;
+                  const fat = meal.nutrition.totalFat || 0;
+                  return sum + carbs + (protein * proteinFactor) + (fat * fatFactor);
+                }, 0) / filteredMeals.length).toFixed(1)}g
+              </span>
+            </div>
+
             <div className="stat-item">
               <span className="stat-label">Avg. Calories:</span>
               <span className="stat-value">
                 {Math.round(filteredMeals.reduce((sum, meal) => sum + meal.nutrition.totalCalories, 0) / filteredMeals.length)}
               </span>
             </div>
-            
+
             <div className="stat-item">
               <span className="stat-label">Avg. Insulin:</span>
               <span className="stat-value">

@@ -167,56 +167,85 @@ class TimeEffect {
    * @param {object} absorptionModifiers - Absorption modifiers by type
    * @returns {object} Current meal effect data
    */
-  static calculateMealEffect(meal, absorptionModifiers) {
-    if (!meal?.timestamp || !meal?.nutrition) {
-      return { active: false, intensity: 0 };
-    }
-    
-    const { carbs = 0, protein = 0, fat = 0 } = meal.nutrition;
-    const absorptionType = meal.nutrition.absorption_type || 'medium';
-    const absorptionFactor = absorptionModifiers?.[absorptionType] || 1.0;
-    
-    // Calculate meal duration based on composition and absorption
-    // Higher fat/protein extends duration, higher absorption factor shortens it
-    const baseDuration = 2 + (fat * 0.02) + (protein * 0.01);
-    const adjustedDuration = baseDuration / absorptionFactor;
-    
-    // Calculate peak time (carb-heavy meals peak faster)
-    const carbRatio = carbs / Math.max(1, carbs + protein + fat);
-    const basePeak = 0.5 + ((1 - carbRatio) * 0.5);
-    const adjustedPeak = basePeak / absorptionFactor;
-    
-    // Calculate hours since meal
-    const mealTime = new Date(meal.timestamp);
-    const currentTime = new Date();
-    const hoursSince = (currentTime - mealTime) / (1000 * 60 * 60);
-    
-    // Calculate effect intensity
-    const active = hoursSince < adjustedDuration;
-    let intensity = 0;
-    
-    if (hoursSince < adjustedPeak) {
-      // Rising phase
-      intensity = Math.min(1.0, hoursSince / adjustedPeak);
-    } else if (hoursSince < adjustedDuration) {
-      // Falling phase
-      intensity = Math.max(0, 1.0 - ((hoursSince - adjustedPeak) / (adjustedDuration - adjustedPeak)));
-    }
-    
-    // Scale by carb content (main driver of glucose rise)
-    const effectiveStrength = intensity * carbs;
-    
-    return {
-      active,
-      intensity,
-      hoursSince,
-      remainingHours: Math.max(0, adjustedDuration - hoursSince),
-      percentRemaining: Math.max(0, 100 * (1 - (hoursSince / adjustedDuration))),
-      effectiveStrength,
-      peak: adjustedPeak,
-      duration: adjustedDuration
-    };
+  static calculateMealEffect(meal, absorptionModifiers, proteinFactor = 0.5, fatFactor = 0.2) {
+  if (!meal?.timestamp || !meal?.nutrition) {
+    return { active: false, intensity: 0 };
   }
+
+  const { carbs = 0, protein = 0, fat = 0 } = meal.nutrition;
+  const absorptionType = meal.nutrition.absorption_type || 'medium';
+  const absorptionFactor = absorptionModifiers?.[absorptionType] || 1.0;
+
+  // Calculate carb equivalents
+  const proteinCarbEquiv = protein * proteinFactor;
+  const fatCarbEquiv = fat * fatFactor;
+  const totalCarbEquiv = carbs + proteinCarbEquiv + fatCarbEquiv;
+
+  // Calculate meal duration based on composition and absorption
+  // Higher fat/protein extends duration, higher absorption factor shortens it
+  const baseDuration = 2 + (fat * 0.02) + (protein * 0.01);
+  const adjustedDuration = baseDuration / absorptionFactor;
+
+  // Calculate peak time (carb-heavy meals peak faster)
+  const carbRatio = carbs / Math.max(1, carbs + protein + fat);
+  const basePeak = 0.5 + ((1 - carbRatio) * 0.5); // Low carb ratio = later peak
+  const adjustedPeak = basePeak / absorptionFactor;
+
+  // Calculate hours since meal
+  const mealTime = new Date(meal.timestamp);
+  const currentTime = new Date();
+  const hoursSince = (currentTime - mealTime) / (1000 * 60 * 60);
+
+  // Calculate effect intensity
+  const active = hoursSince < adjustedDuration;
+  let intensity = 0;
+
+  if (hoursSince < adjustedPeak) {
+    // Rising phase - shape varies by absorption type
+    if (absorptionType === 'fast') {
+      // Fast absorption means steeper initial rise (exponential-like)
+      intensity = Math.min(1.0, Math.pow(hoursSince / adjustedPeak, 0.7));
+    } else if (absorptionType === 'slow') {
+      // Slow absorption means more gradual rise (logarithmic-like)
+      intensity = Math.min(1.0, Math.pow(hoursSince / adjustedPeak, 1.3));
+    } else {
+      // Medium/default is linear
+      intensity = Math.min(1.0, hoursSince / adjustedPeak);
+    }
+  } else if (hoursSince < adjustedDuration) {
+    // Falling phase - also shape varies by absorption type
+    const fallRatio = (hoursSince - adjustedPeak) / (adjustedDuration - adjustedPeak);
+    if (absorptionType === 'fast') {
+      // Fast absorption means steeper decline
+      intensity = Math.max(0, 1.0 - Math.pow(fallRatio, 0.7));
+    } else if (absorptionType === 'slow') {
+      // Slow absorption means more gradual decline with a tail
+      intensity = Math.max(0, 1.0 - Math.pow(fallRatio, 0.5));
+    } else {
+      // Medium/default is linear
+      intensity = Math.max(0, 1.0 - fallRatio);
+    }
+  }
+
+  // Scale by total carb equivalent (not just carbs)
+  const effectiveStrength = intensity * totalCarbEquiv;
+
+  return {
+    active,
+    intensity,
+    hoursSince,
+    remainingHours: Math.max(0, adjustedDuration - hoursSince),
+    percentRemaining: Math.max(0, 100 * (1 - (hoursSince / adjustedDuration))),
+    effectiveStrength,
+    peak: adjustedPeak,
+    duration: adjustedDuration,
+    absorptionType,
+    totalCarbEquiv,
+    carbs,
+    proteinCarbEquiv,
+    fatCarbEquiv
+  };
+}
 
   /**
    * Calculate the effect of activity on blood glucose
@@ -298,6 +327,177 @@ class TimeEffect {
     
     // Default to daytime
     return timeOfDayFactors.daytime?.factor || 1.0;
+  }
+
+  /**
+   * Calculate Blood Glucose Impact (BGImpact) for a meal
+   * @param {object} meal - Meal data with carbs, protein, fat
+   * @param {object} patientFactors - Patient-specific factors
+   * @returns {object} BGImpact data with value and components
+   */
+  static calculateBGImpact(meal, patientFactors) {
+    if (!meal || !patientFactors) {
+      return { bgImpactValue: 0, components: {}, active: false };
+    }
+
+    const {
+      carbs = 0,
+      protein = 0,
+      fat = 0,
+      fiber = 0,
+      glycemicIndex = null,
+      absorptionType = 'medium'
+    } = meal.nutrition || {};
+
+    // Get patient-specific factors
+    const {
+      proteinFactor = 0.5,
+      fatFactor = 0.2,
+      fiberFactor = 0.1,
+      absorptionFactors = { slow: 0.7, medium: 1.0, fast: 1.3 }
+    } = patientFactors;
+
+    // Calculate absorption factor
+    const absorptionFactor = absorptionFactors[absorptionType] || 1.0;
+
+    // Base impact calculation
+    const carbsContribution = carbs;
+    const proteinContribution = protein * proteinFactor;
+    const fatContribution = fat * fatFactor;
+    const fiberReduction = fiber * fiberFactor * -1; // Fiber reduces impact
+
+    // Calculate base BGImpact
+    let baseImpact = carbsContribution + proteinContribution + fatContribution + fiberReduction;
+    baseImpact = Math.max(0, baseImpact); // Ensure impact isn't negative
+
+    // Apply absorption factor
+    let adjustedImpact = baseImpact * absorptionFactor;
+
+    // Apply glycemic index adjustment if available
+    if (glycemicIndex !== null && glycemicIndex !== undefined) {
+      // Normalize glycemic index (0-100 scale)
+      // Higher GI means faster & higher impact
+      const giAdjustment = glycemicIndex / 55; // Medium GI is around 55
+      adjustedImpact = adjustedImpact * giAdjustment;
+    }
+
+    // Calculate meal timing effect
+    const mealTime = meal.timestamp ? new Date(meal.timestamp) : new Date();
+    const hour = mealTime.getHours();
+    let timeOfDayFactor = 1.0;
+
+    // Apply dawn phenomenon effect (higher impact in morning)
+    if (hour >= 5 && hour < 10) {
+      timeOfDayFactor = patientFactors.dawnPhenomenonFactor || 1.2;
+    }
+
+    // Apply final time of day adjustment
+    const finalImpact = adjustedImpact * timeOfDayFactor;
+
+    // Round to 1 decimal place
+    const roundedImpact = Math.round(finalImpact * 10) / 10;
+
+    return {
+      bgImpactValue: roundedImpact,
+      components: {
+        carbs: carbsContribution,
+        protein: proteinContribution,
+        fat: fatContribution,
+        fiber: fiberReduction
+      },
+      factors: {
+        absorption: absorptionFactor,
+        glycemicIndex: glycemicIndex ? (glycemicIndex / 55) : 1.0,
+        timeOfDay: timeOfDayFactor
+      },
+      baseImpact: Math.round(baseImpact * 10) / 10
+    };
+  }
+
+  /**
+   * Calculate Blood Glucose Impact curve over time
+   * @param {object} meal - Meal data with timestamp and nutrition
+   * @param {object} patientFactors - Patient-specific factors
+   * @param {number} hoursToProject - How many hours to project (default 6)
+   * @param {number} intervalMinutes - Data point interval in minutes (default 15)
+   * @returns {Array} Array of time points with projected BG impact
+   */
+  static calculateBGImpactCurve(meal, patientFactors, hoursToProject = 6, intervalMinutes = 15) {
+    if (!meal?.timestamp || !meal?.nutrition) {
+      return [];
+    }
+
+    // Get the BGImpact total value
+    const bgImpact = this.calculateBGImpact(meal, patientFactors);
+
+    // Get key parameters to model the curve
+    const { carbs = 0, protein = 0, fat = 0 } = meal.nutrition;
+    const absorptionType = meal.nutrition.absorption_type || 'medium';
+    const absorptionFactor = patientFactors?.absorptionFactors?.[absorptionType] || 1.0;
+
+    // Calculate meal curve shape parameters
+    // Higher fat/protein extends duration, higher absorption factor shortens it
+    const fatProteinRatio = (fat + protein) / Math.max(1, carbs + protein + fat);
+    const baseDuration = 3 + (fatProteinRatio * 3); // 3-6 hours depending on composition
+    const duration = baseDuration / absorptionFactor; // Adjust for absorption rate
+
+    // Calculate peak time (carb-heavy meals peak faster)
+    const carbRatio = carbs / Math.max(1, carbs + protein + fat);
+    const basePeakHours = 0.5 + ((1 - carbRatio) * 1.0); // 0.5-1.5 hours depending on carb content
+    const peakHours = basePeakHours / absorptionFactor; // Adjust for absorption
+
+    const mealTime = new Date(meal.timestamp);
+    const dataPoints = [];
+
+    // Generate data points for the curve
+    for (let i = 0; i <= hoursToProject * (60 / intervalMinutes); i++) {
+      const minutesSinceMeal = i * intervalMinutes;
+      const hoursSinceMeal = minutesSinceMeal / 60;
+
+      // Calculate time point
+      const timePoint = new Date(mealTime.getTime() + minutesSinceMeal * 60 * 1000);
+
+      // Calculate impact intensity at this time
+      let intensity = 0;
+
+      if (hoursSinceMeal < peakHours) {
+        // Rising phase - use quadratic curve for faster initial rise
+        intensity = Math.pow(hoursSinceMeal / peakHours, 1.8);
+      } else if (hoursSinceMeal < duration) {
+        // Falling phase - protein/fat extend the tail
+        let fallRatio = (hoursSinceMeal - peakHours) / (duration - peakHours);
+
+        // Apply digestion model based on meal composition
+        if (fatProteinRatio > 0.5) {
+          // High protein/fat meals have slower decay with a longer tail
+          intensity = 1.0 - Math.pow(fallRatio, 0.7);
+        } else {
+          // Carb-heavy meals decline more rapidly
+          intensity = 1.0 - Math.pow(fallRatio, 1.2);
+        }
+      } else {
+        // After full duration
+        intensity = 0;
+      }
+
+      // Scale intensity by total impact value
+      const impactValue = intensity * bgImpact.bgImpactValue;
+
+      dataPoints.push({
+        time: timePoint,
+        hoursSinceMeal,
+        intensity,
+        impactValue: Math.round(impactValue * 10) / 10,
+        formattedTime: TimeManager.formatDate(timePoint, TimeManager.formats.CHART_TICKS_SHORT)
+      });
+
+      // Stop if we've reached zero impact after the duration
+      if (hoursSinceMeal > duration * 1.2 && intensity === 0) {
+        break;
+      }
+    }
+
+    return dataPoints;
   }
 }
 
