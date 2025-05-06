@@ -339,7 +339,7 @@ def calculate_suggested_insulin(user_id, nutrition, activities, blood_glucose=No
 def submit_meal(current_user):
     try:
         data = request.json
-        required_fields = ['mealType', 'foodItems', 'activities']
+        required_fields = ['mealType', 'foodItems']
         if not all(field in data for field in required_fields):
             return jsonify({"error": "Missing required fields"}), 400
 
@@ -386,7 +386,7 @@ def submit_meal(current_user):
         === Meal Submission Debug ===
         Received meal data:
         Food Items: {json.dumps(data['foodItems'], indent=2)}
-        Activities: {json.dumps(data['activities'], indent=2)}
+        Activities: {json.dumps(data.get('activities', []), indent=2)}
         Blood Sugar: {data.get('bloodSugar')}
         Blood Sugar Timestamp: {data.get('bloodSugarTimestamp')}
         Meal Type: {data['mealType']}
@@ -398,7 +398,7 @@ def submit_meal(current_user):
         insulin_calc = calculate_suggested_insulin(
             str(current_user['_id']),
             nutrition,
-            data['activities'],
+            data.get('activities', []),
             data.get('bloodSugar'),
             data['mealType'],
             calculation_factors
@@ -444,21 +444,14 @@ def submit_meal(current_user):
             # If no timestamp provided, use the current time
             blood_sugar_timestamp = current_time.isoformat()
 
-        # Prepare meal document
+        # Prepare meal document - NOW WITHOUT EMBEDDED ACTIVITIES
         meal_doc = {
             'user_id': str(current_user['_id']),
             'timestamp': current_time,  # When the record was created
             'mealType': data['mealType'],
             'foodItems': data['foodItems'],
             'nutrition': nutrition,
-            'activities': [{
-                'level': activity.get('level'),
-                'duration': activity.get('duration'),
-                'type': activity.get('type'),
-                'impact': activity.get('impact'),
-                'startTime': activity.get('startTime'),
-                'endTime': activity.get('endTime')
-            } for activity in data['activities']],
+            'activity_ids': [],  # Initialize empty array for activity references
             'bloodSugar': data.get('bloodSugar'),
             'bloodSugarTimestamp': blood_sugar_timestamp,
             'bloodSugarSource': data.get('bloodSugarSource', 'direct'),
@@ -526,56 +519,68 @@ def submit_meal(current_user):
             {"$set": {"meals_only_id": meals_only_id}}
         )
 
-        # Check if we should skip activity duplication
-        should_skip_activity_duplication = data.get('skipActivityDuplication', False)
+        # Process activities - MODIFIED FOR TRUE BIDIRECTIONAL REFERENCES
+        activity_ids = []
+        activities_collection = mongo.db.activities
 
-        # Also save activities to the dedicated activities collection
-        # Only if not flagged to skip duplication
-        if data.get('activities') and not should_skip_activity_duplication:
-            activities_collection = mongo.db.activities
-
-            for activity in data['activities']:
-                # Create activity record in the format expected by the activities collection
-                activity_record = {
-                    'user_id': str(current_user['_id']),
-                    'timestamp': current_time,
-                    'type': activity.get('type', 'expected'),
-                    'level': activity.get('level', 0),
-                    'impact': activity.get('impact', 1.0),
-                    'duration': activity.get('duration', '00:00'),
-                    'meal_id': meal_id  # Reference to the meal record
-                }
-
-                # Handle time fields based on the activity's structure
-                if activity.get('startTime') and activity.get('endTime'):
-                    # Add start and end times
-                    activity_record['startTime'] = activity['startTime']
-                    activity_record['endTime'] = activity['endTime']
-
-                    # Also store in the format expected by activity.py
-                    if activity.get('type') == 'expected':
-                        activity_record['expectedTime'] = activity['startTime']
-                    else:
-                        activity_record['completedTime'] = activity['startTime']
-
-                # Insert the activity into the activities collection
-                try:
-                    activity_result = activities_collection.insert_one(activity_record)
-                    logger.info(f"Activity record created with ID: {activity_result.inserted_id}")
-                except Exception as e:
-                    logger.warning(f"Failed to save activity to activities collection: {e}")
-        elif should_skip_activity_duplication and 'activityIds' in data:
-            # Link the existing activities to this meal
-            activities_collection = mongo.db.activities
+        if 'activityIds' in data:  # Use existing activities
+            # Link existing activities to this meal
             for activity_id in data['activityIds']:
                 try:
+                    # Update existing activity with meal reference
                     activities_collection.update_one(
                         {'_id': ObjectId(activity_id)},
                         {'$set': {'meal_id': meal_id}}
                     )
+                    activity_ids.append(activity_id)
                     logger.info(f"Linked existing activity {activity_id} to meal {meal_id}")
                 except Exception as e:
                     logger.warning(f"Failed to link existing activity {activity_id}: {e}")
+
+        elif data.get('activities'):  # Create new activities
+            for activity in data['activities']:
+                try:
+                    # Create activity record
+                    activity_record = {
+                        'user_id': str(current_user['_id']),
+                        'timestamp': current_time,
+                        'type': activity.get('type', 'expected'),
+                        'level': activity.get('level', 0),
+                        'impact': activity.get('impact', 1.0),
+                        'duration': activity.get('duration', '00:00'),
+                        'meal_id': meal_id  # Reference to the meal record
+                    }
+
+                    # Handle time fields based on the activity's structure
+                    if activity.get('startTime') and activity.get('endTime'):
+                        # Add start and end times
+                        activity_record['startTime'] = activity['startTime']
+                        activity_record['endTime'] = activity['endTime']
+
+                        # Also store in the format expected by activity.py
+                        if activity.get('type') == 'expected':
+                            activity_record['expectedTime'] = activity['startTime']
+                        else:
+                            activity_record['completedTime'] = activity['startTime']
+
+                    if 'notes' in activity:
+                        activity_record['notes'] = activity['notes']
+
+                    # Insert the activity into the activities collection
+                    activity_result = activities_collection.insert_one(activity_record)
+                    activity_id = str(activity_result.inserted_id)
+                    activity_ids.append(activity_id)
+                    logger.info(f"Activity record created with ID: {activity_id}")
+                except Exception as e:
+                    logger.warning(f"Failed to save activity: {e}")
+
+        # Update meal with activity IDs (completing bidirectional reference)
+        if activity_ids:
+            mongo.db.meals.update_one(
+                {"_id": result.inserted_id},
+                {"$set": {"activity_ids": activity_ids}}
+            )
+            logger.info(f"Updated meal {meal_id} with activity references: {activity_ids}")
 
         # If blood sugar data is present, also save it to the blood_sugar collection
         blood_sugar_id = None
@@ -648,6 +653,13 @@ def submit_meal(current_user):
 
             # Insert medication log
             log_result = mongo.db.medication_logs.insert_one(medication_log)
+            medication_log_id = str(log_result.inserted_id)
+
+            # Update meal with medication log reference
+            mongo.db.meals.update_one(
+                {"_id": result.inserted_id},
+                {"$set": {"medication_log_id": medication_log_id}}
+            )
 
             try:
                 # Find existing schedule but DO NOT MODIFY the schedule times
@@ -714,6 +726,7 @@ def submit_meal(current_user):
             "id": meal_id,
             "meals_only_id": meals_only_id,
             "blood_sugar_id": blood_sugar_id,  # Include the blood sugar ID if created
+            "activity_ids": activity_ids,  # Include activity IDs in response
             "nutrition": nutrition,
             "insulinCalculation": insulin_calc,
             "bloodSugarTimestamp": blood_sugar_timestamp,  # Return the timestamp in the response
@@ -1146,3 +1159,77 @@ def get_meals_only(current_user):
     except Exception as e:
         logger.error(f"Error retrieving meals-only data: {str(e)}")
         return jsonify({"error": str(e)}), 500
+
+
+@meal_insulin_bp.route('/api/meal/<meal_id>', methods=['DELETE'])
+@token_required
+def delete_meal(current_user, meal_id):
+    """
+    Delete a meal record and its related data (activities, blood sugar, insulin)
+    """
+    try:
+        # Convert string ID to ObjectId
+        try:
+            meal_obj_id = ObjectId(meal_id)
+        except:
+            return jsonify({"error": "Invalid meal ID format"}), 400
+
+        # Find the meal
+        meal = mongo.db.meals.find_one({"_id": meal_obj_id})
+        if not meal:
+            return jsonify({"error": "Meal not found"}), 404
+
+        # Check if the user owns this meal
+        if meal.get('user_id') != str(current_user['_id']):
+            if current_user.get('user_type') != 'doctor':  # Allow doctors to delete patient records
+                return jsonify({"error": "Unauthorized - you do not have permission to delete this record"}), 403
+
+        # Start tracking what we delete
+        deletion_results = {"meal": None, "activities": 0, "blood_sugar": None, "medication_log": None}
+
+        # 1. Delete associated activities first
+        if 'activity_ids' in meal and meal['activity_ids']:
+            # Convert activity IDs to ObjectIds
+            activity_obj_ids = [ObjectId(aid) for aid in meal['activity_ids']]
+
+            # Delete the activities
+            activities_result = mongo.db.activities.delete_many({"_id": {"$in": activity_obj_ids}})
+            deletion_results["activities"] = activities_result.deleted_count
+
+        # 2. Delete blood sugar record if it exists
+        if 'blood_sugar_id' in meal and meal['blood_sugar_id']:
+            try:
+                bs_result = mongo.db.blood_sugar.delete_one({"_id": ObjectId(meal['blood_sugar_id'])})
+                deletion_results["blood_sugar"] = bs_result.deleted_count
+            except Exception as e:
+                logger.warning(f"Error deleting blood sugar record: {e}")
+
+        # 3. Delete medication log if it exists
+        if 'medication_log_id' in meal and meal['medication_log_id']:
+            try:
+                med_result = mongo.db.medication_logs.delete_one({"_id": ObjectId(meal['medication_log_id'])})
+                deletion_results["medication_log"] = med_result.deleted_count
+            except Exception as e:
+                logger.warning(f"Error deleting medication log: {e}")
+
+        # 4. Delete meals_only record if it exists
+        if 'meals_only_id' in meal and meal['meals_only_id']:
+            try:
+                mongo.db.meals_only.delete_one({"_id": ObjectId(meal['meals_only_id'])})
+            except Exception as e:
+                logger.warning(f"Error deleting meals_only record: {e}")
+
+        # 5. Finally delete the meal record itself
+        meal_result = mongo.db.meals.delete_one({"_id": meal_obj_id})
+        deletion_results["meal"] = meal_result.deleted_count
+
+        logger.info(f"Deleted meal {meal_id} and related records: {deletion_results}")
+
+        return jsonify({
+            "message": "Record deleted successfully",
+            "deleted": deletion_results
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error deleting meal: {str(e)}")
+        return jsonify({"error": f"Failed to delete record: {str(e)}"}), 500

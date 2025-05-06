@@ -165,6 +165,7 @@ def get_activity_history(current_user):
         start_time_str = request.args.get('start_time')  # Add support for precise timestamps
         end_time_str = request.args.get('end_time')
         filter_by = request.args.get('filter_by', 'timestamp')  # Default to timestamp
+        include_meal_details = request.args.get('include_meal_details') == 'true'  # Option to include meal details
 
         logger.debug(f"Filter parameters: start_date={start_date_str}, end_date={end_date_str}, " +
                      f"start_time={start_time_str}, end_time={end_time_str}, filter_by={filter_by}")
@@ -296,10 +297,27 @@ def get_activity_history(current_user):
                     formatted_activity["expectedTime"] = format_time(activity['expectedTime'])
                 if 'completedTime' in activity:
                     formatted_activity["completedTime"] = format_time(activity['completedTime'])
-                if 'meal_id' in activity:
-                    formatted_activity["meal_id"] = activity['meal_id']
                 if 'notes' in activity:
                     formatted_activity["notes"] = activity['notes']
+
+                # Always add meal_id if present - BIDIRECTIONAL REFERENCE
+                if 'meal_id' in activity:
+                    formatted_activity["meal_id"] = activity['meal_id']
+
+                    # Optionally fetch related meal details
+                    if include_meal_details and activity['meal_id']:
+                        try:
+                            meal = mongo.db.meals.find_one({'_id': ObjectId(activity['meal_id'])})
+                            if meal:
+                                formatted_activity["meal_details"] = {
+                                    "mealType": meal.get('mealType', 'unknown'),
+                                    "timestamp": format_time(meal.get('timestamp')),
+                                    "nutrition": meal.get('nutrition'),
+                                    "bloodSugar": meal.get('bloodSugar'),
+                                    "intendedInsulin": meal.get('intendedInsulin'),
+                                }
+                        except Exception as e:
+                            logger.error(f"Error fetching meal details for activity {activity['_id']}: {e}")
 
                 formatted_activities.append(formatted_activity)
             except Exception as e:
@@ -594,6 +612,8 @@ def get_activity(current_user):
         return jsonify({"error": str(e)}), 500
 
 
+
+
 @activity_bp.route('/api/activities', methods=['GET'])
 @token_required
 def get_activities(current_user):
@@ -651,3 +671,41 @@ def get_activities(current_user):
     except Exception as e:
         logger.error(f"Error getting activities: {str(e)}")
         return jsonify({"error": str(e)}), 500
+
+
+@activity_bp.route('/api/activity/<activity_id>', methods=['GET'])
+@token_required
+@api_error_handler
+def get_activity_by_id(current_user, activity_id):
+    try:
+        # Find the specific activity
+        activity = mongo.db.activities.find_one({'_id': ObjectId(activity_id)})
+
+        if not activity:
+            return jsonify({"error": "Activity not found"}), 404
+
+        # Verify ownership
+        if activity.get('user_id') != str(current_user['_id']) and current_user.get('user_type') != 'doctor':
+            return jsonify({"error": "Unauthorized access"}), 403
+
+        # Format the activity
+        formatted_activity = {
+            "id": str(activity['_id']),
+            "type": activity.get('type', 'unknown'),
+            "level": activity.get('level', 0),
+            "impact": activity.get('impact', 1.0),
+            "duration": activity.get('duration', '01:00'),
+            "timestamp": format_time(activity.get('timestamp', datetime.utcnow())),
+        }
+
+        # Add optional fields if present
+        for field in ["startTime", "endTime", "expectedTime", "completedTime", "notes"]:
+            if field in activity:
+                formatted_activity[field] = format_time(activity[field]) if isinstance(activity[field], datetime) else \
+                activity[field]
+
+        return jsonify(formatted_activity), 200
+
+    except Exception as e:
+        logger.error(f"Error fetching activity by ID: {str(e)}")
+        return jsonify({"error": "Internal server error"}), 500
