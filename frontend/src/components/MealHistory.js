@@ -3,6 +3,7 @@ import { useTable, useSortBy, usePagination } from 'react-table';
 import axios from 'axios';
 import moment from 'moment';
 import { FaTrash, FaExclamationTriangle } from 'react-icons/fa';
+
 import './MealHistory.css';
 
 const formatDateTime = (timestamp) => {
