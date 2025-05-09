@@ -247,6 +247,104 @@ class TimeEffect {
   };
 }
 
+/**
+ * Calculate Blood Glucose Impact curve over time for a meal
+ * @param {object} meal - Meal data with timestamp and nutrition
+ * @param {object} patientFactors - Patient-specific factors
+ * @param {number} hoursToProject - How many hours to project (default 6)
+ * @param {number} intervalMinutes - Data point interval in minutes (default 15)
+ * @returns {Array} Array of time points with projected BG impact
+ */
+static calculateBGImpactCurve(meal, patientFactors, hoursToProject = 6, intervalMinutes = 15) {
+  if (!meal?.timestamp || !meal?.nutrition) {
+    return [];
+  }
+
+  // Get meal parameters
+  const { carbs = 0, protein = 0, fat = 0 } = meal.nutrition;
+  const absorptionType = meal.nutrition.absorption_type || 'medium';
+
+  // Get patient-specific factors
+  const {
+    proteinFactor = 0.5,
+    fatFactor = 0.2,
+    absorptionFactors = { slow: 0.7, medium: 1.0, fast: 1.3 }
+  } = patientFactors || {};
+
+  // Calculate carb equivalents
+  const proteinCarbEquiv = protein * proteinFactor;
+  const fatCarbEquiv = fat * fatFactor;
+  const totalCarbEquiv = carbs + proteinCarbEquiv + fatCarbEquiv;
+
+  // Get absorption factor
+  const absorptionFactor = absorptionFactors[absorptionType] || 1.0;
+
+  // Calculate meal curve shape parameters
+  // Higher fat/protein extends duration, higher absorption factor shortens it
+  const fatProteinRatio = (fat + protein) / Math.max(1, carbs + protein + fat);
+  const baseDuration = 3 + (fatProteinRatio * 3); // 3-6 hours depending on composition
+  const duration = baseDuration / absorptionFactor; // Adjust for absorption rate
+
+  // Calculate peak time (carb-heavy meals peak faster)
+  const carbRatio = carbs / Math.max(1, carbs + protein + fat);
+  const basePeakHours = 0.5 + ((1 - carbRatio) * 1.0); // 0.5-1.5 hours depending on carb content
+  const peakHours = basePeakHours / absorptionFactor; // Adjust for absorption
+
+  const mealTime = new Date(meal.timestamp);
+  const dataPoints = [];
+
+  // Generate data points for the curve
+  for (let i = 0; i <= hoursToProject * (60 / intervalMinutes); i++) {
+    const minutesSinceMeal = i * intervalMinutes;
+    const hoursSinceMeal = minutesSinceMeal / 60;
+
+    // Calculate time point
+    const timePoint = new Date(mealTime.getTime() + minutesSinceMeal * 60 * 1000);
+
+    // Calculate impact intensity at this time
+    let intensity = 0;
+
+    if (hoursSinceMeal < peakHours) {
+      // Rising phase - use quadratic curve for faster initial rise
+      intensity = Math.pow(hoursSinceMeal / peakHours, 1.8);
+    } else if (hoursSinceMeal < duration) {
+      // Falling phase - protein/fat extend the tail
+      let fallRatio = (hoursSinceMeal - peakHours) / (duration - peakHours);
+
+      // Apply digestion model based on meal composition
+      if (fatProteinRatio > 0.5) {
+        // High protein/fat meals have slower decay with a longer tail
+        intensity = 1.0 - Math.pow(fallRatio, 0.7);
+      } else {
+        // Carb-heavy meals decline more rapidly
+        intensity = 1.0 - Math.pow(fallRatio, 1.2);
+      }
+    } else {
+      // After full duration
+      intensity = 0;
+    }
+
+    // Scale intensity by total impact value
+    const impactValue = intensity * totalCarbEquiv;
+
+    dataPoints.push({
+      time: timePoint,
+      hoursSinceMeal,
+      intensity,
+      impactValue: Math.round(impactValue * 10) / 10,
+      timestamp: timePoint.getTime(),
+      formattedTime: TimeManager.formatDate(timePoint, TimeManager.formats.CHART_TICKS_SHORT)
+    });
+
+    // Stop if we've reached zero impact after the duration
+    if (hoursSinceMeal > duration * 1.2 && intensity === 0) {
+      break;
+    }
+  }
+
+  return dataPoints;
+}
+
   /**
    * Calculate the effect of activity on blood glucose
    * @param {object} activity - Activity data with level, start/end times
