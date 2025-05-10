@@ -996,6 +996,33 @@ td[data-column-id="absorptionType"] {
   white-space: nowrap;
 }
 
+.view-mode-toggle {
+  display: flex;
+  justify-content: center;
+  margin: 10px 0;
+  padding: 5px;
+  background: #f8f9fa;
+  border-radius: 5px;
+}
+
+.view-mode-toggle .toggle-btn {
+  padding: 5px 15px;
+  margin: 0 5px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background-color: #f5f5f5;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.view-mode-toggle .toggle-btn.active {
+  background-color: #4285f4;
+  color: white;
+  border-color: #2a75f3;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
 /* Meal type color indicators in effect chart */
 .tooltip-meal-item.breakfast .tooltip-meal-type { background-color: #ffc107; color: #212529; }
 .tooltip-meal-item.lunch .tooltip-meal-type { background-color: #fd7e14; color: #fff; }
