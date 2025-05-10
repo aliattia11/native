@@ -1,5 +1,19 @@
 /**
  * TimeManager - Enhanced utility for standardized time handling across the application
+ *
+ * USAGE GUIDELINES:
+ * 1. PREFERRED: Access TimeManager through useTime() hook from TimeContext
+ *    Example: const { getCurrentTimeLocal, localToUTC } = useTime();
+ *
+ * 2. ALTERNATIVE: Import TimeManager directly when outside of React components
+ *    Example: import TimeManager from '../utils/TimeManager';
+ *
+ * 3. ALWAYS: Store times in UTC in backend, display in local timezone to users
+ *
+ * 4. CONVERSION PATTERN:
+ *    - UI Input → capture as local time
+ *    - Before API call → convert to UTC using localToUTCISOString()
+ *    - After API response → convert from UTC to local using utcToLocalString()
  */
 class TimeManager {
   /**
@@ -59,34 +73,35 @@ class TimeManager {
    * @returns {string} System date/time in specified format
    */
   static getSystemDateTime(format = null) {
-  // Use the exact current UTC time provided by the user
-  const systemTime = "2025-05-10 13:05:49"; // Current UTC time
+    // Use the exact current UTC time provided by the user
+    const systemTime = "2025-05-10 14:47:09"; // Current UTC time
 
-  if (!format) {
-    return systemTime;
+    if (!format) {
+      return systemTime;
+    }
+
+    // Parse the system time string and format it as requested
+    try {
+      const [datePart, timePart] = systemTime.split(' ');
+      const [year, month, day] = datePart.split('-');
+      const [hours, minutes, seconds] = timePart.split(':');
+
+      const date = new Date(Date.UTC(
+        parseInt(year),
+        parseInt(month) - 1,
+        parseInt(day),
+        parseInt(hours),
+        parseInt(minutes),
+        parseInt(seconds || 0)
+      ));
+
+      return this.formatDate(date, format);
+    } catch (e) {
+      console.error('Error parsing system time:', e);
+      return systemTime;
+    }
   }
 
-  // Parse the system time string and format it as requested
-  try {
-    const [datePart, timePart] = systemTime.split(' ');
-    const [year, month, day] = datePart.split('-');
-    const [hours, minutes, seconds] = timePart.split(':');
-
-    const date = new Date(Date.UTC(
-      parseInt(year),
-      parseInt(month) - 1,
-      parseInt(day),
-      parseInt(hours),
-      parseInt(minutes),
-      parseInt(seconds || 0)
-    ));
-
-    return this.formatDate(date, format);
-  } catch (e) {
-    console.error('Error parsing system time:', e);
-    return systemTime;
-  }
-}
   /**
    * Get current user login
    * @returns {string} Current user's login ID
@@ -257,28 +272,29 @@ class TimeManager {
       tickFormat
     };
   }
-/**
- * Format a timestamp as just the time (HH:MM)
- * @param {string|Date} timestamp - The timestamp to format
- * @returns {string} Time in HH:MM format
- */
-static formatTime(timestamp) {
-  if (!timestamp) return '';
 
-  try {
-    const date = new Date(timestamp);
-    // Handle invalid dates
-    if (isNaN(date.getTime())) return '';
+  /**
+   * Format a timestamp as just the time (HH:MM)
+   * @param {string|Date} timestamp - The timestamp to format
+   * @returns {string} Time in HH:MM format
+   */
+  static formatTime(timestamp) {
+    if (!timestamp) return '';
 
-    const hours = date.getHours().toString().padStart(2, '0');
-    const minutes = date.getMinutes().toString().padStart(2, '0');
+    try {
+      const date = new Date(timestamp);
+      // Handle invalid dates
+      if (isNaN(date.getTime())) return '';
 
-    return `${hours}:${minutes}`;
-  } catch (error) {
-    console.error('Error formatting time:', error);
-    return '';
+      const hours = date.getHours().toString().padStart(2, '0');
+      const minutes = date.getMinutes().toString().padStart(2, '0');
+
+      return `${hours}:${minutes}`;
+    } catch (error) {
+      console.error('Error formatting time:', error);
+      return '';
+    }
   }
-}
 
   /**
    * Parse timestamp safely ensuring it's treated correctly whether it has timezone info or not
@@ -286,38 +302,39 @@ static formatTime(timestamp) {
    * @returns {Date} Properly parsed Date object
    */
   static parseTimestamp(timestamp) {
-  if (!timestamp) return new Date();
+    if (!timestamp) return new Date();
 
-  if (timestamp instanceof Date) return timestamp;
+    if (timestamp instanceof Date) return timestamp;
 
-  try {
-    // If the timestamp has 'Z' at the end, it's already in UTC format
-    if (typeof timestamp === 'string') {
-      if (timestamp.endsWith('Z') || timestamp.includes('+') || timestamp.includes('-', 10)) {
-        // Has timezone info - parse directly
-        return new Date(timestamp);
-      } else {
-        // No timezone info - treat as UTC time
-        const [datePart, timePart] = timestamp.includes('T')
-          ? timestamp.split('T')
-          : [timestamp.split(' ')[0], timestamp.split(' ')[1] || '00:00:00'];
+    try {
+      // If the timestamp has 'Z' at the end, it's already in UTC format
+      if (typeof timestamp === 'string') {
+        if (timestamp.endsWith('Z') || timestamp.includes('+') || timestamp.includes('-', 10)) {
+          // Has timezone info - parse directly
+          return new Date(timestamp);
+        } else {
+          // No timezone info - treat as UTC time
+          const [datePart, timePart] = timestamp.includes('T')
+            ? timestamp.split('T')
+            : [timestamp.split(' ')[0], timestamp.split(' ')[1] || '00:00:00'];
 
-        if (!datePart) return new Date();
+          if (!datePart) return new Date();
 
-        const [year, month, day] = datePart.split('-').map(num => parseInt(num, 10));
-        const [hours, minutes, seconds] = (timePart || '00:00:00').split(':').map(num => parseInt(num, 10));
+          const [year, month, day] = datePart.split('-').map(num => parseInt(num, 10));
+          const [hours, minutes, seconds] = (timePart || '00:00:00').split(':').map(num => parseInt(num, 10));
 
-        // Create the date in UTC
-        return new Date(Date.UTC(year, month - 1, day, hours || 0, minutes || 0, seconds || 0));
+          // Create the date in UTC
+          return new Date(Date.UTC(year, month - 1, day, hours || 0, minutes || 0, seconds || 0));
+        }
       }
-    }
 
-    return new Date(timestamp);
-  } catch (error) {
-    console.error('Error parsing timestamp:', error, timestamp);
-    return new Date();
+      return new Date(timestamp);
+    } catch (error) {
+      console.error('Error parsing timestamp:', error, timestamp);
+      return new Date();
+    }
   }
-}
+
   /**
    * Format a timestamp as a relative time (e.g., "5 minutes ago")
    * Uses system time rather than browser time for consistency
@@ -325,50 +342,50 @@ static formatTime(timestamp) {
    * @returns {string} Human-readable relative time
    */
   static formatRelativeTime(timestamp) {
-  if (!timestamp) return '';
+    if (!timestamp) return '';
 
-  try {
-    // Parse the timestamp as UTC
-    const date = this.parseTimestamp(timestamp);
+    try {
+      // Parse the timestamp as UTC
+      const date = this.parseTimestamp(timestamp);
 
-    // Get the system time as UTC
-    const systemTime = this.parseTimestamp(this.getSystemDateTime());
+      // Get the system time as UTC
+      const systemTime = this.parseTimestamp(this.getSystemDateTime());
 
-    // Handle invalid dates
-    if (isNaN(date.getTime())) return '';
+      // Handle invalid dates
+      if (isNaN(date.getTime())) return '';
 
-    const diffMs = systemTime - date;
+      const diffMs = systemTime - date;
 
-    // If very recent (less than a minute ago)
-    if (diffMs < this.constants.MILLISECONDS_PER_MINUTE) {
-      return 'just now';
+      // If very recent (less than a minute ago)
+      if (diffMs < this.constants.MILLISECONDS_PER_MINUTE) {
+        return 'just now';
+      }
+
+      // If less than an hour ago
+      if (diffMs < this.constants.MILLISECONDS_PER_HOUR) {
+        const mins = Math.floor(diffMs / this.constants.MILLISECONDS_PER_MINUTE);
+        return `${mins} ${mins === 1 ? 'minute' : 'minutes'} ago`;
+      }
+
+      // If less than a day ago
+      if (diffMs < this.constants.MILLISECONDS_PER_DAY) {
+        const hours = Math.floor(diffMs / this.constants.MILLISECONDS_PER_HOUR);
+        return `${hours} ${hours === 1 ? 'hour' : 'hours'} ago`;
+      }
+
+      // If less than a week ago
+      if (diffMs < 7 * this.constants.MILLISECONDS_PER_DAY) {
+        const days = Math.floor(diffMs / this.constants.MILLISECONDS_PER_DAY);
+        return `${days} ${days === 1 ? 'day' : 'days'} ago`;
+      }
+
+      // If more than a week ago, format as a date
+      return this.formatDate(date, this.formats.DATETIME_DISPLAY);
+    } catch (error) {
+      console.error('Error formatting relative time:', error);
+      return '';
     }
-
-    // If less than an hour ago
-    if (diffMs < this.constants.MILLISECONDS_PER_HOUR) {
-      const mins = Math.floor(diffMs / this.constants.MILLISECONDS_PER_MINUTE);
-      return `${mins} ${mins === 1 ? 'minute' : 'minutes'} ago`;
-    }
-
-    // If less than a day ago
-    if (diffMs < this.constants.MILLISECONDS_PER_DAY) {
-      const hours = Math.floor(diffMs / this.constants.MILLISECONDS_PER_HOUR);
-      return `${hours} ${hours === 1 ? 'hour' : 'hours'} ago`;
-    }
-
-    // If less than a week ago
-    if (diffMs < 7 * this.constants.MILLISECONDS_PER_DAY) {
-      const days = Math.floor(diffMs / this.constants.MILLISECONDS_PER_DAY);
-      return `${days} ${days === 1 ? 'day' : 'days'} ago`;
-    }
-
-    // If more than a week ago, format as a date
-    return this.formatDate(date, this.formats.DATETIME_DISPLAY);
-  } catch (error) {
-    console.error('Error formatting relative time:', error);
-    return '';
   }
-}
 
   /**
    * Check if a timestamp is within a given range
@@ -451,19 +468,20 @@ static formatTime(timestamp) {
     }
   }
 
- static formatDateTime(isoString) {
-  if (!isoString) return '';
+  static formatDateTime(isoString) {
+    if (!isoString) return '';
 
-  try {
-    // Parse timestamp as UTC
-    const date = this.parseTimestamp(isoString);
-    // Format using browser's locale
-    return date.toLocaleString();
-  } catch (error) {
-    console.error('Error formatting date:', error);
-    return '';
+    try {
+      // Parse timestamp as UTC
+      const date = this.parseTimestamp(isoString);
+      // Format using browser's locale
+      return date.toLocaleString();
+    } catch (error) {
+      console.error('Error formatting date:', error);
+      return '';
+    }
   }
-}
+
   static getTimePointHoursAgo(hoursAgo) {
     const date = this.addHours(new Date(), -hoursAgo);
 

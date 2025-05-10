@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useContext } from 'react';
 import axios from 'axios';
 import { useConstants } from '../contexts/ConstantsContext';
+import TimeContext from '../contexts/TimeContext';
 import {
   formatInsulinName,
   getAvailableInsulinTypes,
@@ -21,10 +22,53 @@ const InsulinInput = ({
   suggestedInsulinType = null,
   className = ''
 }) => {
+  // Use TimeContext when available
+  const timeContext = useContext(TimeContext);
+
+  // Determine whether to use TimeContext or direct TimeManager
+  const useTimeContextFunctions = !!timeContext;
+
+  // Helper functions for time management
+  const getCurrentTime = () => {
+    return useTimeContextFunctions
+      ? timeContext.TimeManager.getCurrentTimeISOString()
+      : TimeManager.getCurrentTimeISOString();
+  };
+
+  const formatDateTime = (timestamp, format) => {
+    return useTimeContextFunctions
+      ? timeContext.formatDateTime(timestamp, format || timeContext.formats.DATETIME_DISPLAY)
+      : TimeManager.formatDateTime(timestamp);
+  };
+
+  const formatRelativeTime = (timestamp) => {
+    return useTimeContextFunctions
+      ? timeContext.TimeManager.formatRelativeTime(timestamp)
+      : TimeManager.formatRelativeTime(timestamp);
+  };
+
+  const formatTime = (timestamp) => {
+    return useTimeContextFunctions
+      ? timeContext.TimeManager.formatTime(timestamp)
+      : TimeManager.formatTime(timestamp);
+  };
+
+  const localToUTC = (localTime) => {
+    return useTimeContextFunctions
+      ? timeContext.TimeManager.localToUTCISOString(localTime)
+      : TimeManager.localToUTCISOString(localTime);
+  };
+
+  const parseTimestamp = (timestamp) => {
+    return useTimeContextFunctions
+      ? timeContext.TimeManager.parseTimestamp(timestamp)
+      : TimeManager.parseTimestamp(timestamp);
+  };
+
   const { patientConstants, refreshConstants, loading, error } = useConstants();
   const [selectedInsulin, setSelectedInsulin] = useState(initialInsulin);
   const [dose, setDose] = useState(initialDose);
-  const [scheduledTime, setScheduledTime] = useState(TimeManager.getCurrentTimeISOString());
+  const [scheduledTime, setScheduledTime] = useState(getCurrentTime());
   const [notes, setNotes] = useState('');
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -48,7 +92,7 @@ const InsulinInput = ({
 
   useEffect(() => {
     // Set default scheduled time to now
-    setScheduledTime(TimeManager.getCurrentTimeISOString());
+    setScheduledTime(getCurrentTime());
 
     // Update state if props change
     setSelectedInsulin(initialInsulin);
@@ -97,8 +141,8 @@ const InsulinInput = ({
             scheduled_time: scheduledTime,
             taken_at: takenAt,
             // Add parsed timestamps as Date objects for accurate calculations
-            scheduled_time_date: TimeManager.parseTimestamp(scheduledTime),
-            taken_at_date: TimeManager.parseTimestamp(takenAt)
+            scheduled_time_date: parseTimestamp(scheduledTime),
+            taken_at_date: parseTimestamp(takenAt)
           };
         });
 
@@ -177,18 +221,20 @@ const InsulinInput = ({
   };
 
   const calculateActiveStatus = (dose) => {
-    // Get system time instead of browser time
-    const now = TimeManager.parseTimestamp(TimeManager.getSystemDateTime());
+    // Get system time using the helper function
+    const now = parseTimestamp(
+      useTimeContextFunctions ? timeContext.systemDateTime : TimeManager.getSystemDateTime()
+    );
 
     // Handle cases where the effect timing fields aren't available
     if (!dose.effect_start_time || !dose.effect_end_time) {
       return "Unknown status";
     }
 
-    const effectStart = TimeManager.parseTimestamp(dose.effect_start_time);
-    const onsetTime = dose.onset_time ? TimeManager.parseTimestamp(dose.onset_time) : null;
-    const peakTime = dose.peak_time ? TimeManager.parseTimestamp(dose.peak_time) : null;
-    const effectEnd = TimeManager.parseTimestamp(dose.effect_end_time);
+    const effectStart = parseTimestamp(dose.effect_start_time);
+    const onsetTime = dose.onset_time ? parseTimestamp(dose.onset_time) : null;
+    const peakTime = dose.peak_time ? parseTimestamp(dose.peak_time) : null;
+    const effectEnd = parseTimestamp(dose.effect_end_time);
 
     if (now < effectStart) {
       return "Not yet active";
@@ -321,12 +367,12 @@ const InsulinInput = ({
     if (!backendData) return null;
 
     // Parse calculation time using our enhanced parser
-    const calculationTime = TimeManager.parseTimestamp(backendData.calculation_time);
+    const calculationTime = parseTimestamp(backendData.calculation_time);
 
     // Process insulin contributions with corrected timestamp handling
     const contributions = backendData.insulin_contributions.map(contrib => {
       // Ensure we parse the timestamp correctly to avoid timezone issues
-      const takenAt = TimeManager.parseTimestamp(contrib.taken_at);
+      const takenAt = parseTimestamp(contrib.taken_at);
 
       return {
         ...contrib,
@@ -368,7 +414,6 @@ const InsulinInput = ({
     }
   };
 
-
   // Call this when component loads and after recording insulin
   useEffect(() => {
     fetchActiveInsulin();
@@ -408,7 +453,7 @@ const InsulinInput = ({
       }
 
       // Convert local time to UTC ISO string for sending to backend
-      const utcScheduledTime = TimeManager.localToUTCISOString(scheduledTime);
+      const utcScheduledTime = localToUTC(scheduledTime);
 
       console.log('Submitting insulin dose with scheduled time:', scheduledTime);
       console.log('UTC scheduled time for backend:', utcScheduledTime);
@@ -459,7 +504,7 @@ const InsulinInput = ({
         setExpanded(false);
 
         // Update time to current
-        setScheduledTime(TimeManager.getCurrentTimeISOString());
+        setScheduledTime(getCurrentTime());
 
         // Notify parent components
         if (onDoseLogged) {
@@ -624,6 +669,7 @@ const InsulinInput = ({
                   onChange={handleTimeChange}
                   className={styles.timeInput}
                   required={isStandalone}
+                  useTimeContext={useTimeContextFunctions} // Pass through to TimeInput
                 />
               </div>
 
@@ -647,7 +693,7 @@ const InsulinInput = ({
             <h4>
               Active Insulin: {activeInsulin.total_active_insulin} units
               <span className={styles.calculationTime}>
-                (as of {TimeManager.formatDateTime(activeInsulin.calculation_time_local)})
+                (as of {formatDateTime(activeInsulin.calculation_time_local)})
               </span>
             </h4>
             <div className={styles.insulinContributions}>
@@ -660,7 +706,7 @@ const InsulinInput = ({
                     {contrib.initial_dose} units, {contrib.active_units} active
                     <div className={styles.doseTime}>
                       {/* Use our improved relative time formatting with correct date objects */}
-                      Taken {TimeManager.formatRelativeTime(contrib.taken_at_date)}
+                      Taken {formatRelativeTime(contrib.taken_at_date)}
                       ({Math.round(contrib.activity_percent)}% active)
                     </div>
                   </span>
@@ -782,13 +828,15 @@ const InsulinInput = ({
                   </div>
                   <div className={styles.doseDetails}>
                     <span className={styles.doseTime}>
-                      {TimeManager.formatDateTime(dose.taken_at_date || dose.taken_at || dose.scheduled_time)}
+                      {formatDateTime(dose.taken_at_date || dose.taken_at || dose.scheduled_time)}
                     </span>
                     {dose.effect_end_time && (
                       <span className={styles.doseActivity}>
                         {calculateActiveStatus(dose)}
-                        {TimeManager.parseTimestamp(TimeManager.getSystemDateTime()) < TimeManager.parseTimestamp(dose.effect_end_time) ?
-                          ` (Active until ${TimeManager.formatTime(dose.effect_end_time)})` :
+                        {parseTimestamp(
+                          useTimeContextFunctions ? timeContext.systemDateTime : TimeManager.getSystemDateTime()
+                        ) < parseTimestamp(dose.effect_end_time) ?
+                          ` (Active until ${formatTime(dose.effect_end_time)})` :
                           " (Inactive)"}
                       </span>
                     )}

@@ -11,15 +11,6 @@ import './TimeInput.css';
  * - Duration input (hours:minutes)
  * - Time ranges (start and end times)
  * - Date range selection connected to TimeContext
- *
- * @param {string} mode - 'timepoint', 'duration', 'range', or 'daterange'
- * @param {*} value - The current value in the appropriate format for the selected mode
- * @param {function} onChange - Function to call when value changes
- * @param {string} label - Label text for the input
- * @param {boolean} defaultToNow - Whether to default to current time when no value is provided
- * @param {boolean} disabled - Whether the input is disabled
- * @param {string} className - Additional CSS class to apply
- * @param {boolean} useTimeContext - Whether to connect to the global TimeContext (for 'daterange' mode)
  */
 const TimeInput = ({
   mode = 'timepoint',
@@ -34,7 +25,7 @@ const TimeInput = ({
   useTimeContext = false,
   showPresets = true
 }) => {
-  // Always call useContext - this follows the Rules of Hooks
+  // Always call useContext unconditionally (React Hooks rule)
   const timeContext = useContext(TimeContext);
 
   // Initialize state based on mode
@@ -50,6 +41,31 @@ const TimeInput = ({
     start: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     end: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0]
   });
+
+  // Decide whether to use context functions or direct TimeManager - after hooks are called
+  const contextAvailable = useTimeContext && timeContext;
+
+  // Helper functions that work whether or not context is available
+  const getCurrentTime = () => {
+    if (contextAvailable) {
+      return timeContext.TimeManager.getCurrentTimeISOString();
+    }
+    return TimeManager.getCurrentTimeISOString();
+  };
+
+  const formatDateTime = (date, format) => {
+    if (contextAvailable) {
+      return timeContext.formatDateTime(date, format);
+    }
+    return TimeManager.formatDateTime(date);
+  };
+
+  const calculateDuration = (start, end) => {
+    if (contextAvailable) {
+      return timeContext.TimeManager.calculateDuration(start, end);
+    }
+    return TimeManager.calculateDuration(start, end);
+  };
 
   // Initialize values based on props
   useEffect(() => {
@@ -69,7 +85,8 @@ const TimeInput = ({
       if (value) {
         setTimepoint(value);
       } else if (defaultToNow) {
-        setTimepoint(TimeManager.getCurrentTimeISOString());
+        // Use the helper function that considers context
+        setTimepoint(getCurrentTime());
       } else {
         setTimepoint('');
       }
@@ -99,7 +116,7 @@ const TimeInput = ({
         setStartTime(value.start || '');
         setEndTime(value.end || '');
       } else if (defaultToNow) {
-        const now = TimeManager.getCurrentTimeISOString();
+        const now = getCurrentTime();
         setStartTime(now);
         setEndTime(now);
       } else {
@@ -107,7 +124,7 @@ const TimeInput = ({
         setEndTime('');
       }
     }
-  }, [mode, value, defaultToNow, useTimeContext, localDateRange.start, localDateRange.end]);
+  }, [mode, value, defaultToNow, useTimeContext, localDateRange.start, localDateRange.end, getCurrentTime]);
 
   // Handler functions for each mode
   const handleTimepointChange = (e) => {
@@ -151,7 +168,7 @@ const TimeInput = ({
   const handleDateRangeChange = (e) => {
     const { name, value } = e.target;
 
-    if (useTimeContext && timeContext && timeContext.handleDateRangeChange) {
+    if (contextAvailable && timeContext.handleDateRangeChange) {
       // Update in context if available and enabled
       timeContext.handleDateRangeChange(e);
     } else {
@@ -166,7 +183,7 @@ const TimeInput = ({
 
   // Quick date range presets handler
   const applyDatePreset = (days) => {
-    if (useTimeContext && timeContext && timeContext.applyDatePreset) {
+    if (contextAvailable && timeContext.applyDatePreset) {
       timeContext.applyDatePreset(days);
     } else {
       const now = new Date();
@@ -199,16 +216,19 @@ const TimeInput = ({
   };
 
   // Calculate duration string for range mode
-  const duration = mode === 'range' ? TimeManager.calculateDuration(startTime, endTime) : null;
+  const duration = mode === 'range' && startTime && endTime
+    ? calculateDuration(startTime, endTime)
+    : null;
 
   // Determine which date range to use (context or local)
-  const effectiveDateRange = (useTimeContext && timeContext && timeContext.dateRange)
+  const effectiveDateRange = (contextAvailable && timeContext.dateRange)
     ? timeContext.dateRange
     : localDateRange;
 
-  // Get system values
-  const systemDateTime = TimeManager.getSystemDateTime();
-  const currentUserLogin = TimeManager.getCurrentUserLogin();
+  // Get system values - prefer context values when available
+  const systemDateTime = contextAvailable ? timeContext.systemDateTime : TimeManager.getSystemDateTime();
+  const currentUserLogin = contextAvailable ? timeContext.currentUserLogin : TimeManager.getCurrentUserLogin();
+  const userTimeZone = contextAvailable ? timeContext.userTimeZone : TimeManager.getUserTimeZone();
 
   return (
     <div className={`time-input ${className}`}>
@@ -355,6 +375,18 @@ const TimeInput = ({
             </div>
           )}
 
+          {/* Show timezone info when date range is used */}
+          <div className="timezone-info">
+            Your timezone: {userTimeZone}
+          </div>
+        </div>
+      )}
+
+      {showSystemInfo && (
+        <div className="system-info">
+          <div>System time: {systemDateTime}</div>
+          <div>User: {currentUserLogin}</div>
+          <div>Timezone: {userTimeZone}</div>
         </div>
       )}
     </div>

@@ -4,13 +4,41 @@ import TimeManager from '../utils/TimeManager';
 // Create the context
 const TimeContext = createContext();
 
-// Custom hook for using the context
+/**
+ * Enhanced hook for using time-related functionality throughout the application
+ * Provides a unified interface for all time operations
+ * @returns {Object} Time utility methods and state
+ */
 export const useTime = () => {
   const context = useContext(TimeContext);
   if (!context) {
     throw new Error('useTime must be used within a TimeProvider');
   }
-  return context;
+
+  // Return context with additional convenience methods
+  return {
+    // Original context values
+    ...context,
+
+    // Common time operations
+    getCurrentTimeLocal: () => TimeManager.getCurrentTimeISOString(),
+    localToUTC: (localTime) => TimeManager.localToUTCISOString(localTime),
+    utcToLocal: (utcTime) => TimeManager.utcToLocalString(utcTime),
+    formatTime: (time, format = context.formats.DATETIME_DISPLAY) =>
+      TimeManager.formatDate(time, format),
+    formatRelative: (time) => TimeManager.formatRelativeTime(time),
+    calculateDuration: TimeManager.calculateDuration,
+    parseTimestamp: TimeManager.parseTimestamp,
+
+    // Common time initialization
+    resetToCurrentTime: () => TimeManager.getCurrentTimeISOString(),
+
+    // Helper for showing user-friendly timezone information
+    getTimezoneDisplay: () => ({
+      name: context.userTimeZone,
+      infoText: '(all times stored in UTC but displayed in your local timezone)'
+    })
+  };
 };
 
 // Provider component

@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useContext } from 'react';
 import { useConstants } from '../contexts/ConstantsContext';
+import TimeContext from '../contexts/TimeContext';
 import axios from 'axios';
 import { FaInfoCircle, FaChevronDown, FaChevronUp, FaFileImport, FaSync, FaHistory } from 'react-icons/fa';
 import FoodSection from './FoodSection';
@@ -15,22 +16,40 @@ import TimeManager from '../utils/TimeManager';
 import { MEAL_TYPES } from '../constants';
 import { recommendInsulinType } from '../utils/insulinUtils';
 import styles from './MealInput.module.css';
-import moment from 'moment';
-
-// Helper function to determine entry type
-const determineEntryType = (meal) => {
-  if (meal.mealType === 'blood_sugar_only' || (meal.bloodSugar && !meal.foodItems?.length && !meal.intendedInsulin)) {
-    return 'blood_sugar';
-  } else if (meal.activities?.length > 0 && !meal.foodItems?.length && !meal.intendedInsulin && !meal.bloodSugar) {
-    return 'activity';
-  } else if (meal.intendedInsulin && !meal.foodItems?.length && !meal.activities?.length) {
-    return 'insulin';
-  } else {
-    return 'meal'; // Default is meal (includes food)
-  }
-};
 
 const MealInput = () => {
+  // Use TimeContext when available
+  const timeContext = useContext(TimeContext);
+
+  // Determine whether to use TimeContext functions
+  const useTimeContextFunctions = !!timeContext;
+
+  // Helper functions for time management
+  const getCurrentTime = () => {
+    return useTimeContextFunctions
+      ? timeContext.getCurrentTimeLocal()
+      : TimeManager.getCurrentTimeISOString();
+  };
+
+  const localToUTC = (localTime) => {
+    return useTimeContextFunctions
+      ? timeContext.localToUTC(localTime)
+      : TimeManager.localToUTCISOString(localTime);
+  };
+
+  const formatDateTime = (timestamp, format) => {
+    if (!timestamp) return '';
+    return useTimeContextFunctions
+      ? timeContext.formatDateTime(timestamp, format)
+      : TimeManager.formatDateTime(timestamp);
+  };
+
+  const getUserTimeZone = () => {
+    return useTimeContextFunctions
+      ? timeContext.userTimeZone
+      : TimeManager.getUserTimeZone();
+  };
+
   const { patientConstants, loading, error, refreshConstants } = useConstants();
   const [mealType, setMealType] = useState('');
   const [selectedFoods, setSelectedFoods] = useState([]);
@@ -65,7 +84,7 @@ const MealInput = () => {
 
   // Get user's time zone on component mount
   useEffect(() => {
-    setUserTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
+    setUserTimeZone(getUserTimeZone());
   }, []);
 
   // Handler for InsulinInput changes
@@ -150,50 +169,50 @@ const MealInput = () => {
     };
   }, [refreshConstants]);
 
-  // Fetch recent meals - updated to get 10 meals and filter only actual meal records
- const fetchRecentMeals = useCallback(async () => {
-  try {
-    setIsLoadingMeals(true);
-    const token = localStorage.getItem('token');
-    if (!token) {
-      console.warn('No authentication token found');
-      return;
-    }
-
-    console.log('Fetching from meals-only endpoint...');
-    const response = await axios.get(
-      'http://localhost:5000/api/meals-only',
-      {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        params: {
-          limit: 10
-        }
+  // Fetch recent meals
+  const fetchRecentMeals = useCallback(async () => {
+    try {
+      setIsLoadingMeals(true);
+      const token = localStorage.getItem('token');
+      if (!token) {
+        console.warn('No authentication token found');
+        return;
       }
-    );
 
-    if (response.data && response.data.meals) {
-      console.log('Meals-only response:', response.data);
-      setRecentMeals(response.data.meals);
+      console.log('Fetching from meals-only endpoint...');
+      const response = await axios.get(
+        'http://localhost:5000/api/meals-only',
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          params: {
+            limit: 10
+          }
+        }
+      );
 
-      // Debug the calculation summary data
-      response.data.meals.forEach((meal, index) => {
-        console.log(`Meal ${index + 1}:`, {
-          id: meal.id,
-          mealType: meal.mealType,
-          hasCalculationSummary: !!meal.calculation_summary,
-          meal_only_suggested_insulin: meal.calculation_summary?.meal_only_suggested_insulin
+      if (response.data && response.data.meals) {
+        console.log('Meals-only response:', response.data);
+        setRecentMeals(response.data.meals);
+
+        // Debug the calculation summary data
+        response.data.meals.forEach((meal, index) => {
+          console.log(`Meal ${index + 1}:`, {
+            id: meal.id,
+            mealType: meal.mealType,
+            hasCalculationSummary: !!meal.calculation_summary,
+            meal_only_suggested_insulin: meal.calculation_summary?.meal_only_suggested_insulin
+          });
         });
-      });
+      }
+    } catch (error) {
+      console.error('Error fetching from meals-only endpoint:', error);
+      setMessage('Failed to load recent meals');
+    } finally {
+      setIsLoadingMeals(false);
     }
-  } catch (error) {
-    console.error('Error fetching from meals-only endpoint:', error);
-    setMessage('Failed to load recent meals');
-  } finally {
-    setIsLoadingMeals(false);
-  }
-}, []);
+  }, []);
 
   // Toggle recent meals view
   const toggleRecentMeals = () => {
@@ -366,223 +385,219 @@ const MealInput = () => {
     setExpandedCard(expandedCard === cardName ? null : cardName);
   };
 
-  // Convert local time to UTC ISO string for the backend
-  const convertToUTCIsoString = (localDateTime) => {
-    if (!localDateTime) return new Date().toISOString();
-
-    // Use Moment.js to ensure proper UTC conversion
-    return moment(localDateTime).utc().toISOString();
-  };
-
- const handleSubmit = async (e) => {
-  e.preventDefault();
-  if (!patientConstants) {
-    setMessage('Error: Patient constants not loaded');
-    return;
-  }
-
-  if (!mealType) {
-    setMessage('Please select a meal type');
-    return;
-  }
-
-  if (selectedFoods.length === 0) {
-    setMessage('Please add at least one food item');
-    return;
-  }
-
-  setIsSubmitting(true);
-  setMessage('Submitting meal...');
-
-  try {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      throw new Error('Authentication token not found');
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!patientConstants) {
+      setMessage('Error: Patient constants not loaded');
+      return;
     }
 
-    // Make sure we have a properly formatted UTC timestamp for blood sugar reading
-    const utcBloodSugarTimestamp = TimeManager.localToUTCISOString(bloodSugarTimestamp);
-    console.log('Submitting blood sugar timestamp (UTC):', utcBloodSugarTimestamp);
-
-    // Get activity IDs if activities were recorded separately
-    let activityIds = [];
-
-    // If we have recorded activities separately before this meal submission
-    if (activitiesFromRecording.length > 0) {
-      try {
-        // First record the activities separately to get their IDs
-        const activitiesData = {
-          expectedActivities: activitiesFromRecording.map(activity => {
-            const durationData = TimeManager.calculateDuration(activity.startTime, activity.endTime);
-
-            // Convert local time to UTC for API
-            const startTimeUTC = TimeManager.localToUTCISOString(activity.startTime);
-            const endTimeUTC = TimeManager.localToUTCISOString(activity.endTime);
-
-            return {
-              level: activity.level,
-              duration: TimeManager.hoursToTimeString(durationData.totalHours),
-              expectedTime: startTimeUTC,
-              startTime: startTimeUTC,
-              endTime: endTimeUTC,
-              impact: activity.impact,
-              notes: ""
-            };
-          }),
-          completedActivities: [] // We typically use expected activities in meal context
-        };
-
-        const activityResponse = await axios.post(
-          'http://localhost:5000/api/record-activities',
-          activitiesData,
-          {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            }
-          }
-        );
-
-        // Store the IDs of created activities
-        if (activityResponse.data && activityResponse.data.activity_ids) {
-          activityIds = activityResponse.data.activity_ids;
-          console.log('Activities recorded separately with IDs:', activityIds);
-        }
-      } catch (error) {
-        console.warn('Failed to record activities separately:', error);
-        // Continue with meal submission even if activity recording fails
-      }
+    if (!mealType) {
+      setMessage('Please select a meal type');
+      return;
     }
 
-    // Create meal data object
-    const mealData = {
-      mealType,
-      recordingType: 'meal',
-      foodItems: selectedFoods.map(food => {
-        const isWeightMeasurement = food.portion.activeMeasurement === 'weight';
-        const amount = isWeightMeasurement ? food.portion.w_amount : food.portion.amount;
-        const unit = isWeightMeasurement ? food.portion.w_unit : food.portion.unit;
+    if (selectedFoods.length === 0) {
+      setMessage('Please add at least one food item');
+      return;
+    }
 
-        if (!amount || !unit) {
-          throw new Error(`Invalid measurement for food item: ${food.name}`);
-        }
+    setIsSubmitting(true);
+    setMessage('Submitting meal...');
 
-        return {
-          name: food.name,
-          portion: {
-            amount: parseFloat(amount) || 1,
-            unit: unit || (isWeightMeasurement ? 'g' : 'ml'),
-            measurement_type: food.portion.activeMeasurement || 'weight'
-          },
-          details: {
-            carbs: parseFloat(food.details.carbs) || 0,
-            protein: parseFloat(food.details.protein) || 0,
-            fat: parseFloat(food.details.fat) || 0,
-            absorption_type: food.details.absorption_type || 'medium',
-            serving_size: {
-              amount: food.details.serving_size?.amount || 1,
-              unit: food.details.serving_size?.unit || 'serving',
-              w_amount: food.details.serving_size?.w_amount,
-              w_unit: food.details.serving_size?.w_unit
-            }
-          }
-        };
-      }),
-      // Don't send activities array anymore, just IDs
-      activityIds: activityIds, // Use the array of activity IDs
-      bloodSugar: bloodSugar ? parseFloat(bloodSugar) : null,
-      bloodSugarTimestamp: utcBloodSugarTimestamp,
-      bloodSugarSource,
-      intendedInsulin: insulinData.dose ? parseFloat(insulinData.dose) : null,
-      intendedInsulinType: insulinData.type,
-      suggestedInsulinType,
-      notes: insulinData.notes,
-      calculationFactors: {
-        absorptionFactor: insulinBreakdown?.absorptionFactor,
-        mealTimingFactor: insulinBreakdown?.mealTimingFactor,
-        activityImpact: activityImpactFromRecording,
-        healthMultiplier: healthFactors?.healthMultiplier,
-        medications: healthFactors?.medications?.map(med => ({
-          name: med.name,
-          factor: med.factor,
-          status: med.status,
-          hoursSinceLastDose: med.hoursSinceLastDose
-        })) || [],
-        conditions: healthFactors?.conditions?.map(condition => ({
-          name: condition.name,
-          factor: condition.factor
-        })) || []
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('Authentication token not found');
       }
-    };
 
-    // Add medication scheduling information if insulin is being logged
-    if (insulinData.dose && insulinData.type) {
-      const administrationTime = insulinData.administrationTime ?
-        TimeManager.localToUTCISOString(insulinData.administrationTime) :
-        new Date().toISOString();
+      // Make sure we have a properly formatted UTC timestamp for blood sugar reading
+      const utcBloodSugarTimestamp = localToUTC(bloodSugarTimestamp);
+      console.log('Submitting blood sugar timestamp (UTC):', utcBloodSugarTimestamp);
 
-      mealData.medicationLog = {
-        is_insulin: true,
-        dose: parseFloat(insulinData.dose),
-        medication: insulinData.type,
-        scheduled_time: administrationTime, // Make sure this is in UTC
+      // Get activity IDs if activities were recorded separately
+      let activityIds = [];
+
+      // If we have recorded activities separately before this meal submission
+      if (activitiesFromRecording.length > 0) {
+        try {
+          // First record the activities separately to get their IDs
+          const activitiesData = {
+            expectedActivities: activitiesFromRecording.map(activity => {
+              const durationData = useTimeContextFunctions
+                ? timeContext.TimeManager.calculateDuration(activity.startTime, activity.endTime)
+                : TimeManager.calculateDuration(activity.startTime, activity.endTime);
+
+              // Convert local time to UTC for API
+              const startTimeUTC = localToUTC(activity.startTime);
+              const endTimeUTC = localToUTC(activity.endTime);
+
+              return {
+                level: activity.level,
+                duration: useTimeContextFunctions
+                  ? timeContext.TimeManager.hoursToTimeString(durationData.totalHours)
+                  : TimeManager.hoursToTimeString(durationData.totalHours),
+                expectedTime: startTimeUTC,
+                startTime: startTimeUTC,
+                endTime: endTimeUTC,
+                impact: activity.impact,
+                notes: ""
+              };
+            }),
+            completedActivities: [] // We typically use expected activities in meal context
+          };
+
+          const activityResponse = await axios.post(
+            'http://localhost:5000/api/record-activities',
+            activitiesData,
+            {
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              }
+            }
+          );
+
+          // Store the IDs of created activities
+          if (activityResponse.data && activityResponse.data.activity_ids) {
+            activityIds = activityResponse.data.activity_ids;
+            console.log('Activities recorded separately with IDs:', activityIds);
+          }
+        } catch (error) {
+          console.warn('Failed to record activities separately:', error);
+          // Continue with meal submission even if activity recording fails
+        }
+      }
+
+      // Create meal data object
+      const mealData = {
+        mealType,
+        recordingType: 'meal',
+        foodItems: selectedFoods.map(food => {
+          const isWeightMeasurement = food.portion.activeMeasurement === 'weight';
+          const amount = isWeightMeasurement ? food.portion.w_amount : food.portion.amount;
+          const unit = isWeightMeasurement ? food.portion.w_unit : food.portion.unit;
+
+          if (!amount || !unit) {
+            throw new Error(`Invalid measurement for food item: ${food.name}`);
+          }
+
+          return {
+            name: food.name,
+            portion: {
+              amount: parseFloat(amount) || 1,
+              unit: unit || (isWeightMeasurement ? 'g' : 'ml'),
+              measurement_type: food.portion.activeMeasurement || 'weight'
+            },
+            details: {
+              carbs: parseFloat(food.details.carbs) || 0,
+              protein: parseFloat(food.details.protein) || 0,
+              fat: parseFloat(food.details.fat) || 0,
+              absorption_type: food.details.absorption_type || 'medium',
+              serving_size: {
+                amount: food.details.serving_size?.amount || 1,
+                unit: food.details.serving_size?.unit || 'serving',
+                w_amount: food.details.serving_size?.w_amount,
+                w_unit: food.details.serving_size?.w_unit
+              }
+            }
+          };
+        }),
+        // Don't send activities array anymore, just IDs
+        activityIds: activityIds, // Use the array of activity IDs
+        bloodSugar: bloodSugar ? parseFloat(bloodSugar) : null,
+        bloodSugarTimestamp: utcBloodSugarTimestamp,
+        bloodSugarSource,
+        intendedInsulin: insulinData.dose ? parseFloat(insulinData.dose) : null,
+        intendedInsulinType: insulinData.type,
+        suggestedInsulinType,
         notes: insulinData.notes,
-        meal_context: {
-          meal_type: mealType,
-          blood_sugar: bloodSugar ? parseFloat(bloodSugar) : null,
-          suggested_dose: suggestedInsulin ? parseFloat(suggestedInsulin) : null,
+        calculationFactors: {
+          absorptionFactor: insulinBreakdown?.absorptionFactor,
+          mealTimingFactor: insulinBreakdown?.mealTimingFactor,
+          activityImpact: activityImpactFromRecording,
+          healthMultiplier: healthFactors?.healthMultiplier,
+          medications: healthFactors?.medications?.map(med => ({
+            name: med.name,
+            factor: med.factor,
+            status: med.status,
+            hoursSinceLastDose: med.hoursSinceLastDose
+          })) || [],
+          conditions: healthFactors?.conditions?.map(condition => ({
+            name: condition.name,
+            factor: condition.factor
+          })) || []
         }
       };
-    }
 
-    console.log('Submitting meal with data:', mealData);
-    const response = await axios.post(
-      'http://localhost:5000/api/meal',
-      mealData,
-      {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
+      // Add medication scheduling information if insulin is being logged
+      if (insulinData.dose && insulinData.type) {
+        const administrationTime = insulinData.administrationTime ?
+          localToUTC(insulinData.administrationTime) :
+          new Date().toISOString();
+
+        mealData.medicationLog = {
+          is_insulin: true,
+          dose: parseFloat(insulinData.dose),
+          medication: insulinData.type,
+          scheduled_time: administrationTime, // Make sure this is in UTC
+          notes: insulinData.notes,
+          meal_context: {
+            meal_type: mealType,
+            blood_sugar: bloodSugar ? parseFloat(bloodSugar) : null,
+            suggested_dose: suggestedInsulin ? parseFloat(suggestedInsulin) : null,
+          }
+        };
       }
-    );
 
-    setBackendCalculation(response.data.insulinCalculation);
-    setMessage('Meal logged successfully!');
+      console.log('Submitting meal with data:', mealData);
+      const response = await axios.post(
+        'http://localhost:5000/api/meal',
+        mealData,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
 
-    // Log the response for debugging
-    console.log('Meal submission response:', response.data);
+      setBackendCalculation(response.data.insulinCalculation);
+      setMessage('Meal logged successfully!');
 
-    // Reset form
-    setMealType('');
-    setSelectedFoods([]);
-    setActivitiesFromRecording([]);
-    setBloodSugar('');
-    setSuggestedInsulin('');
-    setInsulinBreakdown(null);
-    setInsulinData({
-      type: '',
-      dose: '',
-      notes: ''
-    });
-    setSuggestedInsulinType('');
+      // Log the response for debugging
+      console.log('Meal submission response:', response.data);
 
-    // Refresh constants to update medication schedules
-    if (insulinData.dose && insulinData.type) {
-      await refreshConstants();
+      // Reset form
+      setMealType('');
+      setSelectedFoods([]);
+      setActivitiesFromRecording([]);
+      setBloodSugar('');
+      setSuggestedInsulin('');
+      setInsulinBreakdown(null);
+      setInsulinData({
+        type: '',
+        dose: '',
+        notes: ''
+      });
+      setSuggestedInsulinType('');
+
+      // Refresh constants to update medication schedules
+      if (insulinData.dose && insulinData.type) {
+        await refreshConstants();
+      }
+
+      // Refresh recent meals
+      await fetchRecentMeals();
+
+    } catch (error) {
+      console.error('Error submitting meal:', error);
+      const errorMessage = error.response?.data?.error || error.message;
+      setMessage(`Error: ${errorMessage}`);
+    } finally {
+      setIsSubmitting(false);
     }
-
-    // Refresh recent meals
-    await fetchRecentMeals();
-
-  } catch (error) {
-    console.error('Error submitting meal:', error);
-    const errorMessage = error.response?.data?.error || error.message;
-    setMessage(`Error: ${errorMessage}`);
-  } finally {
-    setIsSubmitting(false);
-  }
-};
+  };
 
   if (loading) {
     return <div className={styles.loading}>Loading patient constants...</div>;
@@ -653,102 +668,103 @@ const MealInput = () => {
         </div>
       )}
 
-      {/* Recent Meals Section - Updated to show meal count */}
-   {showRecentMeals && (
-  <div className={styles.recentMeals}>
-    <h3>Recent Meals ({recentMeals.length})</h3>
-    {isLoadingMeals ? (
-      <div className={styles.loadingMeals}>Loading recent meals...</div>
-    ) : recentMeals.length > 0 ? (
-      <div className={styles.mealsList}>
-        {recentMeals.map((meal) => (
-          <div key={meal.id} className={styles.mealItem}>
-            <div className={styles.mealHeader}>
-              <span className={styles.mealType}>
-                {meal.mealType.charAt(0).toUpperCase() + meal.mealType.slice(1)}
-              </span>
-              <span className={styles.mealTimestamp}>
-                {new Date(meal.timestamp).toLocaleString()}
-              </span>
-            </div>
-            <div className={styles.mealDetails}>
-              <div className={styles.foodItems}>
-                {meal.foodItems.length > 0 ? (
-                  <div>
-                    {meal.foodItems.slice(0, 3).map((food, idx) => (
-                      <span key={idx} className={styles.foodItem}>
-                        {food.name}
-                      </span>
-                    ))}
-                    {meal.foodItems.length > 3 && (
-                      <span className={styles.moreFoods}>
-                        +{meal.foodItems.length - 3} more
-                      </span>
+      {/* Recent Meals Section */}
+      {showRecentMeals && (
+        <div className={styles.recentMeals}>
+          <h3>Recent Meals ({recentMeals.length})</h3>
+          {isLoadingMeals ? (
+            <div className={styles.loadingMeals}>Loading recent meals...</div>
+          ) : recentMeals.length > 0 ? (
+            <div className={styles.mealsList}>
+              {recentMeals.map((meal) => (
+                <div key={meal.id} className={styles.mealItem}>
+                  <div className={styles.mealHeader}>
+                    <span className={styles.mealType}>
+                      {meal.mealType.charAt(0).toUpperCase() + meal.mealType.slice(1)}
+                    </span>
+                    <span className={styles.mealTimestamp}>
+                      {formatDateTime(meal.timestamp)}
+                    </span>
+                  </div>
+                  <div className={styles.mealDetails}>
+                    <div className={styles.foodItems}>
+                      {meal.foodItems.length > 0 ? (
+                        <div>
+                          {meal.foodItems.slice(0, 3).map((food, idx) => (
+                            <span key={idx} className={styles.foodItem}>
+                              {food.name}
+                            </span>
+                          ))}
+                          {meal.foodItems.length > 3 && (
+                            <span className={styles.moreFoods}>
+                              +{meal.foodItems.length - 3} more
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className={styles.noFoods}>No food items</span>
+                      )}
+                    </div>
+                    <div className={styles.mealNutrition}>
+                      <span>{meal.nutrition?.carbs || 0}g carbs</span>
+                      <span>{meal.nutrition?.protein || 0}g protein</span>
+                      <span>{meal.nutrition?.fat || 0}g fat</span>
+                    </div>
+
+                    {/* Prominently display calculation summary with meal_only_suggested_insulin */}
+                    {meal.calculation_summary && (
+                      <div className={styles.mealCalculationSummary}>
+                        <div className={styles.calcRow}>
+                          <span className={styles.calcLabel}>Base Units:</span>
+                          <span className={styles.calcValue}>{meal.calculation_summary.base_insulin?.toFixed(1) || 'N/A'}</span>
+                        </div>
+
+                        {meal.calculation_summary.adjustment_factors && (
+                          <div className={styles.calcRow}>
+                            <span className={styles.calcLabel}>Adjustments:</span>
+                            <span className={styles.calcValue}>
+                              <span className={styles.adjFactor}>
+                                Abs: {((meal.calculation_summary.adjustment_factors.absorption_rate - 1) * 100).toFixed(0)}%
+                              </span>
+                              <span className={styles.adjFactor}>
+                                Timing: {((meal.calculation_summary.adjustment_factors.meal_timing - 1) * 100).toFixed(0)}%
+                              </span>
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Prominently display meal_only_suggested_insulin */}
+                        {meal.calculation_summary.meal_only_suggested_insulin !== undefined && (
+                          <div className={`${styles.calcRow} ${styles.suggestedInsulinRow}`}>
+                            <span className={styles.calcLabel}>Meal Only Suggested Insulin:</span>
+                            <span className={styles.suggestedValue}>
+                              {meal.calculation_summary.meal_only_suggested_insulin.toFixed(1)} units
+                            </span>
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
-                ) : (
-                  <span className={styles.noFoods}>No food items</span>
-                )}
-              </div>
-              <div className={styles.mealNutrition}>
-                <span>{meal.nutrition?.carbs || 0}g carbs</span>
-                <span>{meal.nutrition?.protein || 0}g protein</span>
-                <span>{meal.nutrition?.fat || 0}g fat</span>
-              </div>
-
-              {/* Prominently display calculation summary with meal_only_suggested_insulin */}
-              {meal.calculation_summary && (
-                <div className={styles.mealCalculationSummary}>
-                  <div className={styles.calcRow}>
-                    <span className={styles.calcLabel}>Base Units:</span>
-                    <span className={styles.calcValue}>{meal.calculation_summary.base_insulin?.toFixed(1) || 'N/A'}</span>
-                  </div>
-
-                  {meal.calculation_summary.adjustment_factors && (
-                    <div className={styles.calcRow}>
-                      <span className={styles.calcLabel}>Adjustments:</span>
-                      <span className={styles.calcValue}>
-                        <span className={styles.adjFactor}>
-                          Abs: {((meal.calculation_summary.adjustment_factors.absorption_rate - 1) * 100).toFixed(0)}%
-                        </span>
-                        <span className={styles.adjFactor}>
-                          Timing: {((meal.calculation_summary.adjustment_factors.meal_timing - 1) * 100).toFixed(0)}%
-                        </span>
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Prominently display meal_only_suggested_insulin */}
-                  {meal.calculation_summary.meal_only_suggested_insulin !== undefined && (
-                    <div className={`${styles.calcRow} ${styles.suggestedInsulinRow}`}>
-                      <span className={styles.calcLabel}>Meal Only Suggested Insulin:</span>
-                      <span className={styles.suggestedValue}>
-                        {meal.calculation_summary.meal_only_suggested_insulin.toFixed(1)} units
-                      </span>
-                    </div>
-                  )}
                 </div>
-              )}
+              ))}
             </div>
+          ) : (
+            <p className={styles.noMeals}>No recent meals found</p>
+          )}
+          <div className={styles.mealsFooter}>
+            <span className={styles.viewAllMeals}>
+              <a href="#" onClick={(e) => {
+                e.preventDefault();
+                window.location.href = '/meal-history';
+              }}>
+                View all meals →
+              </a>
+            </span>
           </div>
-        ))}
-      </div>
-    ) : (
-      <p className={styles.noMeals}>No recent meals found</p>
-    )}
-    <div className={styles.mealsFooter}>
-      <span className={styles.viewAllMeals}>
-        <a href="#" onClick={(e) => {
-          e.preventDefault();
-          window.location.href = '/meal-history';
-        }}>
-          View all meals →
-        </a>
-      </span>
-    </div>
-  </div>
-)}
-            <form className={styles.form} onSubmit={handleSubmit} onKeyDown={preventFormSubmission}>
+        </div>
+      )}
+
+      <form className={styles.form} onSubmit={handleSubmit} onKeyDown={preventFormSubmission}>
         <div className={styles.formField}>
           <label htmlFor="mealType">Meal Type</label>
           <select
@@ -800,10 +816,11 @@ const MealInput = () => {
               disabled={isSubmitting}
               standalone={false}
               className={styles.mealInputBloodSugar}
+              useTimeContext={useTimeContextFunctions}
             />
             {bloodSugarTimestamp && (
               <div className="timestamp-display">
-                Reading time: {moment(bloodSugarTimestamp).local().format('MM/DD/YYYY, HH:mm:ss')}
+                Reading time: {formatDateTime(bloodSugarTimestamp)}
               </div>
             )}
           </div>
