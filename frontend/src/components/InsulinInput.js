@@ -86,18 +86,19 @@ const InsulinInput = ({
       if (response.data && response.data.logs) {
         console.log('Recent doses fetched:', response.data.logs);
 
-        // Make sure we process the timestamp correctly
+        // Process each dose with improved timestamp handling
         const processedDoses = response.data.logs.map(dose => {
-          // Ensure scheduled_time has timezone information
-          let scheduledTime = dose.scheduled_time;
-          if (scheduledTime && !scheduledTime.endsWith('Z') &&
-              !scheduledTime.includes('+') && !scheduledTime.includes('-', 10)) {
-            scheduledTime += 'Z';  // Append Z to indicate UTC if not present
-          }
+          // Parse timestamps with our enhanced function that handles timezone correctly
+          const scheduledTime = dose.scheduled_time || dose.taken_at;
+          const takenAt = dose.taken_at || dose.scheduled_time;
 
           return {
             ...dose,
-            scheduled_time: scheduledTime
+            scheduled_time: scheduledTime,
+            taken_at: takenAt,
+            // Add parsed timestamps as Date objects for accurate calculations
+            scheduled_time_date: TimeManager.parseTimestamp(scheduledTime),
+            taken_at_date: TimeManager.parseTimestamp(takenAt)
           };
         });
 
@@ -176,30 +177,31 @@ const InsulinInput = ({
   };
 
   const calculateActiveStatus = (dose) => {
-  const now = new Date();
+    // Get system time instead of browser time
+    const now = TimeManager.parseTimestamp(TimeManager.getSystemDateTime());
 
-  // Handle cases where the effect timing fields aren't available
-  if (!dose.effect_start_time || !dose.effect_end_time) {
-    return "Unknown status";
-  }
+    // Handle cases where the effect timing fields aren't available
+    if (!dose.effect_start_time || !dose.effect_end_time) {
+      return "Unknown status";
+    }
 
-  const effectStart = new Date(dose.effect_start_time);
-  const onsetTime = dose.onset_time ? new Date(dose.onset_time) : null;
-  const peakTime = dose.peak_time ? new Date(dose.peak_time) : null;
-  const effectEnd = new Date(dose.effect_end_time);
+    const effectStart = TimeManager.parseTimestamp(dose.effect_start_time);
+    const onsetTime = dose.onset_time ? TimeManager.parseTimestamp(dose.onset_time) : null;
+    const peakTime = dose.peak_time ? TimeManager.parseTimestamp(dose.peak_time) : null;
+    const effectEnd = TimeManager.parseTimestamp(dose.effect_end_time);
 
-  if (now < effectStart) {
-    return "Not yet active";
-  } else if (onsetTime && now < onsetTime) {
-    return "Starting to work";
-  } else if (peakTime && now < peakTime) {
-    return "Approaching peak";
-  } else if (now < effectEnd) {
-    return "Active and decreasing";
-  } else {
-    return "Completed";
-  }
-};
+    if (now < effectStart) {
+      return "Not yet active";
+    } else if (onsetTime && now < onsetTime) {
+      return "Starting to work";
+    } else if (peakTime && now < peakTime) {
+      return "Approaching peak";
+    } else if (now < effectEnd) {
+      return "Active and decreasing";
+    } else {
+      return "Completed";
+    }
+  };
 
   const toggleExpanded = () => {
     setExpanded(!expanded);
@@ -299,7 +301,7 @@ const InsulinInput = ({
       // Refresh the recent doses list and constants
       await fetchRecentDoses();
       await refreshConstants();
-  await fetchActiveInsulin(); // Add this line to update active insulin data
+      await fetchActiveInsulin(); // Update active insulin data
 
     } catch (error) {
       console.error('Error importing data:', error);
@@ -312,57 +314,65 @@ const InsulinInput = ({
       setIsSubmitting(false);
     }
   };
-const [activeInsulin, setActiveInsulin] = useState(null);
 
-const handleActiveInsulinData = (backendData) => {
-  if (!backendData) return null;
+  const [activeInsulin, setActiveInsulin] = useState(null);
 
-  // Explicitly convert timestamps to local time for display
-  const contributions = backendData.insulin_contributions.map(contrib => ({
-    ...contrib,
-    // Convert UTC string to Date object in local time
-    taken_at: contrib.taken_at,
-    // Store the parsed date for relative time calculations
-    taken_at_date: new Date(contrib.taken_at)
-  }));
+  const handleActiveInsulinData = (backendData) => {
+    if (!backendData) return null;
 
-  return {
-    ...backendData,
-    calculation_time_local: new Date(backendData.calculation_time),
-    insulin_contributions: contributions
+    // Parse calculation time using our enhanced parser
+    const calculationTime = TimeManager.parseTimestamp(backendData.calculation_time);
+
+    // Process insulin contributions with corrected timestamp handling
+    const contributions = backendData.insulin_contributions.map(contrib => {
+      // Ensure we parse the timestamp correctly to avoid timezone issues
+      const takenAt = TimeManager.parseTimestamp(contrib.taken_at);
+
+      return {
+        ...contrib,
+        taken_at: contrib.taken_at,
+        // Store the correctly parsed date object for accurate time calculations
+        taken_at_date: takenAt
+      };
+    });
+
+    return {
+      ...backendData,
+      calculation_time_local: calculationTime,
+      insulin_contributions: contributions
+    };
   };
-};
 
-// Update fetchActiveInsulin function
-const fetchActiveInsulin = async () => {
-  try {
-    const token = localStorage.getItem('token');
-    if (!token) return;
+  // Update fetchActiveInsulin function to use enhanced timestamp handling
+  const fetchActiveInsulin = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
 
-    console.log("Fetching active insulin data...");
+      console.log("Fetching active insulin data...");
 
-    const response = await axios.get(
-      'http://localhost:5000/api/active-insulin',
-      {
-        headers: { 'Authorization': `Bearer ${token}` }
-      }
-    );
+      const response = await axios.get(
+        'http://localhost:5000/api/active-insulin',
+        {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }
+      );
 
-    // Process the response data
-    const processedData = handleActiveInsulinData(response.data);
-    console.log("Active insulin data:", processedData);
+      // Process the response data with our improved handler
+      const processedData = handleActiveInsulinData(response.data);
+      console.log("Active insulin data:", processedData);
 
-    setActiveInsulin(processedData);
-  } catch (err) {
-    console.error("Error fetching active insulin", err);
-  }
-};
+      setActiveInsulin(processedData);
+    } catch (err) {
+      console.error("Error fetching active insulin", err);
+    }
+  };
 
 
-// Call this when component loads and after recording insulin
-useEffect(() => {
-  fetchActiveInsulin();
-}, []);
+  // Call this when component loads and after recording insulin
+  useEffect(() => {
+    fetchActiveInsulin();
+  }, []);
 
   const handleSubmit = async (e) => {
     if (e) e.preventDefault();
@@ -440,6 +450,7 @@ useEffect(() => {
         // Refresh the list of doses to show the newly added one
         await fetchRecentDoses();
         await refreshConstants();
+        await fetchActiveInsulin(); // Update active insulin data after logging a new dose
 
         // Reset form if standalone
         setSelectedInsulin('');
@@ -632,32 +643,32 @@ useEffect(() => {
         </div>
 
         {activeInsulin && activeInsulin.total_active_insulin > 0 && (
-  <div className={styles.activeInsulinSection}>
-    <h4>
-      Active Insulin: {activeInsulin.total_active_insulin} units
-      <span className={styles.calculationTime}>
-        (as of {TimeManager.formatDateTime(activeInsulin.calculation_time_local)})
-      </span>
-    </h4>
-    <div className={styles.insulinContributions}>
-      {activeInsulin.insulin_contributions.map((contrib, idx) => (
-        <div key={idx} className={styles.insulinDose}>
-          <span className={styles.doseMedication}>
-            {formatInsulinName(contrib.medication)}
-          </span>
-          <span className={styles.doseDetails}>
-            {contrib.initial_dose} units, {contrib.active_units} active
-            <div className={styles.doseTime}>
-              {/* Use the taken_at_date object for accurate relative time */}
-              Taken {TimeManager.formatRelativeTime(contrib.taken_at_date || contrib.taken_at)}
-              ({Math.round(contrib.activity_percent)}% active)
+          <div className={styles.activeInsulinSection}>
+            <h4>
+              Active Insulin: {activeInsulin.total_active_insulin} units
+              <span className={styles.calculationTime}>
+                (as of {TimeManager.formatDateTime(activeInsulin.calculation_time_local)})
+              </span>
+            </h4>
+            <div className={styles.insulinContributions}>
+              {activeInsulin.insulin_contributions.map((contrib, idx) => (
+                <div key={idx} className={styles.insulinDose}>
+                  <span className={styles.doseMedication}>
+                    {formatInsulinName(contrib.medication)}
+                  </span>
+                  <span className={styles.doseDetails}>
+                    {contrib.initial_dose} units, {contrib.active_units} active
+                    <div className={styles.doseTime}>
+                      {/* Use our improved relative time formatting with correct date objects */}
+                      Taken {TimeManager.formatRelativeTime(contrib.taken_at_date)}
+                      ({Math.round(contrib.activity_percent)}% active)
+                    </div>
+                  </span>
+                </div>
+              ))}
             </div>
-          </span>
-        </div>
-      ))}
-    </div>
-  </div>
-)}
+          </div>
+        )}
 
         {/* Insulin details accordion */}
         {selectedInsulin && patientConstants?.medication_factors?.[selectedInsulin] && (
@@ -759,34 +770,34 @@ useEffect(() => {
             <div className={styles.loadingDoses}>Loading recent doses...</div>
           ) : recentDoses.length > 0 ? (
             <div className={styles.dosesList}>
-{recentDoses.map((dose, index) => (
-  <div key={index} className={styles.doseItem}>
-    <div className={styles.doseHeader}>
-      <span className={styles.doseType}>
-        {formatInsulinName(dose.medication)}
-      </span>
-      <span className={styles.doseAmount}>
-        {dose.dose} units
-      </span>
-    </div>
-    <div className={styles.doseDetails}>
-      <span className={styles.doseTime}>
-        {TimeManager.formatDateTime(dose.taken_at || dose.scheduled_time)}
-      </span>
-      {dose.effect_end_time && (
-        <span className={styles.doseActivity}>
-          {calculateActiveStatus(dose)}
-          {new Date() < new Date(dose.effect_end_time) ?
-            ` (Active until ${TimeManager.formatTime(dose.effect_end_time)})` :
-            " (Inactive)"}
-        </span>
-      )}
-      {dose.notes && (
-        <span className={styles.doseNotes}>{dose.notes}</span>
-      )}
-    </div>
-  </div>
-))}
+              {recentDoses.map((dose, index) => (
+                <div key={index} className={styles.doseItem}>
+                  <div className={styles.doseHeader}>
+                    <span className={styles.doseType}>
+                      {formatInsulinName(dose.medication)}
+                    </span>
+                    <span className={styles.doseAmount}>
+                      {dose.dose} units
+                    </span>
+                  </div>
+                  <div className={styles.doseDetails}>
+                    <span className={styles.doseTime}>
+                      {TimeManager.formatDateTime(dose.taken_at_date || dose.taken_at || dose.scheduled_time)}
+                    </span>
+                    {dose.effect_end_time && (
+                      <span className={styles.doseActivity}>
+                        {calculateActiveStatus(dose)}
+                        {TimeManager.parseTimestamp(TimeManager.getSystemDateTime()) < TimeManager.parseTimestamp(dose.effect_end_time) ?
+                          ` (Active until ${TimeManager.formatTime(dose.effect_end_time)})` :
+                          " (Inactive)"}
+                      </span>
+                    )}
+                    {dose.notes && (
+                      <span className={styles.doseNotes}>{dose.notes}</span>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           ) : (
             <p className={styles.noDoses}>No recent insulin doses found</p>

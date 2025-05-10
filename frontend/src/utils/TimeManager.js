@@ -59,42 +59,41 @@ class TimeManager {
    * @returns {string} System date/time in specified format
    */
   static getSystemDateTime(format = null) {
-    // For the diabetes management system, we're using a specific time
-    const systemTime = "2025-04-28 10:10:50";
+  // Use the exact current UTC time provided by the user
+  const systemTime = "2025-05-10 13:05:49"; // Current UTC time
 
-    if (!format) {
-      return systemTime;
-    }
-
-    // Parse the system time string and format it as requested
-    try {
-      const [datePart, timePart] = systemTime.split(' ');
-      const [year, month, day] = datePart.split('-');
-      const [hours, minutes, seconds] = timePart.split(':');
-
-      const date = new Date(
-        parseInt(year),
-        parseInt(month) - 1,
-        parseInt(day),
-        parseInt(hours),
-        parseInt(minutes),
-        parseInt(seconds || 0)
-      );
-
-      return this.formatDate(date, format);
-    } catch (e) {
-      console.error('Error parsing system time:', e);
-      return systemTime;
-    }
+  if (!format) {
+    return systemTime;
   }
 
+  // Parse the system time string and format it as requested
+  try {
+    const [datePart, timePart] = systemTime.split(' ');
+    const [year, month, day] = datePart.split('-');
+    const [hours, minutes, seconds] = timePart.split(':');
+
+    const date = new Date(Date.UTC(
+      parseInt(year),
+      parseInt(month) - 1,
+      parseInt(day),
+      parseInt(hours),
+      parseInt(minutes),
+      parseInt(seconds || 0)
+    ));
+
+    return this.formatDate(date, format);
+  } catch (e) {
+    console.error('Error parsing system time:', e);
+    return systemTime;
+  }
+}
   /**
    * Get current user login
    * @returns {string} Current user's login ID
    */
   static getCurrentUserLogin() {
     // For the diabetes management system, we're using a specific login
-    return "aliattia02ok";
+    return "aliattia02";
   }
 
   /**
@@ -280,22 +279,65 @@ static formatTime(timestamp) {
     return '';
   }
 }
+
   /**
- * Format a timestamp as a relative time (e.g., "5 minutes ago")
- * @param {string|Date} timestamp - The timestamp to format
- * @returns {string} Human-readable relative time
- */
-static formatRelativeTime(timestamp) {
+   * Parse timestamp safely ensuring it's treated correctly whether it has timezone info or not
+   * @param {string|Date} timestamp - The timestamp to parse
+   * @returns {Date} Properly parsed Date object
+   */
+  static parseTimestamp(timestamp) {
+  if (!timestamp) return new Date();
+
+  if (timestamp instanceof Date) return timestamp;
+
+  try {
+    // If the timestamp has 'Z' at the end, it's already in UTC format
+    if (typeof timestamp === 'string') {
+      if (timestamp.endsWith('Z') || timestamp.includes('+') || timestamp.includes('-', 10)) {
+        // Has timezone info - parse directly
+        return new Date(timestamp);
+      } else {
+        // No timezone info - treat as UTC time
+        const [datePart, timePart] = timestamp.includes('T')
+          ? timestamp.split('T')
+          : [timestamp.split(' ')[0], timestamp.split(' ')[1] || '00:00:00'];
+
+        if (!datePart) return new Date();
+
+        const [year, month, day] = datePart.split('-').map(num => parseInt(num, 10));
+        const [hours, minutes, seconds] = (timePart || '00:00:00').split(':').map(num => parseInt(num, 10));
+
+        // Create the date in UTC
+        return new Date(Date.UTC(year, month - 1, day, hours || 0, minutes || 0, seconds || 0));
+      }
+    }
+
+    return new Date(timestamp);
+  } catch (error) {
+    console.error('Error parsing timestamp:', error, timestamp);
+    return new Date();
+  }
+}
+  /**
+   * Format a timestamp as a relative time (e.g., "5 minutes ago")
+   * Uses system time rather than browser time for consistency
+   * @param {string|Date} timestamp - The timestamp to format
+   * @returns {string} Human-readable relative time
+   */
+  static formatRelativeTime(timestamp) {
   if (!timestamp) return '';
 
   try {
-    const date = new Date(timestamp);
-    const now = new Date();
+    // Parse the timestamp as UTC
+    const date = this.parseTimestamp(timestamp);
+
+    // Get the system time as UTC
+    const systemTime = this.parseTimestamp(this.getSystemDateTime());
 
     // Handle invalid dates
     if (isNaN(date.getTime())) return '';
 
-    const diffMs = now - date;
+    const diffMs = systemTime - date;
 
     // If very recent (less than a minute ago)
     if (diffMs < this.constants.MILLISECONDS_PER_MINUTE) {
@@ -327,6 +369,7 @@ static formatRelativeTime(timestamp) {
     return '';
   }
 }
+
   /**
    * Check if a timestamp is within a given range
    * @param {number} timestamp - Timestamp to check
@@ -408,18 +451,19 @@ static formatRelativeTime(timestamp) {
     }
   }
 
-  static formatDateTime(isoString) {
-    if (!isoString) return '';
+ static formatDateTime(isoString) {
+  if (!isoString) return '';
 
-    try {
-      const date = new Date(isoString);
-      return date.toLocaleString();
-    } catch (error) {
-      console.error('Error formatting date:', error);
-      return '';
-    }
+  try {
+    // Parse timestamp as UTC
+    const date = this.parseTimestamp(isoString);
+    // Format using browser's locale
+    return date.toLocaleString();
+  } catch (error) {
+    console.error('Error formatting date:', error);
+    return '';
   }
-
+}
   static getTimePointHoursAgo(hoursAgo) {
     const date = this.addHours(new Date(), -hoursAgo);
 
