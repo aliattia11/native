@@ -495,29 +495,31 @@ def submit_meal(current_user):
             'meal_only_suggested_insulin': round(meal_only_suggested_insulin, 1)  # Meal only suggested insulin
         }
 
-        # Create and insert meals_only document with ONLY meal-related data
-        meals_only_doc = {
-            'user_id': str(current_user['_id']),
-            'timestamp': current_time,
-            'mealType': data['mealType'],
-            'foodItems': data['foodItems'],
-            'nutrition': nutrition,
-            'notes': data.get('notes', ''),
-            'meal_id': meal_id,  # Reference to the full meal record
-            'source': 'meal_submission',
-            'calculation_summary': calculation_summary
-        }
+        # Only create meals_only document for actual meal submissions
+        if data.get('foodItems') and len(data.get('foodItems')) > 0 and data.get('mealType') not in ['blood_sugar_only', 'activity_only', 'insulin_only']:
+            # Create and insert meals_only document with ONLY meal-related data
+            meals_only_doc = {
+                'user_id': str(current_user['_id']),
+                'timestamp': current_time,
+                'mealType': data['mealType'],
+                'foodItems': data['foodItems'],
+                'nutrition': nutrition,
+                'notes': data.get('notes', ''),
+                'meal_id': meal_id,  # Reference to the full meal record
+                'source': 'meal_submission',
+                'calculation_summary': calculation_summary
+            }
 
-        # Insert into meals_only collection
-        meals_only_result = mongo.db.meals_only.insert_one(meals_only_doc)
-        meals_only_id = str(meals_only_result.inserted_id)
-        logger.info(f"Meals-only document created with ID: {meals_only_id}")
+            # Insert into meals_only collection
+            meals_only_result = mongo.db.meals_only.insert_one(meals_only_doc)
+            meals_only_id = str(meals_only_result.inserted_id)
+            logger.info(f"Meals-only document created with ID: {meals_only_id}")
 
-        # Update the main meal document with reference to meals_only
-        mongo.db.meals.update_one(
-            {"_id": result.inserted_id},
-            {"$set": {"meals_only_id": meals_only_id}}
-        )
+            # Update the main meal document with reference to meals_only
+            mongo.db.meals.update_one(
+                {"_id": result.inserted_id},
+                {"$set": {"meals_only_id": meals_only_id}}
+            )
 
         # Process activities - MODIFIED FOR TRUE BIDIRECTIONAL REFERENCES
         activity_ids = []
@@ -724,7 +726,7 @@ def submit_meal(current_user):
         return jsonify({
             "message": "Meal logged successfully",
             "id": meal_id,
-            "meals_only_id": meals_only_id,
+            "meals_only_id": meals_only_id if 'meals_only_id' in locals() else None,  # Use None if meals_only_id is not defined
             "blood_sugar_id": blood_sugar_id,  # Include the blood sugar ID if created
             "activity_ids": activity_ids,  # Include activity IDs in response
             "nutrition": nutrition,
