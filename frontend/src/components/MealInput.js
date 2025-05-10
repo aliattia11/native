@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, useContext } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useContext, useMemo } from 'react';
 import { useConstants } from '../contexts/ConstantsContext';
 import TimeContext from '../contexts/TimeContext';
 import axios from 'axios';
@@ -18,37 +18,24 @@ import { recommendInsulinType } from '../utils/insulinUtils';
 import styles from './MealInput.module.css';
 
 const MealInput = () => {
-  // Use TimeContext when available
+  // Get TimeContext and set up unified time utilities
   const timeContext = useContext(TimeContext);
 
-  // Determine whether to use TimeContext functions
-  const useTimeContextFunctions = !!timeContext;
-
-  // Helper functions for time management
-  const getCurrentTime = () => {
-    return useTimeContextFunctions
-      ? timeContext.getCurrentTimeLocal()
-      : TimeManager.getCurrentTimeISOString();
-  };
-
-  const localToUTC = (localTime) => {
-    return useTimeContextFunctions
-      ? timeContext.localToUTC(localTime)
-      : TimeManager.localToUTCISOString(localTime);
-  };
-
-  const formatDateTime = (timestamp, format) => {
-    if (!timestamp) return '';
-    return useTimeContextFunctions
-      ? timeContext.formatDateTime(timestamp, format)
-      : TimeManager.formatDateTime(timestamp);
-  };
-
-  const getUserTimeZone = () => {
-    return useTimeContextFunctions
-      ? timeContext.userTimeZone
-      : TimeManager.getUserTimeZone();
-  };
+  // Create a single timeUtils object with memoization that handles all cases consistently
+  const timeUtils = useMemo(() => {
+    return {
+      getCurrentTime: () => TimeManager.getCurrentTimeISOString(),
+      localToUTC: (localTime) => TimeManager.localToUTCISOString(localTime),
+      formatDateTime: (timestamp, format) => {
+        if (!timestamp) return '';
+        return TimeManager.formatDateTime(timestamp);
+      },
+      getUserTimeZone: () => TimeManager.getUserTimeZone(),
+      calculateDuration: (start, end) => TimeManager.calculateDuration(start, end),
+      formatRelativeTime: (time) => TimeManager.formatRelativeTime(time),
+      parseTimestamp: (timestamp) => TimeManager.parseTimestamp(timestamp)
+    };
+  }, []);
 
   const { patientConstants, loading, error, refreshConstants } = useConstants();
   const [mealType, setMealType] = useState('');
@@ -84,8 +71,8 @@ const MealInput = () => {
 
   // Get user's time zone on component mount
   useEffect(() => {
-    setUserTimeZone(getUserTimeZone());
-  }, []);
+    setUserTimeZone(timeUtils.getUserTimeZone());
+  }, [timeUtils]);
 
   // Handler for InsulinInput changes
   const handleInsulinChange = (data) => {
@@ -412,7 +399,7 @@ const MealInput = () => {
       }
 
       // Make sure we have a properly formatted UTC timestamp for blood sugar reading
-      const utcBloodSugarTimestamp = localToUTC(bloodSugarTimestamp);
+      const utcBloodSugarTimestamp = timeUtils.localToUTC(bloodSugarTimestamp);
       console.log('Submitting blood sugar timestamp (UTC):', utcBloodSugarTimestamp);
 
       // Get activity IDs if activities were recorded separately
@@ -424,19 +411,15 @@ const MealInput = () => {
           // First record the activities separately to get their IDs
           const activitiesData = {
             expectedActivities: activitiesFromRecording.map(activity => {
-              const durationData = useTimeContextFunctions
-                ? timeContext.TimeManager.calculateDuration(activity.startTime, activity.endTime)
-                : TimeManager.calculateDuration(activity.startTime, activity.endTime);
+              const durationData = timeUtils.calculateDuration(activity.startTime, activity.endTime);
 
               // Convert local time to UTC for API
-              const startTimeUTC = localToUTC(activity.startTime);
-              const endTimeUTC = localToUTC(activity.endTime);
+              const startTimeUTC = timeUtils.localToUTC(activity.startTime);
+              const endTimeUTC = timeUtils.localToUTC(activity.endTime);
 
               return {
                 level: activity.level,
-                duration: useTimeContextFunctions
-                  ? timeContext.TimeManager.hoursToTimeString(durationData.totalHours)
-                  : TimeManager.hoursToTimeString(durationData.totalHours),
+                duration: TimeManager.hoursToTimeString(durationData.totalHours),
                 expectedTime: startTimeUTC,
                 startTime: startTimeUTC,
                 endTime: endTimeUTC,
@@ -533,7 +516,7 @@ const MealInput = () => {
       // Add medication scheduling information if insulin is being logged
       if (insulinData.dose && insulinData.type) {
         const administrationTime = insulinData.administrationTime ?
-          localToUTC(insulinData.administrationTime) :
+          timeUtils.localToUTC(insulinData.administrationTime) :
           new Date().toISOString();
 
         mealData.medicationLog = {
@@ -683,7 +666,7 @@ const MealInput = () => {
                       {meal.mealType.charAt(0).toUpperCase() + meal.mealType.slice(1)}
                     </span>
                     <span className={styles.mealTimestamp}>
-                      {formatDateTime(meal.timestamp)}
+                      {timeUtils.formatDateTime(meal.timestamp)}
                     </span>
                   </div>
                   <div className={styles.mealDetails}>
@@ -816,11 +799,11 @@ const MealInput = () => {
               disabled={isSubmitting}
               standalone={false}
               className={styles.mealInputBloodSugar}
-              useTimeContext={useTimeContextFunctions}
+              useTimeContext={false} // Don't use timeContext directly in sub-components
             />
             {bloodSugarTimestamp && (
               <div className="timestamp-display">
-                Reading time: {formatDateTime(bloodSugarTimestamp)}
+                Reading time: {timeUtils.formatDateTime(bloodSugarTimestamp)}
               </div>
             )}
           </div>

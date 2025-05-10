@@ -797,24 +797,25 @@ const processBloodGlucosePredictions = useCallback((timelineData, target) => {
 
   // Helper function to get consistent colors for meal types
   const getMealColor = useCallback((mealType, isEffect = false) => {
-    // Color scheme based on meal type
-    const colorMap = {
-      'breakfast': '#8884d8', // Purple
-      'lunch': '#82ca9d',     // Green
-      'dinner': '#ff7300',    // Orange
-      'snack': '#ffc658',     // Yellow
-      'normal': '#8884d8'     // Purple
-    };
+  // Enhanced color scheme with more vibrant colors
+  const colorMap = {
+    'breakfast': '#9c6ade', // Brighter purple
+    'lunch': '#50c878',     // Emerald green
+    'dinner': '#ff5722',    // Deeper orange
+    'snack': '#ffc107',     // Vibrant yellow
+    'normal': '#8a2be2'     // More vibrant purple
+  };
 
-    const baseColor = colorMap[mealType] || '#8884d8'; // Default to purple
+  const baseColor = colorMap[mealType] || '#9c6ade'; // Default to bright purple
 
-    if (isEffect) {
-      // For effect lines, use a slightly different shade
-      return adjustColorBrightness(baseColor, -15);
-    }
+  if (isEffect) {
+    // For effect lines, use a slightly different shade
+    return adjustColorBrightness(baseColor, -15);
+  }
 
-    return baseColor;
-  }, []);
+  return baseColor;
+}, []);
+
 
   // Helper function to adjust color brightness
   const adjustColorBrightness = (hex, percent) => {
@@ -948,17 +949,20 @@ const renderMealEffectChart = () => (
         />
       )}
 
-      {/* Meal Bars */}
-      {(viewMode === 'combined' || viewMode === 'meals') && showMeals && filteredMeals.map(meal => (
-        <Bar
-          key={`meal-${meal.id}`}
-          yAxisId="mealCarbs"
-          dataKey={`mealCarbs.${meal.id}`}
-          name={`${meal.mealType} (${meal.formattedTime})`}
-          fill={getMealColor(meal.mealType)}
-          barSize={20}
-        />
-      ))}
+    {/* Meal Bars */}
+{(viewMode === 'combined' || viewMode === 'meals') && showMeals && filteredMeals.map(meal => (
+  <Bar
+    key={`meal-${meal.id}`}
+    yAxisId="mealCarbs"
+    dataKey={`mealCarbs.${meal.id}`}
+    name={`${meal.mealType} (${meal.formattedTime})`}
+    fill={getMealColor(meal.mealType)}
+    barSize={50}  // Increased from 20 to 35
+    fillOpacity={0.85}  // Added opacity for depth
+    stroke={getMealColor(meal.mealType)}
+    strokeWidth={3}  // Add a stroke outline
+  />
+))}
 
       {/* Meal Effect Area - EXPLICITLY LOG VALUES FOR DEBUGGING */}
       {(viewMode === 'combined' || viewMode === 'effect') && showMealEffect && (
@@ -993,7 +997,11 @@ const renderMealEffectChart = () => (
 );
 
   // Render nutrition distribution chart
-  const renderNutritionChart = () => (
+ const renderNutritionChart = () => {
+  // Determine if we need to apply special handling for sparse data (like single meal)
+  const isSparseData = filteredMeals.length <= 1;
+
+  return (
     <ResponsiveContainer width="100%" height={400}>
       <BarChart
         data={filteredMeals}
@@ -1001,25 +1009,51 @@ const renderMealEffectChart = () => (
       >
         <CartesianGrid strokeDasharray="3 3" />
         <XAxis
-        dataKey="timestamp"
-        type="number"
-        scale="time"
-        domain={[timeScale.start, timeScale.end]}
-        ticks={timeContext ? timeContext.generateTimeTicks() : []}
-        tickFormatter={formatXAxis}
-        angle={-45}
-        textAnchor="end"
-        height={70}
-      />
+          dataKey="timestamp"
+          type="number"
+          scale="time"
+          domain={[timeScale.start, timeScale.end]}
+          ticks={timeContext ? timeContext.generateTimeTicks() : []}
+          tickFormatter={formatXAxis}
+          angle={-45}
+          textAnchor="end"
+          height={70}
+        />
         <YAxis />
-        <Tooltip />
+        <Tooltip
+          labelFormatter={(timestamp) => TimeManager.formatDate(timestamp, TimeManager.formats.DATETIME_DISPLAY)}
+          formatter={(value, name) => {
+            return [value.toFixed(1) + "g", name];
+          }}
+        />
         <Legend />
-        <Bar dataKey="nutrition.totalCarbs" name="Carbs (g)" fill="#8884d8" stackId="nutrition" />
-        <Bar dataKey="nutrition.proteinCarbEquiv" name={`Protein as Carbs (${patientConstants?.protein_factor || 0.5}x)`} fill="#82ca9d" stackId="nutrition" />
-        <Bar dataKey="nutrition.fatCarbEquiv" name={`Fat as Carbs (${patientConstants?.fat_factor || 0.2}x)`} fill="#ffc658" stackId="nutrition" />
+
+        {/* Keep stacking behavior in both cases but force size for sparse data */}
+        <Bar
+          dataKey="nutrition.totalCarbs"
+          name="Carbs (g)"
+          fill="#8884d8"
+          stackId="nutrition"
+          barSize={isSparseData ? 40 : undefined} // Force wide bars only for single meal
+        />
+        <Bar
+          dataKey="nutrition.proteinCarbEquiv"
+          name={`Protein as Carbs (${patientConstants?.protein_factor || 0.5}x)`}
+          fill="#82ca9d"
+          stackId="nutrition"
+          barSize={isSparseData ? 40 : undefined}
+        />
+        <Bar
+          dataKey="nutrition.fatCarbEquiv"
+          name={`Fat as Carbs (${patientConstants?.fat_factor || 0.2}x)`}
+          fill="#ffc658"
+          stackId="nutrition"
+          barSize={isSparseData ? 40 : undefined}
+        />
       </BarChart>
     </ResponsiveContainer>
   );
+};
 
   // Create table columns definition
   const columns = useMemo(
