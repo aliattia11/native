@@ -24,6 +24,7 @@ import { useBloodSugarData } from '../contexts/BloodSugarDataContext';
 import TimeManager from '../utils/TimeManager';
 import TimeEffect from '../utils/TimeEffect';
 import TimeContext from '../contexts/TimeContext';
+
 import TimeInput from '../components/TimeInput';
 import { FaSync, FaChartBar, FaTable, FaList, FaFilter, FaCalendarAlt, FaInfoCircle } from 'react-icons/fa';
 
@@ -1000,12 +1001,16 @@ const renderMealEffectChart = () => (
       >
         <CartesianGrid strokeDasharray="3 3" />
         <XAxis
-          dataKey="timestamp"
-          tickFormatter={formatXAxis}
-          angle={-45}
-          textAnchor="end"
-          height={70}
-        />
+        dataKey="timestamp"
+        type="number"
+        scale="time"
+        domain={[timeScale.start, timeScale.end]}
+        ticks={timeContext ? timeContext.generateTimeTicks() : []}
+        tickFormatter={formatXAxis}
+        angle={-45}
+        textAnchor="end"
+        height={70}
+      />
         <YAxis />
         <Tooltip />
         <Legend />
