@@ -258,7 +258,75 @@ class TimeManager {
       tickFormat
     };
   }
+/**
+ * Format a timestamp as just the time (HH:MM)
+ * @param {string|Date} timestamp - The timestamp to format
+ * @returns {string} Time in HH:MM format
+ */
+static formatTime(timestamp) {
+  if (!timestamp) return '';
 
+  try {
+    const date = new Date(timestamp);
+    // Handle invalid dates
+    if (isNaN(date.getTime())) return '';
+
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+
+    return `${hours}:${minutes}`;
+  } catch (error) {
+    console.error('Error formatting time:', error);
+    return '';
+  }
+}
+  /**
+ * Format a timestamp as a relative time (e.g., "5 minutes ago")
+ * @param {string|Date} timestamp - The timestamp to format
+ * @returns {string} Human-readable relative time
+ */
+static formatRelativeTime(timestamp) {
+  if (!timestamp) return '';
+
+  try {
+    const date = new Date(timestamp);
+    const now = new Date();
+
+    // Handle invalid dates
+    if (isNaN(date.getTime())) return '';
+
+    const diffMs = now - date;
+
+    // If very recent (less than a minute ago)
+    if (diffMs < this.constants.MILLISECONDS_PER_MINUTE) {
+      return 'just now';
+    }
+
+    // If less than an hour ago
+    if (diffMs < this.constants.MILLISECONDS_PER_HOUR) {
+      const mins = Math.floor(diffMs / this.constants.MILLISECONDS_PER_MINUTE);
+      return `${mins} ${mins === 1 ? 'minute' : 'minutes'} ago`;
+    }
+
+    // If less than a day ago
+    if (diffMs < this.constants.MILLISECONDS_PER_DAY) {
+      const hours = Math.floor(diffMs / this.constants.MILLISECONDS_PER_HOUR);
+      return `${hours} ${hours === 1 ? 'hour' : 'hours'} ago`;
+    }
+
+    // If less than a week ago
+    if (diffMs < 7 * this.constants.MILLISECONDS_PER_DAY) {
+      const days = Math.floor(diffMs / this.constants.MILLISECONDS_PER_DAY);
+      return `${days} ${days === 1 ? 'day' : 'days'} ago`;
+    }
+
+    // If more than a week ago, format as a date
+    return this.formatDate(date, this.formats.DATETIME_DISPLAY);
+  } catch (error) {
+    console.error('Error formatting relative time:', error);
+    return '';
+  }
+}
   /**
    * Check if a timestamp is within a given range
    * @param {number} timestamp - Timestamp to check

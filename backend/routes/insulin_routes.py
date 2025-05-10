@@ -273,3 +273,149 @@ def get_insulin_analytics(current_user):
     except Exception as e:
         logger.error(f"Error retrieving insulin analytics: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+
+def calculate_stacked_insulin_effect(patient_id, target_time=None):
+    """
+    Calculate stacked insulin effect at a specific time
+
+    Args:
+        patient_id (str): Patient ID
+        target_time (datetime, optional): Time to calculate effect for. Defaults to current time.
+
+    Returns:
+        dict: Information about active insulin
+    """
+    from config import mongo
+    from datetime import datetime, timedelta
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    if target_time is None:
+        target_time = datetime.utcnow()
+
+    # Ensure target_time is treated as UTC
+    if hasattr(target_time, 'tzinfo') and target_time.tzinfo is not None:
+        # Convert to UTC naive datetime to match MongoDB storage format
+        target_time = target_time.replace(tzinfo=None)
+
+    logger.debug(f"Calculating insulin effect at target time: {target_time.isoformat()}")
+
+    # Find all active insulin doses (not yet at effect_end_time)
+    active_insulin = list(mongo.db.medication_logs.find({
+        'patient_id': patient_id,
+        'is_insulin': True,
+        'effect_end_time': {'$gte': target_time}
+    }))
+
+    logger.debug(f"Found {len(active_insulin)} active insulin doses")
+
+    total_active_insulin = 0
+    insulin_contributions = []
+
+    for dose in active_insulin:
+        # Get the effect profile for this dose
+        profile = dose.get('effect_profile', {})
+        onset_hours = profile.get('onset_hours', 0.5)
+        peak_hours = profile.get('peak_hours', 2.0)
+        duration_hours = profile.get('duration_hours', 4.0)
+
+        # Calculate time since dose in hours, ensuring consistent timezone handling
+        taken_at = dose.get('taken_at')
+        if not taken_at:
+            logger.debug(f"Skipping dose {dose.get('_id')} - missing taken_at time")
+            continue
+
+        # Make sure taken_at is a datetime object (not a string)
+        if isinstance(taken_at, str):
+            try:
+                # Parse ISO format string into datetime, treating it as UTC
+                taken_at = datetime.fromisoformat(taken_at.replace('Z', '+00:00')).replace(tzinfo=None)
+            except ValueError:
+                logger.warning(f"Could not parse taken_at time for dose {dose.get('_id')}: {taken_at}")
+                continue
+
+        # Debug log the time values
+        logger.debug(f"Dose {dose.get('_id')}: taken_at={taken_at.isoformat()}, target_time={target_time.isoformat()}")
+
+        # Calculate hours since dose
+        hours_since_dose = (target_time - taken_at).total_seconds() / 3600
+        logger.debug(f"Hours since dose: {hours_since_dose:.2f}")
+
+        # Calculate current activity percentage using a simplified model
+        activity_percent = 0
+        if hours_since_dose < 0:
+            # Dose is in the future (shouldn't happen but handle anyway)
+            activity_percent = 0
+            logger.warning(f"Dose {dose.get('_id')} appears to be in the future: {taken_at} vs {target_time}")
+        elif hours_since_dose < onset_hours:
+            # Linear ramp up to onset
+            activity_percent = (hours_since_dose / onset_hours) * 30  # 0-30%
+        elif hours_since_dose < peak_hours:
+            # Rise to peak
+            activity_percent = 30 + ((hours_since_dose - onset_hours) /
+                                     (peak_hours - onset_hours)) * 70  # 30-100%
+        elif hours_since_dose <= duration_hours:
+            # Decay from peak
+            activity_percent = 100 * ((duration_hours - hours_since_dose) /
+                                      (duration_hours - peak_hours))  # 100-0%
+        else:
+            # Past duration (shouldn't happen due to query filter but handle anyway)
+            activity_percent = 0
+            logger.warning(f"Dose {dose.get('_id')} outside duration window but returned in query")
+
+        # Calculate active insulin units from this dose
+        initial_dose = dose.get('dose', 0)
+        active_units = (initial_dose * activity_percent) / 100
+
+        insulin_contributions.append({
+            'dose_id': str(dose.get('_id')),
+            'medication': dose.get('medication'),
+            'initial_dose': initial_dose,
+            'taken_at': taken_at.isoformat() if isinstance(taken_at, datetime) else taken_at,
+            'hours_since_dose': round(hours_since_dose, 2),
+            'activity_percent': round(activity_percent, 1),
+            'active_units': round(active_units, 2)
+        })
+
+        total_active_insulin += active_units
+
+    return {
+        'total_active_insulin': round(total_active_insulin, 2),
+        'calculation_time': target_time.isoformat(),
+        'calculation_timezone': 'UTC',  # Explicitly state the timezone used
+        'active_doses': len(active_insulin),
+        'insulin_contributions': insulin_contributions
+    }
+
+@insulin_routes.route('/api/active-insulin', methods=['GET'])
+@token_required
+@api_error_handler
+def get_active_insulin_effect(current_user):  # Changed function name to be unique
+    """Get currently active insulin and stacked effect"""
+    try:
+        # Check if we're getting data for a specific patient (doctor access)
+        patient_id = request.args.get('patient_id')
+        if patient_id and current_user.get('user_type') != 'doctor':
+            return jsonify({'error': 'Unauthorized access'}), 403
+
+        user_id = patient_id if patient_id else str(current_user['_id'])
+
+        # Get target time if provided, otherwise use current time
+        target_time_str = request.args.get('target_time')
+        target_time = None
+        if target_time_str:
+            try:
+                target_time = datetime.fromisoformat(target_time_str.replace('Z', '+00:00'))
+            except ValueError:
+                return jsonify({'error': 'Invalid target time format'}), 400
+
+        # Calculate active insulin effect
+        active_insulin = calculate_stacked_insulin_effect(user_id, target_time)
+
+        return jsonify(active_insulin)
+
+    except Exception as e:
+        logger.error(f"Error calculating active insulin: {str(e)}")
+        return jsonify({'error': str(e)}), 500
