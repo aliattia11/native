@@ -827,6 +827,27 @@ const processBloodGlucosePredictions = useCallback((timelineData, target) => {
 
     return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
   };
+const formatLegendText = useCallback((value) => {
+  // Filter out activity_only entries
+  if (value && value.includes('activity_only')) {
+    return null; // Return null to exclude this item from legend
+  }
+
+  // Format meal entries properly
+  if (value.includes('meal-') || value === 'Blood Sugar' || value === 'Total Meal Effect') {
+    return value; // Keep standard entries
+  }
+
+  // For meal entries with timestamps, make them cleaner
+  if (value.includes('breakfast') || value.includes('lunch') ||
+      value.includes('dinner') || value.includes('snack')) {
+    // Get just the meal type without timestamp
+    const mealType = value.split(' (')[0];
+    return mealType.charAt(0).toUpperCase() + mealType.slice(1);
+  }
+
+  return value;
+}, []);
 
   // Render chart based on current chart type
 const renderMealEffectChart = () => (
@@ -884,8 +905,23 @@ const renderMealEffectChart = () => (
       )}
 
       <Tooltip content={<CustomMealTooltip />} />
-      <Legend />
-
+<Legend
+  formatter={formatLegendText}
+  payload={
+    // Filter out activity_only items from legend
+    combinedData.length > 0 ?
+      Object.keys(combinedData[0])
+        .filter(key => !key.includes('activity_only'))
+        .map(key => ({
+          value: key,
+          type: key.includes('meal') ? 'square' : 'line',
+          color: key === 'bloodSugar' ? '#8031A7' :
+                 key === 'totalMealEffect' ? '#82ca9d' :
+                 getMealColor(key.split('.')[1])
+        }))
+      : []
+  }
+/>
       {/* Target glucose reference line */}
       {showBloodSugar && (
         <ReferenceLine
