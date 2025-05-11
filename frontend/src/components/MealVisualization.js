@@ -64,7 +64,8 @@ const MealVisualization = ({
     futureHours,
     toggleFutureEffect,
     setFutureHours: setFutureHoursInContext,
-    getBloodSugarStatus
+    getBloodSugarStatus,
+    getBloodSugarAtTime
   } = useBloodSugarData();
 
   // Use contexts for constants and blood sugar data
@@ -110,8 +111,7 @@ const MealVisualization = ({
   useEffect(() => {
     setUserTimeZone(TimeManager.getUserTimeZone());
   }, []);
-
-  // Process raw meal data into the format needed for visualization
+    // Process raw meal data into the format needed for visualization
   const processMealData = useCallback((rawMeals) => {
     if (!Array.isArray(rawMeals)) {
       console.error('processMealData received non-array data:', rawMeals);
@@ -265,10 +265,11 @@ const MealVisualization = ({
     }
   }, [patientConstants, effectDurationHours]);
 
-  const estimateBaseline = useCallback((timestamp, timelineData, target = 100) => {
-    // If no timeline data, return target
+  // Estimate baseline blood glucose at a specific time from available readings
+  const estimateBaseline = useCallback((timestamp, timelineData) => {
+    // If no timeline data, return target glucose from BloodSugarDataContext
     if (!timelineData || timelineData.length === 0) {
-      return target;
+      return targetGlucose;
     }
 
     const targetTime = timestamp;
@@ -277,7 +278,7 @@ const MealVisualization = ({
     const actualReadings = timelineData.filter(point => point.isActualReading);
 
     if (actualReadings.length === 0) {
-      return target;
+      return targetGlucose;
     }
 
     // Sort readings by time distance from target
@@ -314,26 +315,44 @@ const MealVisualization = ({
     if (before) return before.bloodSugar;
     if (after) return after.bloodSugar;
 
-    // Fallback to target
-    return target;
-  }, []);
+    // Fallback to target glucose from context
+    return targetGlucose;
+  }, [targetGlucose]);
 
   // Helper function to process blood glucose predictions
-  const processBloodGlucosePredictions = useCallback((timelineData, target) => {
+  const processBloodGlucosePredictions = useCallback((timelineData) => {
     // Find points with actual readings
     const actualReadingPoints = timelineData.filter(point => point.isActualReading);
 
-    if (actualReadingPoints.length === 0 && target) {
-      // If no actual readings but we have a target, use target as baseline for all
+    // If there are no actual readings, get blood sugar data from context
+    if (actualReadingPoints.length === 0) {
+      // Use blood sugar data from context for each time point
       timelineData.forEach(point => {
-        point.estimatedBloodSugar = target;
+        // Get blood sugar at this specific time from context
+        const bloodSugarPoint = getBloodSugarAtTime(point.timestamp);
 
-        // Apply meal effect to estimated blood sugar
-        if (showMealEffect && point.totalMealEffect > 0) {
-          const mealImpact = point.totalMealEffect * MEAL_IMPACT_FACTOR;
-          point.bloodSugar = Math.max(MIN_SAFE_BLOOD_GLUCOSE, target + mealImpact);
+        // If we found a blood sugar reading for this time
+        if (bloodSugarPoint) {
+          point.estimatedBloodSugar = bloodSugarPoint.bloodSugar;
+
+          // Apply meal effect to estimated blood sugar
+          if (showMealEffect && point.totalMealEffect > 0) {
+            const mealImpact = point.totalMealEffect * MEAL_IMPACT_FACTOR;
+            point.bloodSugar = Math.max(MIN_SAFE_BLOOD_GLUCOSE, bloodSugarPoint.bloodSugar + mealImpact);
+          } else {
+            point.bloodSugar = bloodSugarPoint.bloodSugar;
+          }
         } else {
-          point.bloodSugar = target;
+          // Fall back to target glucose if no reading found
+          point.estimatedBloodSugar = targetGlucose;
+
+          // Apply meal effect to target glucose
+          if (showMealEffect && point.totalMealEffect > 0) {
+            const mealImpact = point.totalMealEffect * MEAL_IMPACT_FACTOR;
+            point.bloodSugar = Math.max(MIN_SAFE_BLOOD_GLUCOSE, targetGlucose + mealImpact);
+          } else {
+            point.bloodSugar = targetGlucose;
+          }
         }
       });
       return;
@@ -346,8 +365,15 @@ const MealVisualization = ({
       // Skip if it's an actual reading
       if (point.isActualReading) continue;
 
-      // Estimate baseline blood sugar for this point
-      point.estimatedBloodSugar = estimateBaseline(point.timestamp, timelineData, target);
+      // Estimate baseline blood sugar for this point using blood sugar data context
+      const contextBloodSugar = getBloodSugarAtTime(point.timestamp);
+
+      // Use context data if available, otherwise use local estimation
+      if (contextBloodSugar) {
+        point.estimatedBloodSugar = contextBloodSugar.bloodSugar;
+      } else {
+        point.estimatedBloodSugar = estimateBaseline(point.timestamp, timelineData);
+      }
 
       // Apply meal effect to estimated blood sugar
       if (showMealEffect && point.totalMealEffect > 0) {
@@ -357,7 +383,7 @@ const MealVisualization = ({
         point.bloodSugar = point.estimatedBloodSugar;
       }
     }
-  }, [showMealEffect, estimateBaseline]);
+  }, [showMealEffect, estimateBaseline, targetGlucose, getBloodSugarAtTime]);
 
   // Generate combined data for timeline visualization
   const generateCombinedData = useCallback((mealData, bloodGlucoseData) => {
@@ -490,7 +516,7 @@ const MealVisualization = ({
       }
 
       // Process time points to calculate blood glucose predictions where missing
-      processBloodGlucosePredictions(timelineData, targetGlucose);
+      processBloodGlucosePredictions(timelineData);
 
       console.log("Generated", timelineData.length, "timeline data points");
       return timelineData;
@@ -498,9 +524,8 @@ const MealVisualization = ({
       console.error('Error generating combined data:', error);
       return [];
     }
-  }, [calculateMealEffect, targetGlucose, includeFutureEffect, futureHours, processBloodGlucosePredictions]);
-
-  // Fetch meal and blood sugar data
+  }, [calculateMealEffect, targetGlucose, includeFutureEffect, futureHours, processBloodGlucosePredictions, getBloodSugarAtTime]);
+    // Fetch meal and blood sugar data
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
@@ -689,7 +714,8 @@ const MealVisualization = ({
   const formatXAxis = useCallback((timestamp) => {
     return TimeManager.formatDate(new Date(timestamp), TimeManager.formats.CHART_TICKS_MEDIUM);
   }, []);
-    // Helper function to get consistent colors for meal types
+
+  // Helper function to get consistent colors for meal types
   const getMealColor = useCallback((mealType, isEffect = false) => {
     // Enhanced color scheme with more vibrant colors
     const colorMap = {
@@ -859,7 +885,232 @@ const MealVisualization = ({
                               timeScale.end
                             );
 
-  // Render meal effect chart
+  const renderMealDetail = () => {
+  if (!detailView) return <div className="no-detail-message">Select a meal to view details</div>;
+
+  // Calculate carb equivalents for the detail view
+  const carbs = detailView.nutrition.totalCarbs;
+  const protein = detailView.nutrition.totalProtein;
+  const fat = detailView.nutrition.totalFat;
+  const proteinFactor = patientConstants?.protein_factor || 0.5;
+  const fatFactor = patientConstants?.fat_factor || 0.2;
+  const proteinCarbEquiv = protein * proteinFactor;
+  const fatCarbEquiv = fat * fatFactor;
+  const totalCarbEquiv = carbs + proteinCarbEquiv + fatCarbEquiv;
+
+  // Get meal effect projection using TimeEffect utility
+  let mealEffects = [];
+
+  // Create patient factors object for TimeEffect
+  const patientFactors = {
+    proteinFactor: proteinFactor,
+    fatFactor: fatFactor,
+    absorptionFactors: patientConstants?.absorption_modifiers || {
+      very_fast: 1.4,
+      fast: 1.2,
+      medium: 1.0,
+      slow: 0.8,
+      very_slow: 0.6
+    },
+    dawnPhenomenonFactor: patientConstants?.dawn_phenomenon_factor || 1.2
+  };
+
+  try {
+    // Attempt to use TimeEffect utility first
+    mealEffects = TimeEffect.calculateBGImpactCurve({
+      nutrition: {
+        carbs: carbs,
+        protein: protein,
+        fat: fat,
+        absorptionType: detailView.nutrition.absorptionType || 'medium'
+      },
+      timestamp: detailView.timestamp
+    }, patientFactors, effectDurationHours, 15);
+
+    // If no results or error, fall back to local calculation
+    if (!mealEffects || mealEffects.length === 0) {
+      mealEffects = calculateMealEffect(detailView);
+    }
+  } catch (error) {
+    console.error("Error using TimeEffect, falling back to local calculation:", error);
+    mealEffects = calculateMealEffect(detailView);
+  }
+
+  return (
+    <div className="meal-detail-view">
+      <h3>Meal Details</h3>
+      <div className="meal-detail-header">
+        <div className="meal-time">
+          <span className="label">Time:</span>
+          <span className="value">{detailView.formattedTime}</span>
+        </div>
+        <div className="meal-type">
+          <span className="label">Type:</span>
+          <span className={`value ${detailView.mealType}`}>
+            {detailView.mealType.charAt(0).toUpperCase() + detailView.mealType.slice(1)}
+          </span>
+        </div>
+      </div>
+
+      <div className="meal-nutrition-summary">
+        <h4>Nutrition Summary</h4>
+        <div className="nutrition-grid">
+          <div className="nutrition-item">
+            <span className="label">Carbs:</span>
+            <span className="value">{detailView.nutrition.totalCarbs.toFixed(1)}g</span>
+            <div className="percentage-bar">
+              <div
+                className="percentage-fill carbs"
+                style={{ width: `${detailView.nutrition.carbPercentage}%` }}
+              />
+            </div>
+            <span className="percentage">{detailView.nutrition.carbPercentage}%</span>
+          </div>
+
+          <div className="nutrition-item">
+            <span className="label">Protein:</span>
+            <span className="value">
+              {detailView.nutrition.totalProtein.toFixed(1)}g
+              <span className="carb-equivalent">
+                (={proteinCarbEquiv.toFixed(1)}g carb equiv.)
+              </span>
+            </span>
+            <div className="percentage-bar">
+              <div
+                className="percentage-fill protein"
+                style={{ width: `${detailView.nutrition.proteinPercentage}%` }}
+              />
+            </div>
+            <span className="percentage">{detailView.nutrition.proteinPercentage}%</span>
+          </div>
+
+          <div className="nutrition-item">
+            <span className="label">Fat:</span>
+            <span className="value">
+              {detailView.nutrition.totalFat.toFixed(1)}g
+              <span className="carb-equivalent">
+                (={fatCarbEquiv.toFixed(1)}g carb equiv.)
+              </span>
+            </span>
+            <div className="percentage-bar">
+              <div
+                className="percentage-fill fat"
+                style={{ width: `${detailView.nutrition.fatPercentage}%` }}
+              />
+            </div>
+            <span className="percentage">{detailView.nutrition.fatPercentage}%</span>
+          </div>
+
+          <div className="nutrition-item">
+            <span className="label">Total Carb Equivalent:</span>
+            <span className="value total-carb-equivalent">{totalCarbEquiv.toFixed(1)}g</span>
+          </div>
+
+          <div className="nutrition-item">
+            <span className="label">Absorption Type:</span>
+            <span className="value">{detailView.nutrition.absorptionType || 'medium'}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Meal Effect Visualization */}
+      {mealEffects && mealEffects.length > 0 && (
+        <div className="meal-effect-visualization">
+          <h4>Blood Glucose Impact Projection</h4>
+          <div className="effect-chart-container" style={{ height: "200px", width: "100%" }}>
+            <ResponsiveContainer>
+              <LineChart
+                data={mealEffects}
+                margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis
+                  dataKey="hoursSinceMeal"
+                  label={{ value: 'Hours After Meal', position: 'insideBottom', offset: -5 }}
+                />
+                <YAxis
+                  label={{ value: 'Impact Value', angle: -90, position: 'insideLeft' }}
+                />
+                <Tooltip
+                  formatter={(value) => [`${value.toFixed(1)} units`, 'Impact']}
+                  labelFormatter={(value) => `${value.toFixed(1)} hours after meal`}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="impactValue"
+                  name="Blood Glucose Impact"
+                  stroke="#8884d8"
+                  activeDot={{ r: 8 }}
+                />
+                <ReferenceLine
+                  x={detailView.nutrition.peak || 1}
+                  stroke="red"
+                  label={{ value: 'Peak', position: 'top' }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="effect-info">
+            <p>
+              <strong>Peak Effect:</strong> At {(detailView.nutrition.peak || 1).toFixed(1)} hours
+              after meal
+            </p>
+            <p>
+              <strong>Duration:</strong> Effects last approximately {(detailView.nutrition.duration || 3).toFixed(1)} hours
+            </p>
+            <p>
+              <strong>Absorption Type:</strong> {detailView.nutrition.absorptionType || 'Medium'} ({
+                detailView.nutrition.absorptionType === 'fast' ? 'Effects appear quickly but don\'t last as long' :
+                detailView.nutrition.absorptionType === 'slow' ? 'Effects appear gradually but last longer' :
+                'Balanced absorption rate'
+              })
+            </p>
+          </div>
+        </div>
+      )}
+
+      {detailView.foodItems.length > 0 && (
+        <div className="meal-food-items">
+          <h4>Food Items</h4>
+          <table className="food-items-table">
+            <thead>
+              <tr>
+                <th>Food</th>
+                <th>Amount</th>
+                <th>Unit</th>
+                <th>Carbs (g)</th>
+                <th>Protein (g)</th>
+                <th>Fat (g)</th>
+                <th>Calories</th>
+              </tr>
+            </thead>
+            <tbody>
+              {detailView.foodItems.map((item, index) => (
+                <tr key={index}>
+                  <td>{item.name}</td>
+                  <td>{item.portion?.amount || 1}</td>
+                  <td>{item.portion?.unit || 'serving'}</td>
+                  <td>{item.details?.carbs?.toFixed(1) || '0'}</td>
+                  <td>{item.details?.protein?.toFixed(1) || '0'}</td>
+                  <td>{item.details?.fat?.toFixed(1) || '0'}</td>
+                  <td>{Math.round(item.details?.calories) || '0'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div className="detail-actions">
+        <button className="back-button" onClick={() => setActiveView('table')}>
+          Back to List
+        </button>
+      </div>
+    </div>
+  );
+};
+
+  // Render meal effect chart - UPDATED TO USE CONTEXT BLOOD SUGAR DATA
   const renderMealEffectChart = () => (
     <ResponsiveContainer width="100%" height={500}>
       <ComposedChart
@@ -935,7 +1186,7 @@ const MealVisualization = ({
           }
         />
 
-        {/* Target glucose reference line */}
+        {/* Target glucose reference line - UPDATED TO USE CONTEXT TARGET */}
         {showBloodSugar && (
           <ReferenceLine
             y={targetGlucose}
@@ -946,7 +1197,7 @@ const MealVisualization = ({
           />
         )}
 
-        {/* Blood Sugar Line */}
+        {/* Blood Sugar Line - USING DYNAMIC BLOOD SUGAR DATA */}
         {showBloodSugar && (
           <Line
             yAxisId="bloodSugar"
@@ -968,10 +1219,10 @@ const MealVisualization = ({
             dataKey={`mealCarbs.${meal.id}`}
             name={`${meal.mealType} (${meal.formattedTime})`}
             fill={getMealColor(meal.mealType)}
-            barSize={50}  // Increased from 20 to 35
-            fillOpacity={0.85}  // Added opacity for depth
+            barSize={50}
+            fillOpacity={0.85}
             stroke={getMealColor(meal.mealType)}
-            strokeWidth={3}  // Add a stroke outline
+            strokeWidth={3}
           />
         ))}
 
@@ -1129,7 +1380,8 @@ const MealVisualization = ({
     ],
     [setDetailView]
   );
-    // Set up React Table
+
+  // Set up React Table
   const tableInstance = useTable(
     {
       columns,
@@ -1157,230 +1409,26 @@ const MealVisualization = ({
     state: { pageIndex, pageSize },
   } = tableInstance;
 
-  // Render meal detail view
-  const renderMealDetail = () => {
-    if (!detailView) return <div className="no-detail-message">Select a meal to view details</div>;
+  // Apply any date preset for date range selection
+  const applyDatePreset = (days) => {
+    const now = new Date();
+    const start = new Date(now);
+    start.setDate(start.getDate() - days);
+    const startStr = TimeManager.formatDate(start, 'YYYY-MM-DD');
 
-    // Calculate carb equivalents for the detail view
-    const carbs = detailView.nutrition.totalCarbs;
-    const protein = detailView.nutrition.totalProtein;
-    const fat = detailView.nutrition.totalFat;
-    const proteinFactor = patientConstants?.protein_factor || 0.5;
-    const fatFactor = patientConstants?.fat_factor || 0.2;
-    const proteinCarbEquiv = protein * proteinFactor;
-    const fatCarbEquiv = fat * fatFactor;
-    const totalCarbEquiv = carbs + proteinCarbEquiv + fatCarbEquiv;
-
-    // Get meal effect projection using TimeEffect utility
-    let mealEffects = [];
-
-    // Create patient factors object for TimeEffect
-    const patientFactors = {
-      proteinFactor: proteinFactor,
-      fatFactor: fatFactor,
-      absorptionFactors: patientConstants?.absorption_modifiers || {
-        very_fast: 1.4,
-        fast: 1.2,
-        medium: 1.0,
-        slow: 0.8,
-        very_slow: 0.6
-      },
-      dawnPhenomenonFactor: patientConstants?.dawn_phenomenon_factor || 1.2
-    };
-
-    try {
-      // Attempt to use TimeEffect utility first
-      mealEffects = TimeEffect.calculateBGImpactCurve({
-        nutrition: {
-          carbs: carbs,
-          protein: protein,
-          fat: fat,
-          absorptionType: detailView.nutrition.absorptionType || 'medium'
-        },
-        timestamp: detailView.timestamp
-      }, patientFactors, effectDurationHours, 15);
-
-      // If no results or error, fall back to local calculation
-      if (!mealEffects || mealEffects.length === 0) {
-        mealEffects = calculateMealEffect(detailView);
-      }
-    } catch (error) {
-      console.error("Error using TimeEffect, falling back to local calculation:", error);
-      mealEffects = calculateMealEffect(detailView);
+    let end;
+    if (days === 1) {
+      // For "Last 24h": past day plus 12 hours
+      end = new Date(now);
+      end.setHours(end.getHours() + 12);
+    } else {
+      // Default: add one future day
+      end = new Date(now);
+      end.setDate(end.getDate() + 1);
     }
+    const endStr = TimeManager.formatDate(end, 'YYYY-MM-DD');
 
-    return (
-      <div className="meal-detail-view">
-        <h3>Meal Details</h3>
-        <div className="meal-detail-header">
-          <div className="meal-time">
-            <span className="label">Time:</span>
-            <span className="value">{detailView.formattedTime}</span>
-          </div>
-          <div className="meal-type">
-            <span className="label">Type:</span>
-            <span className={`value ${detailView.mealType}`}>
-              {detailView.mealType.charAt(0).toUpperCase() + detailView.mealType.slice(1)}
-            </span>
-          </div>
-        </div>
-
-        <div className="meal-nutrition-summary">
-          <h4>Nutrition Summary</h4>
-          <div className="nutrition-grid">
-            <div className="nutrition-item">
-              <span className="label">Carbs:</span>
-              <span className="value">{detailView.nutrition.totalCarbs.toFixed(1)}g</span>
-              <div className="percentage-bar">
-                <div
-                  className="percentage-fill carbs"
-                  style={{ width: `${detailView.nutrition.carbPercentage}%` }}
-                />
-              </div>
-              <span className="percentage">{detailView.nutrition.carbPercentage}%</span>
-            </div>
-
-            <div className="nutrition-item">
-              <span className="label">Protein:</span>
-              <span className="value">
-                {detailView.nutrition.totalProtein.toFixed(1)}g
-                <span className="carb-equivalent">
-                  (={proteinCarbEquiv.toFixed(1)}g carb equiv.)
-                </span>
-              </span>
-              <div className="percentage-bar">
-                <div
-                  className="percentage-fill protein"
-                  style={{ width: `${detailView.nutrition.proteinPercentage}%` }}
-                />
-              </div>
-              <span className="percentage">{detailView.nutrition.proteinPercentage}%</span>
-            </div>
-
-            <div className="nutrition-item">
-              <span className="label">Fat:</span>
-              <span className="value">
-                {detailView.nutrition.totalFat.toFixed(1)}g
-                <span className="carb-equivalent">
-                  (={fatCarbEquiv.toFixed(1)}g carb equiv.)
-                </span>
-              </span>
-              <div className="percentage-bar">
-                <div
-                  className="percentage-fill fat"
-                  style={{ width: `${detailView.nutrition.fatPercentage}%` }}
-                />
-              </div>
-              <span className="percentage">{detailView.nutrition.fatPercentage}%</span>
-            </div>
-
-            <div className="nutrition-item">
-              <span className="label">Total Carb Equivalent:</span>
-              <span className="value total-carb-equivalent">{totalCarbEquiv.toFixed(1)}g</span>
-            </div>
-
-            <div className="nutrition-item">
-              <span className="label">Absorption Type:</span>
-              <span className="value">{detailView.nutrition.absorptionType || 'medium'}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Meal Effect Visualization */}
-        {mealEffects && mealEffects.length > 0 && (
-          <div className="meal-effect-visualization">
-            <h4>Blood Glucose Impact Projection</h4>
-            <div className="effect-chart-container" style={{ height: "200px", width: "100%" }}>
-              <ResponsiveContainer>
-                <LineChart
-                  data={mealEffects}
-                  margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis
-                    dataKey="hoursSinceMeal"
-                    label={{ value: 'Hours After Meal', position: 'insideBottom', offset: -5 }}
-                  />
-                  <YAxis
-                    label={{ value: 'Impact Value', angle: -90, position: 'insideLeft' }}
-                  />
-                  <Tooltip
-                    formatter={(value) => [`${value.toFixed(1)} units`, 'Impact']}
-                    labelFormatter={(value) => `${value.toFixed(1)} hours after meal`}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="impactValue"
-                    name="Blood Glucose Impact"
-                    stroke="#8884d8"
-                    activeDot={{ r: 8 }}
-                  />
-                  <ReferenceLine
-                    x={detailView.nutrition.peak || 1}
-                    stroke="red"
-                    label={{ value: 'Peak', position: 'top' }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="effect-info">
-              <p>
-                <strong>Peak Effect:</strong> At {(detailView.nutrition.peak || 1).toFixed(1)} hours
-                after meal
-              </p>
-              <p>
-                <strong>Duration:</strong> Effects last approximately {(detailView.nutrition.duration || 3).toFixed(1)} hours
-              </p>
-              <p>
-                <strong>Absorption Type:</strong> {detailView.nutrition.absorptionType || 'Medium'} ({
-                  detailView.nutrition.absorptionType === 'fast' ? 'Effects appear quickly but don\'t last as long' :
-                  detailView.nutrition.absorptionType === 'slow' ? 'Effects appear gradually but last longer' :
-                  'Balanced absorption rate'
-                })
-              </p>
-            </div>
-          </div>
-        )}
-
-        {detailView.foodItems.length > 0 && (
-          <div className="meal-food-items">
-            <h4>Food Items</h4>
-            <table className="food-items-table">
-              <thead>
-                <tr>
-                  <th>Food</th>
-                  <th>Amount</th>
-                  <th>Unit</th>
-                  <th>Carbs (g)</th>
-                  <th>Protein (g)</th>
-                  <th>Fat (g)</th>
-                  <th>Calories</th>
-                </tr>
-              </thead>
-              <tbody>
-                {detailView.foodItems.map((item, index) => (
-                  <tr key={index}>
-                    <td>{item.name}</td>
-                    <td>{item.portion?.amount || 1}</td>
-                    <td>{item.portion?.unit || 'serving'}</td>
-                    <td>{item.details?.carbs?.toFixed(1) || '0'}</td>
-                    <td>{item.details?.protein?.toFixed(1) || '0'}</td>
-                    <td>{item.details?.fat?.toFixed(1) || '0'}</td>
-                    <td>{Math.round(item.details?.calories) || '0'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        <div className="detail-actions">
-          <button className="back-button" onClick={() => setActiveView('table')}>
-            Back to List
-          </button>
-        </div>
-      </div>
-    );
+    handleDateRangeChange({ start: startStr, end: endStr });
   };
 
   // Main render function

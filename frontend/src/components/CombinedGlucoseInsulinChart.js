@@ -997,16 +997,19 @@ const CombinedGlucoseInsulinChart = ({ isDoctor = false, patientId = null }) => 
                     )}
 
                     {/* Insulin Doses as Bars */}
-                    {(viewMode === 'combined' || viewMode === 'doses') && selectedInsulinTypes.map((insulinType, idx) => (
-                      <Bar
-                        key={`dose-${insulinType}-${idx}`}
-                        yAxisId="insulinDose"
-                        dataKey={`insulinBars.${insulinType}`}
-                        name={`${insulinType.replace(/_/g, ' ')} Dose`}
-                        fill={getInsulinColor(insulinType, idx)}
-                        barSize={20}
-                      />
-                    ))}
+{(viewMode === 'combined' || viewMode === 'doses') && selectedInsulinTypes.map((insulinType, idx) => (
+  <Bar
+    key={`dose-${insulinType}-${idx}`}
+    yAxisId="insulinDose"
+    dataKey={`insulinBars.${insulinType}`}
+    name={`${insulinType.replace(/_/g, ' ')} Dose`}
+    fill={getInsulinColor(insulinType, idx)}
+    barSize={80}  // Increased from 50 to 80 for wider bars
+    fillOpacity={0.85}  // Added opacity for depth
+    stroke={getInsulinColor(insulinType, idx)}  // Add matching stroke
+    strokeWidth={3}  // Add stroke outline
+  />
+))}
 
                     {/* Insulin Effect Area */}
                     {(viewMode === 'combined' || viewMode === 'effect') && showExpectedEffect && (
