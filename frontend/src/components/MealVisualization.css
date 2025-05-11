@@ -1266,6 +1266,8 @@ td[data-column-id="absorptionType"] {
   border-radius: 3px;
 }
 
+
+
 /* Meal type color indicators in effect chart */
 .tooltip-meal-item.breakfast .tooltip-meal-type { background-color: #ffc107; color: #212529; }
 .tooltip-meal-item.lunch .tooltip-meal-type { background-color: #fd7e14; color: #fff; }

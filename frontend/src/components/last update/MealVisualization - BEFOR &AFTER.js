@@ -23,7 +23,6 @@ import { useBloodSugarData } from '../contexts/BloodSugarDataContext';
 import TimeManager from '../utils/TimeManager';
 import TimeEffect from '../utils/TimeEffect';
 import TimeContext from '../contexts/TimeContext';
-import { calculateMealEffect, generateMealTimelineData } from '../utils/BG_Effect';
 
 import TimeInput from '../components/TimeInput';
 import { FaSync, FaChartBar, FaTable, FaList, FaFilter, FaCalendarAlt, FaInfoCircle } from 'react-icons/fa';
@@ -198,40 +197,280 @@ const MealVisualization = ({
 
   // Calculate meal effect for a specific meal
  // REPLACE your entire calculateMealEffect function with this version
+const calculateMealEffect = useCallback((meal) => {
+  if (!meal || !patientConstants) {
+    console.log("Missing meal or patientConstants data");
+    return [];
+  }
 
+  try {
+    // Extract meal nutrition data or use defaults
+    const nutrition = meal.nutrition || {};
+    const totalCarbEquiv = nutrition.totalCarbEquiv || nutrition.totalCarbs || 0;
+    const absorptionType = nutrition.absorptionType || 'medium';
 
+    // Get absorption modifiers from constants
+    const absorptionModifiers = patientConstants.absorption_modifiers || {
+      very_fast: 1.4,
+      fast: 1.2,
+      medium: 1.0,
+      slow: 0.8,
+      very_slow: 0.6
+    };
+
+    // Define peak and duration based on absorption type
+    const absorptionFactor = absorptionModifiers[absorptionType] || 1.0;
+    const peakHour = absorptionType === 'fast' ? 1.0 :
+                    absorptionType === 'slow' ? 2.0 : 1.5;
+    const durationHours = Math.min(effectDurationHours, 6);
+
+    // Generate the effect curve similar to the original implementation
+    const startTime = meal.timestamp;
+    const results = [];
+
+    // Generate points at 15-minute intervals
+    for (let minute = 0; minute <= durationHours * 60; minute += 15) {
+      const hoursSinceMeal = minute / 60;
+      let impactValue = 0;
+
+      // Calculate impact using a physiological model
+      if (hoursSinceMeal <= peakHour) {
+        // Rising phase (bell curve shape)
+        impactValue = totalCarbEquiv * (hoursSinceMeal / peakHour) * Math.exp(1 - (hoursSinceMeal / peakHour));
+      } else if (hoursSinceMeal <= durationHours) {
+        // Falling phase (exponential decay)
+        const decayRate = 1.0 / (durationHours - peakHour);
+        impactValue = totalCarbEquiv * Math.exp(-(hoursSinceMeal - peakHour) * decayRate);
+      }
+
+      // Apply absorption factor
+      impactValue *= absorptionFactor;
+
+      // Timestamp for this point
+      const timestamp = startTime + (minute * 60 * 1000);
+
+      results.push({
+        timestamp,
+        hoursSinceMeal,
+        // Keep actual carb equivalent values
+        impactValue: Math.max(0, impactValue)
+      });
+    }
+
+    return results;
+  } catch (error) {
+    console.error("Error calculating meal effect:", error);
+    return [];
+  }
+}, [patientConstants, effectDurationHours]);
 
  const generateCombinedData = useCallback((mealData, bloodGlucoseData) => {
-  // Create options object from component state and context values
-  const options = {
-    timeScale,
-    targetGlucose,
-    includeFutureEffect,
-    futureHours,
-    effectDurationHours,
-    patientConstants
-  };
+  try {
+    if (!mealData || !Array.isArray(mealData) || mealData.length === 0) {
+      console.log("No meal data available");
+      return [];
+    }
 
-  // Create context functions object
-  const contextFunctions = {
-    getBloodSugarAtTime,
-    getBloodSugarStatus,
-    getFilteredData
-  };
+    // Find the earliest and latest timestamps
+    const allMealTimes = mealData.map(m => m.timestamp).filter(t => !isNaN(t) && t > 0);
+    const allBGTimes = bloodGlucoseData
+      .map(d => d.readingTime)
+      .filter(t => !isNaN(t) && t > 0);
 
-  // Use the utility function
-  return generateMealTimelineData(
-    mealData,
-    bloodGlucoseData,
-    options,
-    contextFunctions,
-    TimeManager
-  );
+    const allTimestamps = [...allMealTimes, ...allBGTimes];
+    if (allTimestamps.length === 0) {
+      console.log("No valid timestamps found");
+      return [];
+    }
+
+    let minTime = Math.min(...allTimestamps);
+    let maxTime = Math.max(...allTimestamps);
+
+    // If including future effects, extend the timeline
+    if (includeFutureEffect) {
+      const futureTime = TimeManager.getFutureProjectionTime(futureHours);
+      maxTime = Math.max(maxTime, futureTime);
+    }
+
+    console.log(`Timeline range: ${new Date(minTime)} to ${new Date(maxTime)}`);
+
+    // Get filtered blood sugar data from context
+    let contextBloodSugarData = getFilteredData(bloodGlucoseData);
+    console.log("Filtered blood sugar readings from context:", contextBloodSugarData.length);
+
+    // Create maps for quick lookups
+    const actualReadingsMap = new Map();
+    const estimatedReadingsMap = new Map();
+
+    // Populate blood glucose readings maps
+    bloodGlucoseData.forEach(reading => {
+      if (reading && reading.isActualReading) {
+        actualReadingsMap.set(reading.readingTime, reading);
+      } else if (reading && (reading.isEstimated || reading.isInterpolated)) {
+        estimatedReadingsMap.set(reading.readingTime, reading);
+      }
+    });
+
+    // Process meal effects for all meals
+    console.log("Processing meal effects for", mealData.length, "meals");
+    const mealEffects = mealData
+      .filter(meal => meal && !isNaN(meal.timestamp) && meal.timestamp > 0)
+      .map(meal => {
+        const effects = calculateMealEffect(meal);
+        return {
+          meal,
+          effects
+        };
+      });
+
+    // Get the current time to distinguish between historical and future data
+    const now = new Date().getTime();
+    console.log(`Current time (now): ${new Date(now).toISOString()}`);
+
+    // Create a timeline using 15-minute intervals
+    const timelineData = [];
+    const interval = 15 * 60 * 1000; // 15 minutes in milliseconds
+    let currentTime = minTime;
+    let pointsWithEffects = 0;
+
+    // Generate the timeline
+    while (currentTime <= maxTime) {
+      // Use context's getBloodSugarAtTime to get the blood sugar at this time point
+      const bsAtTime = getBloodSugarAtTime(currentTime);
+
+      // Create the time point data structure with isBeforeNow flag
+      const timePoint = {
+        timestamp: currentTime,
+        formattedTime: TimeManager.formatDate(
+          new Date(currentTime),
+          TimeManager.formats.DATETIME_DISPLAY
+        ),
+        isBeforeNow: currentTime <= now,  // Flag to indicate if this point is before or at current time
+        meals: [],
+        mealEffects: {},
+        totalMealEffect: 0,
+
+        // Use data from context if available
+        bloodSugar: bsAtTime ? bsAtTime.bloodSugar : targetGlucose,
+        estimatedBloodSugar: bsAtTime ? bsAtTime.bloodSugar : targetGlucose,
+        isActualReading: bsAtTime ? bsAtTime.isActualReading : false,
+        isInterpolated: bsAtTime ? bsAtTime.isInterpolated : false,
+        isEstimated: bsAtTime ? bsAtTime.isEstimated : false,
+        dataType: bsAtTime ? bsAtTime.dataType : 'estimated',
+        status: bsAtTime ? bsAtTime.status : getBloodSugarStatus(targetGlucose, targetGlucose)
+      };
+
+      // Add meals that occurred at this time point
+      mealData.forEach(meal => {
+        // Check if meal occurred within 15 minutes of this time point
+        if (meal && !isNaN(meal.timestamp) && Math.abs(meal.timestamp - currentTime) < interval / 2) {
+          // Add meal to the meals array for tooltip display
+          timePoint.meals.push({
+            id: meal.id,
+            mealType: meal.mealType,
+            carbs: meal.nutrition?.totalCarbs || 0,
+            protein: meal.nutrition?.totalProtein || 0,
+            fat: meal.nutrition?.totalFat || 0,
+            totalCarbEquiv: meal.nutrition?.totalCarbEquiv || 0
+          });
+
+          // Create a property like "mealCarbs.123" where 123 is the meal ID
+          if (meal.id) {
+            timePoint[`mealCarbs.${meal.id}`] = meal.nutrition?.totalCarbs || 0;
+          }
+        }
+      });
+
+      // Calculate combined meal effects at this time point
+      mealEffects.forEach(({ meal, effects }) => {
+        if (!Array.isArray(effects)) {
+          console.warn(`Invalid effects array for meal:`, meal);
+          return;
+        }
+
+        // Find effect at this time point
+        const effect = effects.find(e => Math.abs(e.timestamp - currentTime) < interval / 2);
+        if (effect && !isNaN(effect.impactValue) && effect.impactValue > 0) {
+          const mealId = meal.id;
+          if (mealId) {
+            timePoint.mealEffects[mealId] = effect.impactValue;
+            timePoint[`mealEffect.${mealId}`] = effect.impactValue;
+
+            // Track total effect
+            timePoint.totalMealEffect += effect.impactValue;
+          }
+        }
+      });
+
+      // Validate totalMealEffect
+      if (isNaN(timePoint.totalMealEffect)) {
+        console.warn("NaN totalMealEffect detected at", timePoint.formattedTime);
+        timePoint.totalMealEffect = 0;
+      }
+
+      // Apply meal effect calculations
+      if (timePoint.totalMealEffect > 0) {
+        // Get patient-specific carb-to-glucose factor from constants
+        const carbToBgFactor = patientConstants?.carb_to_bg_factor || 4.0;
+
+        // Calculate meal impact using the patient-specific factor
+        const mealImpact = timePoint.totalMealEffect * carbToBgFactor;
+
+        // Store the raw meal impact without rounding
+        timePoint.mealImpactMgdL = mealImpact;
+
+        // IMPLEMENT DIFFERENT APPROACHES BEFORE/AFTER NOW:
+        if (timePoint.isBeforeNow) {
+          // BEFORE NOW LOGIC: Show theoretical impact on target
+
+          // Preserve the original blood sugar and estimated blood sugar values
+          timePoint.historicalBloodSugar = timePoint.bloodSugar;
+          timePoint.historicalEstimatedBG = timePoint.estimatedBloodSugar;
+
+          // Calculate how this meal should have theoretically affected the target
+          // This shows the theoretical impact of the meal on the default target
+          timePoint.targetWithMealEffect = Math.max(70, targetGlucose + mealImpact);
+
+          // Only show historical meal impact on target, not on actual BG
+          // Actual readings and estimates remain unchanged
+        } else {
+          // AFTER NOW LOGIC: Show estimated future response
+
+          // Keep baseline blood sugar for reference
+          timePoint.baselineBloodSugar = timePoint.bloodSugar;
+
+          // Apply meal effect to projected blood sugar
+          // This shows our best estimate of future BG with meal effects
+          timePoint.bloodSugar = Math.max(70, timePoint.estimatedBloodSugar + mealImpact);
+          timePoint.affectedByMeal = true;
+
+          // Also calculate the theoretical target with meal effect for comparison
+          timePoint.targetWithMealEffect = Math.max(70, targetGlucose + mealImpact);
+
+          pointsWithEffects++;
+        }
+
+        // Calculate deviation from target
+        timePoint.targetDeviation = timePoint.bloodSugar - targetGlucose;
+        timePoint.targetDeviationPercent = Math.round((timePoint.bloodSugar / targetGlucose) * 100);
+
+        // Update status based on current value
+        timePoint.status = getBloodSugarStatus(timePoint.bloodSugar, targetGlucose);
+      }
+
+      // Add the time point to timeline data
+      timelineData.push(timePoint);
+      currentTime += interval;
+    }
+
+    console.log(`Generated ${timelineData.length} timeline data points, ${pointsWithEffects} with meal effects`);
+    return timelineData;
+  } catch (error) {
+    console.error('Error generating combined data:', error);
+    return [];
+  }
 }, [calculateMealEffect, targetGlucose, includeFutureEffect, futureHours,
-    getBloodSugarAtTime, getBloodSugarStatus, getFilteredData, TimeManager, patientConstants,
-    timeScale, effectDurationHours]);
-
-
+    getBloodSugarAtTime, getBloodSugarStatus, getFilteredData, TimeManager, patientConstants]);
 
   // Fetch meal and blood sugar data
  // MODIFY your fetchData function with these updates - focus on changes at the end
@@ -498,69 +737,81 @@ const CustomMealTooltip = useCallback(({ active, payload, label }) => {
     const bloodSugar = !isNaN(data.bloodSugar) ? Math.round(data.bloodSugar) : 'N/A';
     const estimatedBS = !isNaN(data.estimatedBloodSugar) ? Math.round(data.estimatedBloodSugar) : 'N/A';
     const targetWithEffect = !isNaN(data.targetWithMealEffect) ? Math.round(data.targetWithMealEffect) : 'N/A';
+    const historicalBS = !isNaN(data.historicalBloodSugar) ? Math.round(data.historicalBloodSugar) : bloodSugar;
 
     const mealImpact = data.mealImpactMgdL ||
       (data.totalMealEffect && !isNaN(data.totalMealEffect) ?
-        parseFloat((data.totalMealEffect * 1.0).toFixed(1)) : 0);
+        parseFloat((data.totalMealEffect * (patientConstants?.carb_to_bg_factor || 4.0)).toFixed(1)) : 0);
 
     return (
       <div className="meal-effect-tooltip">
         <p className="tooltip-time">{data.formattedTime}</p>
+
+        {/* Time indicator - show if we're looking at historical or future data */}
+        <p className="tooltip-timeframe">
+          {data.isBeforeNow ?
+            <span className="historical-data">Historical Data</span> :
+            <span className="future-projection">Future Projection</span>
+          }
+        </p>
 
         {/* Show meal effect information if present */}
         {data.totalMealEffect > 0 && (
           <div className="tooltip-section tooltip-meal-section">
             <h4>Meal Impact:</h4>
             <p className="tooltip-meal-impact">
-              Raw effect: <strong>+{mealImpact.toFixed(1)} mg/dL</strong>
+              Calculated effect: <strong>+{mealImpact.toFixed(1)} mg/dL</strong>
             </p>
           </div>
         )}
 
-        {/* Blood glucose information (first visualization) */}
+        {/* Blood glucose information - different display based on before/after now */}
         <div className="tooltip-section">
           <h4>Blood Glucose:</h4>
-          {data.isActualReading ? (
-            <p>Measured: <strong>{bloodSugar} mg/dL</strong></p>
+
+          {data.isBeforeNow ? (
+            // HISTORICAL DATA DISPLAY
+            <>
+              {data.isActualReading ? (
+                <p>Measured: <strong>{historicalBS} mg/dL</strong></p>
+              ) : (
+                <p>Estimated: <strong>{historicalBS} mg/dL</strong></p>
+              )}
+
+              {data.totalMealEffect > 0 && (
+                <div className="tooltip-theory-section">
+                  <p>Target glucose: {targetGlucose} mg/dL</p>
+                  <p className="tooltip-theoretical">
+                    Theoretical with meal: <strong>{targetWithEffect} mg/dL</strong>
+                    <span className="tooltip-percent">
+                      ({Math.round((targetWithEffect/targetGlucose)*100)}% of target)
+                    </span>
+                  </p>
+                </div>
+              )}
+            </>
           ) : (
+            // FUTURE PROJECTION DISPLAY
             <>
               <p>Baseline estimate: {estimatedBS} mg/dL</p>
               {data.totalMealEffect > 0 && (
                 <p className="tooltip-projected">
-                  With meal effect: <strong>{bloodSugar} mg/dL</strong>
+                  Projected with meal: <strong>{bloodSugar} mg/dL</strong>
+                  <span className="tooltip-percent">
+                    ({Math.round((bloodSugar/targetGlucose)*100)}% of target)
+                  </span>
                 </p>
               )}
             </>
           )}
+
+          {/* Status is always shown */}
           {data.status && (
             <p className="status" style={{ color: data.status.color }}>
               Status: {data.status.label}
             </p>
           )}
         </div>
-
-        {/* Target glucose information (second visualization) */}
-        {data.totalMealEffect > 0 && (
-          <div className="tooltip-section tooltip-target-section">
-            <h4>Target Impact:</h4>
-            <p>Target glucose: {targetGlucose} mg/dL</p>
-            <p className="tooltip-target-impact">
-              With same meal: <strong>{targetWithEffect} mg/dL</strong>
-              <span className="tooltip-percent">
-                ({Math.round((targetWithEffect/targetGlucose)*100)}% of target)
-              </span>
-            </p>
-
-            {/* Target status classification */}
-            {targetWithEffect > targetGlucose * 1.3 ? (
-              <p className="tooltip-status high">HIGH</p>
-            ) : targetWithEffect < targetGlucose * 0.7 ? (
-              <p className="tooltip-status low">LOW</p>
-            ) : (
-              <p className="tooltip-status normal">IN RANGE</p>
-            )}
-          </div>
-        )}
 
         {/* Meal effects details */}
         {data.mealEffects && Object.keys(data.mealEffects).length > 0 && (
@@ -580,34 +831,55 @@ const CustomMealTooltip = useCallback(({ active, payload, label }) => {
     );
   }
   return null;
-}, [targetGlucose]);
+}, [targetGlucose, patientConstants]);
 
   // Custom dot for blood sugar readings on chart
  const CustomBloodSugarDot = useCallback((props) => {
   const { cx, cy, stroke, payload } = props;
 
   // Don't render dots for non-actual readings unless they're affected by meals
+  // in the future region
   if (!payload.isActualReading && !payload.affectedByMeal) return null;
 
   // Determine dot properties based on reading type and relation to target
   const targetDiff = payload.bloodSugar - targetGlucose;
-  let radius = payload.isActualReading ? 4 : 3;
-  let strokeWidth = payload.isActualReading ? 2 : 1;
 
-  // Base color on relationship to target
-  let strokeColor;
-  if (targetDiff > targetGlucose * 0.3) {
-    strokeColor = '#ff4444'; // High
-  } else if (targetDiff < -targetGlucose * 0.3) {
-    strokeColor = '#ff8800'; // Low
-  } else if (payload.affectedByMeal) {
-    strokeColor = '#4CAF50'; // Meal affected but in range
+  // Historical vs future dots have different styling
+  let radius, strokeWidth, strokeColor, fillColor;
+
+  if (payload.isBeforeNow) {
+    // Historical dots (before now)
+    radius = payload.isActualReading ? 4 : 3;
+    strokeWidth = payload.isActualReading ? 2 : 1;
+
+    // Base color on relationship to target
+    if (targetDiff > targetGlucose * 0.3) {
+      strokeColor = '#ff4444'; // High
+    } else if (targetDiff < -targetGlucose * 0.3) {
+      strokeColor = '#ff8800'; // Low
+    } else {
+      strokeColor = '#8031A7'; // Normal
+    }
+
+    fillColor = payload.isActualReading ? "#ffffff" : "#f3e5f5";
   } else {
-    strokeColor = '#8031A7'; // Normal
-  }
+    // Future dots (after now)
+    radius = payload.affectedByMeal ? 4 : 3;
+    strokeWidth = 2;
 
-  let fillColor = payload.isActualReading ? "#ffffff" :
-                  (payload.affectedByMeal ? "#e8f5e9" : "#f3e5f5");
+    // Future dots use a different color scheme
+    if (targetDiff > targetGlucose * 0.3) {
+      strokeColor = '#e91e63'; // High (pink)
+    } else if (targetDiff < -targetGlucose * 0.3) {
+      strokeColor = '#ff9800'; // Low (orange)
+    } else if (payload.affectedByMeal) {
+      strokeColor = '#4CAF50'; // Meal affected but in range (green)
+    } else {
+      strokeColor = '#2196F3'; // Normal future estimate (blue)
+    }
+
+    fillColor = payload.affectedByMeal ? "#e8f5e9" : "#e3f2fd";
+  }
 
   return (
     <circle
@@ -620,6 +892,7 @@ const CustomMealTooltip = useCallback(({ active, payload, label }) => {
     />
   );
 }, [targetGlucose]);
+
 
   // Check if current time is within chart range
   const currentTimeInRange = timeContext && timeContext.isTimeInRange ?
@@ -734,7 +1007,7 @@ const CustomMealTooltip = useCallback(({ active, payload, label }) => {
         </>
       )}
 
-      {/* First visualization: Baseline estimated blood sugar line */}
+      {/* Baseline estimated blood sugar line */}
       {showBloodSugar && (
         <Line
           yAxisId="bloodSugar"
@@ -749,7 +1022,7 @@ const CustomMealTooltip = useCallback(({ active, payload, label }) => {
         />
       )}
 
-      {/* First visualization: Blood sugar with meal effect line */}
+      {/* Historical actual blood sugar line (before now) */}
       {showBloodSugar && (
         <Line
           yAxisId="bloodSugar"
@@ -764,20 +1037,20 @@ const CustomMealTooltip = useCallback(({ active, payload, label }) => {
         />
       )}
 
-      {/* Second visualization: Target with meal effect line */}
+      {/* Target with meal effect line - HISTORICAL (before now) */}
       {showBloodSugar && showMealEffect && (
         <Line
           yAxisId="bloodSugar"
           type="monotone"
-          dataKey="targetWithMealEffect"
-          name="Target + Meal Effect"
+          dataKey={(dataPoint) => dataPoint.isBeforeNow ? dataPoint.targetWithMealEffect : null}
+          name="Theoretical Target + Meal"
           stroke="#FF7300"  // Same color as target for association
           strokeWidth={2}
-          strokeDasharray="2 2"
+          strokeDasharray="3 3"
           dot={(props) => {
             const { cx, cy, payload } = props;
-            // Only show dots where meal effect exists
-            if (!payload.totalMealEffect || payload.totalMealEffect <= 0) return null;
+            // Only show dots where meal effect exists and is before now
+            if (!payload.totalMealEffect || payload.totalMealEffect <= 0 || !payload.isBeforeNow) return null;
 
             return (
               <circle
@@ -791,6 +1064,37 @@ const CustomMealTooltip = useCallback(({ active, payload, label }) => {
             );
           }}
           activeDot={{ r: 6, strokeWidth: 1, fill: '#FFCC80' }}
+          connectNulls
+        />
+      )}
+
+      {/* Future estimated blood sugar with meal effect (after now) */}
+      {showBloodSugar && showMealEffect && (
+        <Line
+          yAxisId="bloodSugar"
+          type="monotone"
+          dataKey={(dataPoint) => !dataPoint.isBeforeNow && dataPoint.affectedByMeal ? dataPoint.bloodSugar : null}
+          name="Projected With Meal"
+          stroke="#4CAF50" // Green for future projections
+          strokeWidth={2.5}
+          strokeDasharray="2 0" // Solid line
+          dot={(props) => {
+            const { cx, cy, payload } = props;
+            // Only show dots for future points affected by meal
+            if (payload.isBeforeNow || !payload.affectedByMeal) return null;
+
+            return (
+              <circle
+                cx={cx}
+                cy={cy}
+                r={4}
+                fill="#E8F5E9"
+                stroke="#4CAF50"
+                strokeWidth={2}
+              />
+            );
+          }}
+          activeDot={{ r: 7, strokeWidth: 2, fill: '#E8F5E9', stroke: '#4CAF50' }}
           connectNulls
         />
       )}
@@ -827,15 +1131,13 @@ const CustomMealTooltip = useCallback(({ active, payload, label }) => {
       )}
 
       {/* Current time reference line */}
-      {currentTimeInRange && (
-        <ReferenceLine
-          x={new Date().getTime()}
-          yAxisId={showBloodSugar ? "bloodSugar" : "mealCarbs"}
-          stroke="#ff0000"
-          strokeWidth={2}
-          label={{ value: 'Now', position: 'top', fill: '#ff0000' }}
-        />
-      )}
+      <ReferenceLine
+        x={new Date().getTime()}
+        yAxisId={showBloodSugar ? "bloodSugar" : "mealCarbs"}
+        stroke="#ff0000"
+        strokeWidth={2}
+        label={{ value: 'Now', position: 'top', fill: '#ff0000' }}
+      />
     </ComposedChart>
   </ResponsiveContainer>
 );
