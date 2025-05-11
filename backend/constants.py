@@ -15,6 +15,7 @@ class ConstantConfig:
     target_glucose: float = 100
     protein_factor: float = 0.5
     fat_factor: float = 0.2
+    carb_to_bg_factor: float = 4.0  # Default: 1g carbs = 4 mg/dL increase
     activity_coefficients: Dict[str, float] = field(default_factory=lambda: {
         "-2": 1.2,  # mode 1 (20% increase in insulin needs)
         "-1": 1.1,  # mode 2 (10% increase)
@@ -332,6 +333,7 @@ class Constants:
         'target_glucose': config.target_glucose,
         'protein_factor': config.protein_factor,
         'fat_factor': config.fat_factor,
+    'carb_to_bg_factor': config.carb_to_bg_factor,  # Add this line
         'activity_coefficients': config.activity_coefficients,
         'absorption_modifiers': config.absorption_modifiers,
         'insulin_timing_guidelines': config.insulin_timing_guidelines,

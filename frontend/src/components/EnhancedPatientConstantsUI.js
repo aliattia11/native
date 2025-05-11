@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import MedicationSchedule from './MedicationSchedule';
 import styles from './EnhancedPatientConstants.module.css';
@@ -271,6 +270,22 @@ return (
                   onChange={(e) => handleBasicConstantChange('target_glucose', e.target.value)}
                   step="1"
                 />
+              </div>
+              {/* New field for Carb-to-BG Factor */}
+              <div className={styles.formGroup}>
+                <label>
+                  Carb-to-BG Factor
+                  <span className={styles.tooltipIcon} title="How much 1g of carbohydrate raises blood glucose in mg/dL">ⓘ</span>
+                </label>
+                <input
+                  type="number"
+                  value={constants.carb_to_bg_factor || 4.0}
+                  onChange={(e) => handleBasicConstantChange('carb_to_bg_factor', e.target.value)}
+                  min="1.0"
+                  max="10.0"
+                  step="0.1"
+                />
+                <small className={styles.inputHint}>mg/dL per gram of carbs (typically 4-5)</small>
               </div>
               <div className={styles.formGroup}>
                 <label>Protein Factor</label>

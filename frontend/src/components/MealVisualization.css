@@ -1023,6 +1023,249 @@ td[data-column-id="absorptionType"] {
   box-shadow: 0 1px 3px rgba(0,0,0,0.2);
 }
 
+
+
+/* Add these styles to your MealVisualization.css file */
+
+.tooltip-meal-impact {
+  color: #4CAF50;
+  font-weight: 500;
+}
+
+/* Make meal effect area more visible */
+.recharts-layer.recharts-area path.recharts-area-area {
+  filter: drop-shadow(0px 1px 3px rgba(76, 175, 80, 0.3));
+}
+
+/* Add subtle highlight to the blood sugar line */
+.recharts-layer.recharts-line path.recharts-curve.recharts-line-curve {
+  filter: drop-shadow(0px 0px 1px rgba(129, 49, 167, 0.3));
+}
+
+/* Enhanced styles for actual readings dots */
+.recharts-dot.recharts-line-dot {
+  stroke-width: 2px;
+}
+
+/* Enhance tooltip styling */
+.meal-effect-tooltip {
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid #ccc;
+  padding: 12px;
+  border-radius: 6px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  max-width: 300px;
+}
+
+.tooltip-section {
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #eee;
+}
+
+.tooltip-section:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+}
+
+.tooltip-section h4 {
+  margin: 0 0 6px;
+  color: #333;
+  font-size: 14px;
+}
+
+.tooltip-time {
+  font-weight: 600;
+  font-size: 15px;
+  color: #333;
+  margin-bottom: 10px;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 6px;
+}
+
+/* Add these styles to your MealVisualization.css file */
+
+.tooltip-meal-impact {
+  color: #4CAF50;
+  font-weight: 500;
+  margin: 5px 0;
+  display: flex;
+  align-items: center;
+}
+
+.tooltip-high {
+  color: #ff4444;
+}
+
+.tooltip-low {
+  color: #ff8800;
+}
+
+.tooltip-normal {
+  color: #00C851;
+}
+
+/* Optional target zone highlight */
+.target-zone-highlight {
+  fill: rgba(0, 200, 81, 0.05);
+}
+
+/* Make the baseline more visible */
+.recharts-line.baseline-line .recharts-line-curve {
+  stroke-dasharray: 3;
+}
+
+/* Enhanced tooltip styling */
+.status {
+  font-weight: 500;
+  margin-top: 5px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  display: inline-block;
+  background-color: rgba(0,0,0,0.05);
+}
+
+/* Add these styles to your MealVisualization.css file */
+
+/* Target impact line styling */
+.target-impact-line {
+  stroke-dasharray: 3;
+  opacity: 0.8;
+}
+
+/* Enhanced tooltip styling */
+.meal-effect-tooltip {
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid #ccc;
+  padding: 12px;
+  border-radius: 6px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  max-width: 300px;
+}
+
+.tooltip-section {
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #eee;
+}
+
+.tooltip-section:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+}
+
+.tooltip-section h4 {
+  margin: 0 0 6px;
+  color: #333;
+  font-size: 14px;
+}
+
+.tooltip-time {
+  font-weight: 600;
+  font-size: 15px;
+  color: #333;
+  margin-bottom: 10px;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 6px;
+}
+
+.tooltip-meal-section {
+  border-left: 3px solid #4CAF50;
+  padding-left: 8px;
+  background-color: rgba(76, 175, 80, 0.05);
+}
+
+.tooltip-target-section {
+  border-left: 3px solid #FF7300;
+  padding-left: 8px;
+  background-color: rgba(255, 115, 0, 0.05);
+}
+
+.tooltip-projected {
+  font-weight: 500;
+  color: #8031A7;
+}
+
+.tooltip-target-impact {
+  font-weight: 500;
+  color: #FF7300;
+}
+
+.tooltip-percent {
+  margin-left: 6px;
+  font-size: 0.9em;
+  color: #666;
+}
+
+.tooltip-status {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.tooltip-status.high {
+  background-color: rgba(255, 68, 68, 0.1);
+  color: #ff4444;
+}
+
+.tooltip-status.low {
+  background-color: rgba(255, 136, 0, 0.1);
+  color: #ff8800;
+}
+
+.tooltip-status.normal {
+  background-color: rgba(0, 200, 81, 0.1);
+  color: #00C851;
+}
+
+/* Chart legend styling */
+.chart-legend {
+  margin-top: 20px;
+  padding: 15px;
+  border: 1px solid #eee;
+  border-radius: 4px;
+  background-color: #fafafa;
+}
+
+.chart-legend h4 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  font-size: 16px;
+  color: #333;
+}
+
+.legend-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+  flex: 1 1 45%;
+}
+
+.legend-color {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  margin-right: 8px;
+  border-radius: 3px;
+}
+
+.legend-area {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  margin-right: 8px;
+  border-radius: 3px;
+}
+
 /* Meal type color indicators in effect chart */
 .tooltip-meal-item.breakfast .tooltip-meal-type { background-color: #ffc107; color: #212529; }
 .tooltip-meal-item.lunch .tooltip-meal-type { background-color: #fd7e14; color: #fff; }

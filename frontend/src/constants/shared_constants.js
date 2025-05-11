@@ -185,6 +185,7 @@
     "target_glucose": 100,
     "protein_factor": 0.5,
     "fat_factor": 0.2,
+    "carb_to_bg_factor": 4.0,
     "activity_coefficients": {
       "-2": 1.2,
       "-1": 1.1,
