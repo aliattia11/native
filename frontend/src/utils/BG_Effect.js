@@ -291,26 +291,42 @@ export const generateMealTimelineData = (
       timelineData.push(timePoint);
       currentTime += interval;
     }
+const now = new Date().getTime();
+const processedTimelineData = timelineData.map(point => {
+  const isHistorical = point.timestamp < now;
 
-    const now = new Date().getTime();
-    const processedTimelineData = timelineData.map(point => {
-      const isHistorical = point.timestamp < now;
+  // Create a new object to avoid mutating the original
+  const processedPoint = { ...point };
 
-      // For historical points, overwrite bloodSugar with estimatedBloodSugar unless it's an actual reading
-      if (isHistorical && !point.isActualReading) {
-        return {
-          ...point,
-          bloodSugar: point.estimatedBloodSugar,
-          // Keep track of the calculated value for the tooltip
-          bloodSugarWithMealEffect: point.bloodSugar
-        };
-      }
+  // Always save the baseline blood sugar, regardless of historical/future
+  processedPoint.baselineBloodSugar = processedPoint.estimatedBloodSugar;
 
-      return point;
-    });
+  // For historical points that aren't actual readings, show only baseline values
+  if (isHistorical && !point.isActualReading) {
+    // Store the meal effect version for tooltips
+    processedPoint.bloodSugarWithMealEffect = processedPoint.bloodSugar;
+    // Set displayed blood sugar to baseline (no meal effect)
+    processedPoint.bloodSugar = processedPoint.estimatedBloodSugar;
+  }
+  // For future points, ensure we maintain both values
+  else if (!isHistorical) {
+    // Keep bloodSugar as is (with meal effects)
+    // Make sure estimatedBloodSugar has a valid value for future points
+    if (!processedPoint.estimatedBloodSugar || processedPoint.estimatedBloodSugar === 0) {
+      // Find a reasonable baseline value - either from context or target glucose
+      // If no meal effect, blood sugar should equal baseline
+      processedPoint.estimatedBloodSugar = point.totalMealEffect > 0 ?
+        (processedPoint.bloodSugar - (point.mealImpactMgdL || 0)) :
+        processedPoint.bloodSugar;
+    }
+  }
 
-    console.log(`Processed ${processedTimelineData.length} timeline data points with historical/future split`);
-    return processedTimelineData;
+  return processedPoint;
+});
+
+console.log(`Processed ${processedTimelineData.length} timeline data points with historical/future split`);
+return processedTimelineData;
+
   } catch (error) {
     console.error('Error generating meal timeline data:', error);
     return [];

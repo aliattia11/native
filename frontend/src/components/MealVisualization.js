@@ -231,8 +231,6 @@ const MealVisualization = ({
     getBloodSugarAtTime, getBloodSugarStatus, getFilteredData, TimeManager, patientConstants,
     timeScale, effectDurationHours]);
 
-
-
   // Fetch meal and blood sugar data
  // MODIFY your fetchData function with these updates - focus on changes at the end
 const fetchData = useCallback(async () => {
@@ -489,33 +487,49 @@ const formatLegendText = useCallback((value) => {
 
 
 
-
 const prepareChartData = useCallback((data) => {
   if (!data || !Array.isArray(data)) return [];
 
   const now = new Date().getTime();
 
-  // Create a deep copy of the data to avoid modifying the original
   return data.map(point => {
     const isHistorical = point.timestamp < now;
-
-    // Create a new object for each point to avoid mutating the original
     const newPoint = { ...point };
 
-    if (isHistorical && !point.isActualReading) {
-      // For historical points, keep only the baseline value
-      // Set the meal effect line to null so it doesn't render
-      newPoint.bloodSugar = null;  // Hide the dark purple line
-      newPoint.bloodSugarWithMealEffect = point.bloodSugar;  // Store the original for the tooltip
-    } else if (!isHistorical && !point.isActualReading) {
-      // For future points, set the baseline to null so it doesn't render
-      newPoint.estimatedBloodSugar = null;  // Hide the light purple line
+    // For historical data (before now)
+    if (isHistorical) {
+      if (!point.isActualReading) {
+        // For estimated points, hide the bloodSugar (dark purple) line
+        // but keep estimatedBloodSugar (light purple) line
+        newPoint.bloodSugar = null;
+      }
+      // For actual readings, keep both values so dots appear correctly
     }
+    // For future data (after now)
+    else {
+      // IMPORTANT: Don't null out estimatedBloodSugar for future points
+      // Keep both lines for future projection
+
+      // Ensure we have a valid estimatedBloodSugar for the baseline
+      if (newPoint.estimatedBloodSugar === null || newPoint.estimatedBloodSugar === undefined ||
+          newPoint.estimatedBloodSugar === 0) {
+        // If missing, use the original baseline from the bloodSugar context
+        // or fall back to target glucose as a reasonable baseline
+        newPoint.estimatedBloodSugar = newPoint.baselineBloodSugar || targetGlucose;
+      }
+
+      // Make sure bloodSugar (with meal effect) is properly set for future points
+      if (!point.isActualReading) {
+        // Keep the bloodSugar value for the dark purple line (with meal effect)
+      }
+    }
+
+    // Store the original bloodSugar value for tooltips
+    newPoint.bloodSugarWithMealEffect = point.bloodSugar;
 
     return newPoint;
   });
-}, []);
-
+}, [targetGlucose]);
 
   // Custom meal effect tooltip
  // REPLACE your CustomMealTooltip function with this updated version
@@ -526,7 +540,10 @@ const CustomMealTooltip = useCallback(({ active, payload, label }) => {
     const isHistorical = data.timestamp < now;
 
     // Validate all critical data values
-    const bloodSugar = !isNaN(data.bloodSugar) ? Math.round(data.bloodSugar) : 'N/A';
+    const bloodSugar = isHistorical
+      ? (!isNaN(data.estimatedBloodSugar) ? Math.round(data.estimatedBloodSugar) : 'N/A')
+      : (!isNaN(data.bloodSugar) ? Math.round(data.bloodSugar) : 'N/A');
+
     const estimatedBS = !isNaN(data.estimatedBloodSugar) ? Math.round(data.estimatedBloodSugar) : 'N/A';
     const bloodSugarWithEffect = !isNaN(data.bloodSugarWithMealEffect) ?
       Math.round(data.bloodSugarWithMealEffect) : bloodSugar;
@@ -625,16 +642,16 @@ const CustomMealTooltip = useCallback(({ active, payload, label }) => {
 }, [targetGlucose]);
 
   // Custom dot for blood sugar readings on chart
- const CustomBloodSugarDot = useCallback((props) => {
-  const { cx, cy, stroke, payload } = props;
+const CustomBloodSugarDot = useCallback((props) => {
+  const { cx, cy, payload, index } = props;
 
-  // Don't render dots for non-actual readings unless they're affected by meals
-  if (!payload.isActualReading && !payload.affectedByMeal) return null;
+  // Only render dots for actual readings
+  if (!payload || !payload.isActualReading || !cx || !cy) return null;
 
   // Determine dot properties based on reading type and relation to target
   const targetDiff = payload.bloodSugar - targetGlucose;
-  let radius = payload.isActualReading ? 4 : 3;
-  let strokeWidth = payload.isActualReading ? 2 : 1;
+  const radius = 4;
+  const strokeWidth = 2;
 
   // Base color on relationship to target
   let strokeColor;
@@ -642,14 +659,11 @@ const CustomMealTooltip = useCallback(({ active, payload, label }) => {
     strokeColor = '#ff4444'; // High
   } else if (targetDiff < -targetGlucose * 0.3) {
     strokeColor = '#ff8800'; // Low
-  } else if (payload.affectedByMeal) {
-    strokeColor = '#4CAF50'; // Meal affected but in range
   } else {
     strokeColor = '#8031A7'; // Normal
   }
 
-  let fillColor = payload.isActualReading ? "#ffffff" :
-                  (payload.affectedByMeal ? "#e8f5e9" : "#f3e5f5");
+  let fillColor = "#ffffff"; // White fill for all actual readings
 
   return (
     <circle
@@ -778,9 +792,10 @@ const CustomMealTooltip = useCallback(({ active, payload, label }) => {
       // This modification goes in the renderMealEffectChart function
 // Replace the existing blood sugar line components with this code:
 
+{/* Replace the blood sugar visualization section with this updated code */}
 {showBloodSugar && (
   <>
-    {/* Baseline blood sugar line (light purple) - ONLY VISIBLE FOR HISTORICAL DATA */}
+    {/* Baseline blood sugar line (light purple) - VISIBLE THROUGHOUT TIMELINE */}
     <Line
       yAxisId="bloodSugar"
       type="basis"
@@ -790,22 +805,10 @@ const CustomMealTooltip = useCallback(({ active, payload, label }) => {
       strokeWidth={2.5}
       dot={false}
       connectNulls
-      // Only render points before now (historical)
       isAnimationActive={false}
-      // Custom render for line segments - only show for historical data
-      dot={(props) => {
-        // Never render dots for baseline line
-        return null;
-      }}
-      // This is the key part - only render points before current time
-      points={combinedData.filter(d => d.timestamp < new Date().getTime()).map(d => ({
-        x: d.timestamp,
-        y: d.estimatedBloodSugar,
-        payload: d
-      }))}
     />
 
-    {/* Blood sugar with meal effect line (dark purple) - ONLY VISIBLE FOR FUTURE DATA */}
+    {/* Blood sugar with meal effect line (dark purple) - VISIBLE ONLY FOR FUTURE DATA */}
     <Line
       yAxisId="bloodSugar"
       type="basis"
@@ -813,25 +816,9 @@ const CustomMealTooltip = useCallback(({ active, payload, label }) => {
       name="Blood Sugar with Meal Effect"
       stroke="#8031A7" // Dark purple
       strokeWidth={2.5}
-      connectNulls
+      connectNulls={false}  // Don't connect across null values
       isAnimationActive={false}
-      // Only render dots for actual readings (both historical and future)
-      dot={CustomBloodSugarDot}
-      // This is the key part - only render points after current time
-      points={[
-        // Include all actual readings regardless of time (dots)
-        ...combinedData.filter(d => d.isActualReading).map(d => ({
-          x: d.timestamp,
-          y: d.bloodSugar,
-          payload: d
-        })),
-        // Only include future points for the line (after now)
-        ...combinedData.filter(d => !d.isActualReading && d.timestamp >= new Date().getTime()).map(d => ({
-          x: d.timestamp,
-          y: d.bloodSugar,
-          payload: d
-        }))
-      ]}
+      dot={CustomBloodSugarDot} // Keep custom dot renderer
     />
   </>
 )}

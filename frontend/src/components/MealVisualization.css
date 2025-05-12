@@ -1266,7 +1266,18 @@ td[data-column-id="absorptionType"] {
   border-radius: 3px;
 }
 
+/* Add these CSS rules to filter out rendering artifacts */
+.recharts-line-curve {
+  filter: drop-shadow(0 0 1px rgba(0,0,0,0.1));
+}
 
+/* Hide any lines with extremely large y values */
+.recharts-line[name="Blood Sugar with Meal Effect"] path[d*="L-"],
+.recharts-line[name="Baseline Blood Sugar"] path[d*="L-"],
+.recharts-line[name="Blood Sugar with Meal Effect"] path[d*="NaN"],
+.recharts-line[name="Baseline Blood Sugar"] path[d*="NaN"] {
+  display: none;
+}
 
 /* Meal type color indicators in effect chart */
 .tooltip-meal-item.breakfast .tooltip-meal-type { background-color: #ffc107; color: #212529; }
