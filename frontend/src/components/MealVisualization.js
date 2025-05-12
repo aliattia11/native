@@ -461,15 +461,14 @@ const fetchData = useCallback(async () => {
 const formatLegendText = useCallback((value) => {
   // Format specific data series properly
   if (value === 'bloodSugar') {
-    return 'Blood Sugar';
+    return 'Blood Sugar (with meal effects, future)';
   } else if (value === 'estimatedBloodSugar') {
-    return 'Baseline Blood Sugar';
+    return 'Baseline Blood Sugar (historical)';
   } else if (value === 'targetWithMealEffect') {
     return 'Target + Meal Effect';
   } else if (value === 'totalMealEffect') {
     return 'Total Meal Effect';
   }
-
   // Handle meal-related entries
   if (value.includes('mealCarbs.')) {
     return 'Meal Carbs';
@@ -488,16 +487,51 @@ const formatLegendText = useCallback((value) => {
   return value;
 }, []);
 
+
+
+
+const prepareChartData = useCallback((data) => {
+  if (!data || !Array.isArray(data)) return [];
+
+  const now = new Date().getTime();
+
+  // Create a deep copy of the data to avoid modifying the original
+  return data.map(point => {
+    const isHistorical = point.timestamp < now;
+
+    // Create a new object for each point to avoid mutating the original
+    const newPoint = { ...point };
+
+    if (isHistorical && !point.isActualReading) {
+      // For historical points, keep only the baseline value
+      // Set the meal effect line to null so it doesn't render
+      newPoint.bloodSugar = null;  // Hide the dark purple line
+      newPoint.bloodSugarWithMealEffect = point.bloodSugar;  // Store the original for the tooltip
+    } else if (!isHistorical && !point.isActualReading) {
+      // For future points, set the baseline to null so it doesn't render
+      newPoint.estimatedBloodSugar = null;  // Hide the light purple line
+    }
+
+    return newPoint;
+  });
+}, []);
+
+
   // Custom meal effect tooltip
  // REPLACE your CustomMealTooltip function with this updated version
 const CustomMealTooltip = useCallback(({ active, payload, label }) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload;
+    const now = new Date().getTime();
+    const isHistorical = data.timestamp < now;
 
     // Validate all critical data values
     const bloodSugar = !isNaN(data.bloodSugar) ? Math.round(data.bloodSugar) : 'N/A';
     const estimatedBS = !isNaN(data.estimatedBloodSugar) ? Math.round(data.estimatedBloodSugar) : 'N/A';
-    const targetWithEffect = !isNaN(data.targetWithMealEffect) ? Math.round(data.targetWithMealEffect) : 'N/A';
+    const bloodSugarWithEffect = !isNaN(data.bloodSugarWithMealEffect) ?
+      Math.round(data.bloodSugarWithMealEffect) : bloodSugar;
+    const targetWithEffect = !isNaN(data.targetWithMealEffect) ?
+      Math.round(data.targetWithMealEffect) : 'N/A';
 
     const mealImpact = data.mealImpactMgdL ||
       (data.totalMealEffect && !isNaN(data.totalMealEffect) ?
@@ -517,7 +551,14 @@ const CustomMealTooltip = useCallback(({ active, payload, label }) => {
           </div>
         )}
 
-        {/* Blood glucose information (first visualization) */}
+        {/* Indicate if showing historical or future data */}
+        <p className="tooltip-data-type">
+          {isHistorical ?
+            <em>Showing historical data {!data.isActualReading && "(baseline estimate)"}</em> :
+            <em>Showing future projection with meal effects</em>}
+        </p>
+
+        {/* Blood glucose information */}
         <div className="tooltip-section">
           <h4>Blood Glucose:</h4>
           {data.isActualReading ? (
@@ -527,7 +568,7 @@ const CustomMealTooltip = useCallback(({ active, payload, label }) => {
               <p>Baseline estimate: {estimatedBS} mg/dL</p>
               {data.totalMealEffect > 0 && (
                 <p className="tooltip-projected">
-                  With meal effect: <strong>{bloodSugar} mg/dL</strong>
+                  With meal effect: <strong>{isHistorical ? bloodSugarWithEffect : bloodSugar} mg/dL</strong>
                 </p>
               )}
             </>
@@ -538,6 +579,7 @@ const CustomMealTooltip = useCallback(({ active, payload, label }) => {
             </p>
           )}
         </div>
+
 
         {/* Target glucose information (second visualization) */}
         {data.totalMealEffect > 0 && (
@@ -633,10 +675,8 @@ const CustomMealTooltip = useCallback(({ active, payload, label }) => {
   // Render meal effect chart
  const renderMealEffectChart = () => (
   <ResponsiveContainer width="100%" height={500}>
-    <ComposedChart
-      data={combinedData}
-      margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
-    >
+<ComposedChart data={prepareChartData(combinedData)} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
+
       <CartesianGrid strokeDasharray="3 3" />
       <XAxis
         dataKey="timestamp"
@@ -735,34 +775,66 @@ const CustomMealTooltip = useCallback(({ active, payload, label }) => {
       )}
 
       {/* First visualization: Baseline estimated blood sugar line */}
-      {showBloodSugar && (
-        <Line
-          yAxisId="bloodSugar"
-          type="monotone"
-          dataKey="estimatedBloodSugar"
-          name="Baseline Blood Sugar"
-          stroke="#D19EFF"  // Light purple color
-          strokeWidth={1.5}
-          strokeDasharray="3 3"
-          dot={false}
-          connectNulls
-        />
-      )}
+      // This modification goes in the renderMealEffectChart function
+// Replace the existing blood sugar line components with this code:
 
-      {/* First visualization: Blood sugar with meal effect line */}
-      {showBloodSugar && (
-        <Line
-          yAxisId="bloodSugar"
-          type="monotone"
-          dataKey="bloodSugar"
-          name="Blood Sugar"
-          stroke="#8031A7" // Darker purple
-          strokeWidth={2.5}
-          dot={CustomBloodSugarDot}
-          activeDot={{ r: 8 }}
-          connectNulls
-        />
-      )}
+{showBloodSugar && (
+  <>
+    {/* Baseline blood sugar line (light purple) - ONLY VISIBLE FOR HISTORICAL DATA */}
+    <Line
+      yAxisId="bloodSugar"
+      type="basis"
+      dataKey="estimatedBloodSugar"
+      name="Baseline Blood Sugar"
+      stroke="#D19EFF"  // Light purple
+      strokeWidth={2.5}
+      dot={false}
+      connectNulls
+      // Only render points before now (historical)
+      isAnimationActive={false}
+      // Custom render for line segments - only show for historical data
+      dot={(props) => {
+        // Never render dots for baseline line
+        return null;
+      }}
+      // This is the key part - only render points before current time
+      points={combinedData.filter(d => d.timestamp < new Date().getTime()).map(d => ({
+        x: d.timestamp,
+        y: d.estimatedBloodSugar,
+        payload: d
+      }))}
+    />
+
+    {/* Blood sugar with meal effect line (dark purple) - ONLY VISIBLE FOR FUTURE DATA */}
+    <Line
+      yAxisId="bloodSugar"
+      type="basis"
+      dataKey="bloodSugar"
+      name="Blood Sugar with Meal Effect"
+      stroke="#8031A7" // Dark purple
+      strokeWidth={2.5}
+      connectNulls
+      isAnimationActive={false}
+      // Only render dots for actual readings (both historical and future)
+      dot={CustomBloodSugarDot}
+      // This is the key part - only render points after current time
+      points={[
+        // Include all actual readings regardless of time (dots)
+        ...combinedData.filter(d => d.isActualReading).map(d => ({
+          x: d.timestamp,
+          y: d.bloodSugar,
+          payload: d
+        })),
+        // Only include future points for the line (after now)
+        ...combinedData.filter(d => !d.isActualReading && d.timestamp >= new Date().getTime()).map(d => ({
+          x: d.timestamp,
+          y: d.bloodSugar,
+          payload: d
+        }))
+      ]}
+    />
+  </>
+)}
 
       {/* Second visualization: Target with meal effect line */}
       {showBloodSugar && showMealEffect && (
@@ -787,11 +859,11 @@ const CustomMealTooltip = useCallback(({ active, payload, label }) => {
                 fill="#FFCC80"
                 stroke="#FF7300"
                 strokeWidth={1}
+
               />
             );
           }}
           activeDot={{ r: 6, strokeWidth: 1, fill: '#FFCC80' }}
-          connectNulls
         />
       )}
 

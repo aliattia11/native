@@ -42,22 +42,26 @@ export const calculateMealEffect = (meal, patientConstants, effectDurationHours 
     const durationHours = Math.min(effectDurationHours, 6);
 
     // Generate the effect curve similar to the original implementation
-    const startTime = meal.timestamp;
+     const startTime = meal.timestamp;
     const results = [];
 
-    // Generate points at 15-minute intervals
-    for (let minute = 0; minute <= durationHours * 60; minute += 15) {
+    // Generate points at 5-minute intervals instead of 15 for smoother curves
+    for (let minute = 0; minute <= durationHours * 60; minute += 5) {
       const hoursSinceMeal = minute / 60;
       let impactValue = 0;
 
-      // Calculate impact using a physiological model
+      // Calculate impact using an enhanced physiological model
       if (hoursSinceMeal <= peakHour) {
-        // Rising phase (bell curve shape)
-        impactValue = totalCarbEquiv * (hoursSinceMeal / peakHour) * Math.exp(1 - (hoursSinceMeal / peakHour));
+        // Rising phase with smoother curve (modified bell curve)
+        const normalizedTime = hoursSinceMeal / peakHour;
+        // This formula creates a smoother rise with physiologically plausible acceleration
+        impactValue = totalCarbEquiv * (Math.pow(normalizedTime, 1.2)) * Math.exp(1 - normalizedTime);
       } else if (hoursSinceMeal <= durationHours) {
-        // Falling phase (exponential decay)
-        const decayRate = 1.0 / (durationHours - peakHour);
-        impactValue = totalCarbEquiv * Math.exp(-(hoursSinceMeal - peakHour) * decayRate);
+        // Falling phase with gradual decay (more realistic)
+        const decayRate = 0.8 / (durationHours - peakHour); // Slightly slower decay
+        const normalizedTime = hoursSinceMeal - peakHour;
+        // Smoother exponential decay
+        impactValue = totalCarbEquiv * 0.95 * Math.exp(-normalizedTime * decayRate);
       }
 
       // Apply absorption factor
@@ -288,8 +292,25 @@ export const generateMealTimelineData = (
       currentTime += interval;
     }
 
-    console.log(`Generated ${timelineData.length} timeline data points, ${pointsWithEffects} with meal effects`);
-    return timelineData;
+    const now = new Date().getTime();
+    const processedTimelineData = timelineData.map(point => {
+      const isHistorical = point.timestamp < now;
+
+      // For historical points, overwrite bloodSugar with estimatedBloodSugar unless it's an actual reading
+      if (isHistorical && !point.isActualReading) {
+        return {
+          ...point,
+          bloodSugar: point.estimatedBloodSugar,
+          // Keep track of the calculated value for the tooltip
+          bloodSugarWithMealEffect: point.bloodSugar
+        };
+      }
+
+      return point;
+    });
+
+    console.log(`Processed ${processedTimelineData.length} timeline data points with historical/future split`);
+    return processedTimelineData;
   } catch (error) {
     console.error('Error generating meal timeline data:', error);
     return [];

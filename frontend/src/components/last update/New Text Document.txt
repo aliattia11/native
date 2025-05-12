@@ -1,0 +1,5 @@
+
+I WANNA APPLY THE FOLLOWING
+Before the now-line: SHOW how the meal should have affected the default BG target, highlighting the theoretical impact of the meal.
+
+After the now-line: SHOW the estimated BG response based on current meal 

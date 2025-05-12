@@ -777,33 +777,37 @@ const BloodSugarVisualization = ({
                   />
 
                   {/* Connected line only for points within maxConnectGapMinutes of each other */}
-                  <Line
-                    key="actual-line"
-                    dataKey="bloodSugar"
-                    name={`Actual Readings (${unit})`}
-                    data={processedReadings.filter(r => r.connectToPrevious)}
-                    stroke="#8884d8"
-                    strokeWidth={2}
-                    isAnimationActive={false}
-                    dot={false}
-                    connectNulls={false}
-                  />
+              <Line
+  key="actual-line"
+  dataKey="bloodSugar"
+  name={`Actual Readings (${unit})`}
+  data={processedReadings.filter(r => r.connectToPrevious)}
+  stroke="#8884d8"
+  strokeWidth={2}
+  isAnimationActive={false}
+  dot={false}
+  connectNulls={false}
+  // Add this line to create smooth curves:
+  type="monotoneX"
+/>
 
                   {/* Estimated line showing target-returning pattern */}
                   {estimationSettings.enabled && (
-                    <Line
-                      key="estimated-line"
-                      dataKey="bloodSugar"
-                      name={`Estimated Pattern (${unit})`}
-                      data={estimatedBloodSugarData}
-                      stroke="#6a5acd"
-                      strokeWidth={1.5}
-                      strokeOpacity={0.8}
-                      strokeDasharray="4 4"
-                      isAnimationActive={false}
-                      dot={CustomEstimatedDot}
-                      connectNulls={true}
-                    />
+                   <Line
+  key="estimated-line"
+  dataKey="bloodSugar"
+  name={`Estimated Pattern (${unit})`}
+  data={estimatedBloodSugarData}
+  stroke="#6a5acd"
+  strokeWidth={1.5}
+  strokeOpacity={0.8}
+  strokeDasharray="4 4"
+  isAnimationActive={false}
+  dot={CustomEstimatedDot}
+  connectNulls={true}
+  // Add this line to create smooth curves:
+  type="monotoneX"
+/>
                   )}
 
                   {/* Show predicted blood sugar (if available from insulin effects) */}

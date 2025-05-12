@@ -160,22 +160,22 @@ export const BloodSugarDataProvider = ({ children }) => {
   }, [timeContext]);
 
   // Helper to determine appropriate point interval based on date range
-  const getEstimationInterval = useCallback((startDate, endDate) => {
-    // Calculate time difference in days
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    const diffTime = Math.abs(end - start);
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+ const getEstimationInterval = useCallback((startDate, endDate) => {
+  // Calculate time difference in days
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const diffTime = Math.abs(end - start);
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-    // Set interval based on time range
-    if (diffDays <= 1) {
-      return { minutes: 30, checkNearbyHours: 1 }; // 30 min for 24h view
-    } else if (diffDays <= 7) {
-      return { minutes: 180, checkNearbyHours: 1 }; // 3 hours for week view
-    } else {
-      return { minutes: 360, checkNearbyHours: 1 }; // 6 hours for month view
-    }
-  }, []);
+  // Set interval based on time range with smaller values for smoother curves
+  if (diffDays <= 1) {
+    return { minutes: 15, checkNearbyHours: 1 }; // 15 min for 24h view (was 30)
+  } else if (diffDays <= 7) {
+    return { minutes: 60, checkNearbyHours: 1 }; // 1 hour for week view (was 180)
+  } else {
+    return { minutes: 180, checkNearbyHours: 1 }; // 3 hours for month view (was 360)
+  }
+}, []);
 
   const getFilteredEstimatedReadings = useCallback((allData = combinedData) => {
     if (!allData || allData.length === 0) return [];
