@@ -68,6 +68,7 @@ def get_constants(current_user):
                 'target_glucose': user.get('target_glucose', default_constants['target_glucose']),
                 'protein_factor': user.get('protein_factor', default_constants['protein_factor']),
                 'fat_factor': user.get('fat_factor', default_constants['fat_factor']),
+                'carb_to_bg_factor': user.get('carb_to_bg_factor', default_constants['carb_to_bg_factor']),  # Add this line to return carb_to_bg_factor
                 'activity_coefficients': user.get('activity_coefficients', default_constants['activity_coefficients']),
                 'absorption_modifiers': user.get('absorption_modifiers', default_constants['absorption_modifiers']),
                 'insulin_timing_guidelines': user.get('insulin_timing_guidelines', default_constants['insulin_timing_guidelines']),

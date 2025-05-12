@@ -5,6 +5,7 @@ from utils.error_handler import api_error_handler
 from config import mongo
 from constants import Constants, ConstantConfig
 import logging
+from datetime import datetime  # Add this import for medication logging
 
 logger = logging.getLogger(__name__)
 doctor_routes = Blueprint('doctor_routes', __name__)
@@ -71,6 +72,7 @@ def get_patient_constants(current_user, patient_id):
             'target_glucose': patient.get('target_glucose', default_constants['target_glucose']),
             'protein_factor': patient.get('protein_factor', default_constants['protein_factor']),
             'fat_factor': patient.get('fat_factor', default_constants['fat_factor']),
+            'carb_to_bg_factor': patient.get('carb_to_bg_factor', default_constants['carb_to_bg_factor']),  # Add this line to return carb_to_bg_factor
             'activity_coefficients': patient.get('activity_coefficients', default_constants['activity_coefficients']),
             'absorption_modifiers': patient.get('absorption_modifiers', default_constants['absorption_modifiers']),
             'insulin_timing_guidelines': patient.get('insulin_timing_guidelines', default_constants['insulin_timing_guidelines']),
@@ -105,6 +107,7 @@ def reset_patient_constants(current_user, patient_id):
             'target_glucose': default_config.target_glucose,
             'protein_factor': default_config.protein_factor,
             'fat_factor': default_config.fat_factor,
+            'carb_to_bg_factor': default_config.carb_to_bg_factor,  # Add this line for reset function
             'activity_coefficients': default_config.activity_coefficients,
             'absorption_modifiers': default_config.absorption_modifiers,
             'insulin_timing_guidelines': default_config.insulin_timing_guidelines,
@@ -154,6 +157,7 @@ def update_patient_constants(current_user, patient_id):
             'target_glucose',
             'protein_factor',
             'fat_factor',
+            'carb_to_bg_factor',  # Add this line to include carb_to_bg_factor
             'activity_coefficients',
             'absorption_modifiers',
             'insulin_timing_guidelines',
@@ -250,6 +254,7 @@ def update_patient_conditions(current_user, patient_id):
         except Exception as e:
             logger.error(f"Error updating patient conditions: {str(e)}")
             return jsonify({'message': 'Error updating patient conditions'}), 500
+
 @doctor_routes.route('/api/doctor/patient/<patient_id>/medications', methods=['PUT'])
 @token_required
 @api_error_handler

@@ -39,7 +39,7 @@ export const calculateMealEffect = (meal, patientConstants, effectDurationHours 
     const absorptionFactor = absorptionModifiers[absorptionType] || 1.0;
     const peakHour = absorptionType === 'fast' ? 1.0 :
                     absorptionType === 'slow' ? 2.0 : 1.5;
-    const durationHours = Math.min(effectDurationHours, 6);
+    const durationHours = Math.min(effectDurationHours, 10);
 
     // Generate the effect curve similar to the original implementation
      const startTime = meal.timestamp;
