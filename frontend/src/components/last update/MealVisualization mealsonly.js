@@ -23,15 +23,8 @@ import { useBloodSugarData } from '../contexts/BloodSugarDataContext';
 import TimeManager from '../utils/TimeManager';
 import TimeEffect from '../utils/TimeEffect';
 import TimeContext from '../contexts/TimeContext';
-import {
-  calculateMealEffect,
-  generateMealTimelineData,
-  prepareChartData,
-  calculateCarbEquivalents,
-  calculateNutritionDistribution,
-  calculateMealStatistics,
-  applyDatePreset
-} from '../utils/BG_Effect';
+import { calculateMealEffect, generateMealTimelineData } from '../utils/BG_Effect';
+
 import TimeInput from '../components/TimeInput';
 import { FaSync, FaChartBar, FaTable, FaList, FaFilter, FaCalendarAlt, FaInfoCircle } from 'react-icons/fa';
 
@@ -126,105 +119,87 @@ const MealVisualization = ({
 
   // Process raw meal data into the format needed for visualization
   const processMealData = useCallback((rawMeals) => {
-  if (!Array.isArray(rawMeals)) {
-    console.error('processMealData received non-array data:', rawMeals);
-    return [];
-  }
+    if (!Array.isArray(rawMeals)) {
+      console.error('processMealData received non-array data:', rawMeals);
+      return [];
+    }
 
-  return rawMeals.map(meal => {
-    // Parse timestamps using TimeManager
-    const mealTime = TimeManager.parseTimestamp(meal.timestamp);
-    const formattedTime = TimeManager.formatDate(
-      mealTime,
-      TimeManager.formats.DATETIME_DISPLAY
-    );
+    return rawMeals.map(meal => {
+      // Parse timestamps using TimeManager
+      const mealTime = TimeManager.parseTimestamp(meal.timestamp);
+      const formattedTime = TimeManager.formatDate(
+        mealTime,
+        TimeManager.formats.DATETIME_DISPLAY
+      );
 
-    // Extract or calculate nutritional totals
-    const nutrition = meal.nutrition || {};
-    const totalCarbs = nutrition.carbs || 0;
-    const totalProtein = nutrition.protein || 0;
-    const totalFat = nutrition.fat || 0;
-    const totalCalories = nutrition.calories ||
-      (totalCarbs * 4 + totalProtein * 4 + totalFat * 9);
+      // Extract or calculate nutritional totals
+      const nutrition = meal.nutrition || {};
+      const totalCarbs = nutrition.carbs || 0;
+      const totalProtein = nutrition.protein || 0;
+      const totalFat = nutrition.fat || 0;
+      const totalCalories = nutrition.calories ||
+        (totalCarbs * 4 + totalProtein * 4 + totalFat * 9);
 
-    // Calculate carb equivalents using our utility function
-    const totalCarbEquiv = calculateCarbEquivalents({
-      totalCarbs,
-      totalProtein,
-      totalFat
-    }, patientConstants);
+      // Get protein factor and fat factor from patient constants for carb equivalents
+      const proteinFactor = patientConstants?.protein_factor || 0.5;
+      const fatFactor = patientConstants?.fat_factor || 0.2;
 
-    // Get protein factor and fat factor from patient constants
-    const proteinFactor = patientConstants?.protein_factor || 0.5;
-    const fatFactor = patientConstants?.fat_factor || 0.2;
+      // Calculate carb equivalents
+      const proteinCarbEquiv = totalProtein * proteinFactor;
+      const fatCarbEquiv = totalFat * fatFactor;
+      const totalCarbEquiv = totalCarbs + proteinCarbEquiv + fatCarbEquiv;
 
-    // Calculate individual equivalents for display
-    const proteinCarbEquiv = totalProtein * proteinFactor;
-    const fatCarbEquiv = totalFat * fatFactor;
+      // Calculate nutritional distribution percentages
+      const totalNutrients = totalCarbs + totalProtein + totalFat;
+      const carbPercentage = totalNutrients > 0 ? Math.round((totalCarbs / totalNutrients) * 100) : 0;
+      const proteinPercentage = totalNutrients > 0 ? Math.round((totalProtein / totalNutrients) * 100) : 0;
+      const fatPercentage = totalNutrients > 0 ? Math.round((totalFat / totalNutrients) * 100) : 0;
 
-    // Calculate nutritional distribution percentages
-    const totalNutrients = totalCarbs + totalProtein + totalFat;
-    const carbPercentage = totalNutrients > 0 ? Math.round((totalCarbs / totalNutrients) * 100) : 0;
-    const proteinPercentage = totalNutrients > 0 ? Math.round((totalProtein / totalNutrients) * 100) : 0;
-    const fatPercentage = totalNutrients > 0 ? Math.round((totalFat / totalNutrients) * 100) : 0;
+      // Get absorption type
+      const absorptionType = nutrition.absorption_type || 'medium';
 
-    // Get absorption type
-    const absorptionType = nutrition.absorption_type || 'medium';
+      // Get calculation summary if available
+      const calculationSummary = meal.calculation_summary || null;
 
-    // Get calculation summary if available
-    const calculationSummary = meal.calculation_summary || null;
-
-    return {
-      id: meal._id || meal.id,
-      timestamp: mealTime.valueOf(),
-      formattedTime,
-      date: TimeManager.formatDate(mealTime, 'YYYY-MM-DD'),
-      time: TimeManager.formatDate(mealTime, 'HH:mm'),
-      mealType: meal.mealType || 'normal',
-      foodItems: meal.foodItems || [],
-      nutrition: {
-        ...nutrition,
-        totalCarbs,
-        totalProtein,
-        totalFat,
-        totalCalories,
-        carbPercentage,
-        proteinPercentage,
-        fatPercentage,
-        absorptionType,
-        totalCarbEquiv,
-        proteinCarbEquiv,
-        fatCarbEquiv
-      },
-      insulin: {
-        dose: meal.insulin?.dose || 0,
-        type: meal.insulin?.type || '',
-        calculationFactors: meal.calculationFactors || {}
-      },
-      notes: meal.notes || '',
-      calculation_summary: calculationSummary,
-      bloodGlucose: meal.bloodGlucose || null,
-      activities: meal.activities || []
-    };
-  }).sort((a, b) => b.timestamp - a.timestamp); // Sort by timestamp descending
-}, [patientConstants, calculateCarbEquivalents]);
+      return {
+        id: meal._id || meal.id,
+        timestamp: mealTime.valueOf(),
+        formattedTime,
+        date: TimeManager.formatDate(mealTime, 'YYYY-MM-DD'),
+        time: TimeManager.formatDate(mealTime, 'HH:mm'),
+        mealType: meal.mealType || 'normal',
+        foodItems: meal.foodItems || [],
+        nutrition: {
+          ...nutrition,
+          totalCarbs,
+          totalProtein,
+          totalFat,
+          totalCalories,
+          carbPercentage,
+          proteinPercentage,
+          fatPercentage,
+          absorptionType,
+          totalCarbEquiv,
+          proteinCarbEquiv,
+          fatCarbEquiv
+        },
+        insulin: {
+          dose: meal.insulin?.dose || 0,
+          type: meal.insulin?.type || '',
+          calculationFactors: meal.calculationFactors || {}
+        },
+        notes: meal.notes || '',
+        calculation_summary: calculationSummary,
+        bloodGlucose: meal.bloodGlucose || null,
+        activities: meal.activities || []
+      };
+    }).sort((a, b) => b.timestamp - a.timestamp); // Sort by timestamp descending
+  }, [patientConstants]);
 
   // Calculate meal effect for a specific meal
  // REPLACE your entire calculateMealEffect function with this version
 
-// When calculating meal statistics
-const mealStatistics = useMemo(() => {
-  if (filteredMeals.length === 0) return null;
 
-  return calculateMealStatistics(filteredMeals, combinedData);
-}, [filteredMeals, combinedData, calculateMealStatistics]);
-
-// When calculating nutrition distribution
-const nutritionDistribution = useMemo(() => {
-  if (filteredMeals.length === 0) return null;
-
-  return calculateNutritionDistribution(filteredMeals, patientConstants);
-}, [filteredMeals, patientConstants, calculateNutritionDistribution]);
 
  const generateCombinedData = useCallback((mealData, bloodGlucoseData) => {
   // Create options object from component state and context values
@@ -252,10 +227,9 @@ const nutritionDistribution = useMemo(() => {
     contextFunctions,
     TimeManager
   );
-}, [targetGlucose, includeFutureEffect, futureHours,
+}, [calculateMealEffect, targetGlucose, includeFutureEffect, futureHours,
     getBloodSugarAtTime, getBloodSugarStatus, getFilteredData, TimeManager, patientConstants,
     timeScale, effectDurationHours]);
-
 
   // Fetch meal and blood sugar data
  // MODIFY your fetchData function with these updates - focus on changes at the end
@@ -511,6 +485,52 @@ const formatLegendText = useCallback((value) => {
   return value;
 }, []);
 
+
+
+const prepareChartData = useCallback((data) => {
+  if (!data || !Array.isArray(data)) return [];
+
+  const now = new Date().getTime();
+
+  return data.map(point => {
+    const isHistorical = point.timestamp < now;
+    const newPoint = { ...point };
+
+    // For historical data (before now)
+    if (isHistorical) {
+      if (!point.isActualReading) {
+        // For estimated points, hide the bloodSugar (dark purple) line
+        // but keep estimatedBloodSugar (light purple) line
+        newPoint.bloodSugar = null;
+      }
+      // For actual readings, keep both values so dots appear correctly
+    }
+    // For future data (after now)
+    else {
+      // IMPORTANT: Don't null out estimatedBloodSugar for future points
+      // Keep both lines for future projection
+
+      // Ensure we have a valid estimatedBloodSugar for the baseline
+      if (newPoint.estimatedBloodSugar === null || newPoint.estimatedBloodSugar === undefined ||
+          newPoint.estimatedBloodSugar === 0) {
+        // If missing, use the original baseline from the bloodSugar context
+        // or fall back to target glucose as a reasonable baseline
+        newPoint.estimatedBloodSugar = newPoint.baselineBloodSugar || targetGlucose;
+      }
+
+      // Make sure bloodSugar (with meal effect) is properly set for future points
+      if (!point.isActualReading) {
+        // Keep the bloodSugar value for the dark purple line (with meal effect)
+      }
+    }
+
+    // Store the original bloodSugar value for tooltips
+    newPoint.bloodSugarWithMealEffect = point.bloodSugar;
+
+    return newPoint;
+  });
+}, [targetGlucose]);
+
   // Custom meal effect tooltip
  // REPLACE your CustomMealTooltip function with this updated version
 const CustomMealTooltip = useCallback(({ active, payload, label }) => {
@@ -667,12 +687,10 @@ const CustomBloodSugarDot = useCallback((props) => {
                             );
 
   // Render meal effect chart
-const renderMealEffectChart = () => (
+ const renderMealEffectChart = () => (
   <ResponsiveContainer width="100%" height={500}>
-    <ComposedChart
-      data={prepareChartData(combinedData, { targetGlucose })}
-      margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
-    >
+<ComposedChart data={prepareChartData(combinedData)} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
+
       <CartesianGrid strokeDasharray="3 3" />
       <XAxis
         dataKey="timestamp"
@@ -1325,49 +1343,23 @@ const renderMealEffectChart = () => (
           <div className="date-controls">
             <div className="date-range-inputs">
               <TimeInput
-                  mode="daterange"
-                  value={timeContext ? dateRange : localDateRange}
-                  onChange={handleDateRangeChange}
-                  useTimeContext={!!timeContext}
-                  showPresets={false}
+                mode="daterange"
+                value={timeContext ? dateRange : localDateRange}
+                onChange={handleDateRangeChange}
+                useTimeContext={!!timeContext}
+                showPresets={false}
               />
             </div>
+
             <div className="quick-ranges">
-              <button onClick={() => {
-                const newRange = timeContext ?
-                    timeContext.applyDatePreset(1) :
-                    applyDatePreset(1);
-                if (timeContext) {
-                  timeContext.setDateRange(newRange);
-                } else {
-                  setLocalDateRange(newRange);
-                }
-              }}>
-                <FaCalendarAlt/> Today
+              <button onClick={() => timeContext ? timeContext.applyDatePreset(1) : applyDatePreset(1)}>
+                <FaCalendarAlt /> Today
               </button>
-              <button onClick={() => {
-                const newRange = timeContext ?
-                    timeContext.applyDatePreset(7) :
-                    applyDatePreset(7);
-                if (timeContext) {
-                  timeContext.setDateRange(newRange);
-                } else {
-                  setLocalDateRange(newRange);
-                }
-              }}>
-                <FaCalendarAlt/> Week
+              <button onClick={() => timeContext ? timeContext.applyDatePreset(7) : applyDatePreset(7)}>
+                <FaCalendarAlt /> Week
               </button>
-              <button onClick={() => {
-                const newRange = timeContext ?
-                    timeContext.applyDatePreset(30) :
-                    applyDatePreset(30);
-                if (timeContext) {
-                  timeContext.setDateRange(newRange);
-                } else {
-                  setLocalDateRange(newRange);
-                }
-              }}>
-                <FaCalendarAlt/> Month
+              <button onClick={() => timeContext ? timeContext.applyDatePreset(30) : applyDatePreset(30)}>
+                <FaCalendarAlt /> Month
               </button>
             </div>
           </div>
@@ -1376,12 +1368,12 @@ const renderMealEffectChart = () => (
           <div className="filter-controls">
             <div className="meal-type-filter">
               <label htmlFor="meal-type-select">
-                <FaFilter/> Meal Type:
+                <FaFilter /> Meal Type:
               </label>
               <select
-                  id="meal-type-select"
-                  value={mealTypeFilter}
-                  onChange={handleMealTypeChange}
+                id="meal-type-select"
+                value={mealTypeFilter}
+                onChange={handleMealTypeChange}
               >
                 <option value="all">All Types</option>
                 <option value="breakfast">Breakfast</option>
@@ -1393,9 +1385,9 @@ const renderMealEffectChart = () => (
             </div>
 
             <button
-                className={`update-btn ${isFetching ? 'loading' : ''}`}
-                onClick={fetchData}
-                disabled={loading || isFetching}
+              className={`update-btn ${isFetching ? 'loading' : ''}`}
+              onClick={fetchData}
+              disabled={loading || isFetching}
             >
               <FaSync className={isFetching ? "spin" : ""} />
               {isFetching ? 'Updating...' : 'Update Data'}
@@ -1634,62 +1626,99 @@ const renderMealEffectChart = () => (
       )}
 
       {/* Statistics summary - shown at bottom of all views when data is available */}
-     {!loading && filteredMeals.length > 0 && (
-  <div className="meal-statistics">
-    <h3>Meal Impact Summary</h3>
-    <div className="stats-grid">
-      <div className="stat-item">
-        <span className="stat-label">Total Meals:</span>
-        <span className="stat-value">{filteredMeals.length}</span>
-      </div>
+      {!loading && filteredMeals.length > 0 && (
+        <div className="meal-statistics">
+          <h3>Meal Impact Summary</h3>
+          <div className="stats-grid">
+            <div className="stat-item">
+              <span className="stat-label">Total Meals:</span>
+              <span className="stat-value">{filteredMeals.length}</span>
+            </div>
 
-      {nutritionDistribution && (
-        <>
-          <div className="stat-item">
-            <span className="stat-label">Avg. Carbs:</span>
-            <span className="stat-value">
-              {nutritionDistribution.avgCarbs.toFixed(1)}g
-            </span>
+            <div className="stat-item">
+              <span className="stat-label">Avg. Carbs:</span>
+              <span className="stat-value">
+                {(filteredMeals.reduce((sum, meal) => sum + meal.nutrition.totalCarbs, 0) / filteredMeals.length).toFixed(1)}g
+              </span>
+            </div>
+
+            <div className="stat-item">
+              <span className="stat-label">Avg. Carb Equivalent:</span>
+              <span className="stat-value">
+                {(filteredMeals.reduce((sum, meal) => sum + (meal.nutrition.totalCarbEquiv || 0), 0) / filteredMeals.length).toFixed(1)}g
+              </span>
+            </div>
+
+            <div className="stat-item">
+              <span className="stat-label">Average Peak Time:</span>
+              <span className="stat-value">
+                {(filteredMeals.reduce((sum, meal) => {
+                  // Calculate estimated peak time based on meal composition
+                  const carbs = meal.nutrition.totalCarbs;
+                  const protein = meal.nutrition.totalProtein;
+                  const fat = meal.nutrition.totalFat;
+                  const total = carbs + protein + fat;
+
+                  // Higher carb meals peak faster
+                  const carbRatio = total > 0 ? carbs / total : 0.5;
+                  const basePeak = 0.5 + ((1 - carbRatio) * 0.5);
+
+                  // Adjust for absorption type
+                  const absorptionType = meal.nutrition.absorptionType || 'medium';
+                  const absorptionFactor = absorptionType === 'fast' ? 1.2 :
+                                          absorptionType === 'slow' ? 0.8 : 1.0;
+
+                  return sum + (basePeak / absorptionFactor);
+                }, 0) / filteredMeals.length).toFixed(1)} hours
+              </span>
+            </div>
+
+            <div className="stat-item">
+              <span className="stat-label">Average Effect Duration:</span>
+              <span className="stat-value">
+                {(filteredMeals.reduce((sum, meal) => {
+                  const fat = meal.nutrition.totalFat;
+                  const protein = meal.nutrition.totalProtein;
+
+                  // Higher fat/protein extends duration
+                  const baseDuration = 2 + (fat * 0.02) + (protein * 0.01);
+
+                  // Adjust for absorption type
+                  const absorptionType = meal.nutrition.absorptionType || 'medium';
+                  const absorptionFactor = absorptionType === 'fast' ? 1.2 :
+                                          absorptionType === 'slow' ? 0.8 : 1.0;
+
+                  return sum + (baseDuration / absorptionFactor);
+                }, 0) / filteredMeals.length).toFixed(1)} hours
+              </span>
+            </div>
           </div>
-
-          <div className="stat-item">
-            <span className="stat-label">Avg. Carb Equivalent:</span>
-            <span className="stat-value">
-              {nutritionDistribution.avgCarbEquivalent.toFixed(1)}g
-            </span>
-          </div>
-
-          <div className="stat-item">
-            <span className="stat-label">Average Peak Time:</span>
-            <span className="stat-value">
-              {nutritionDistribution.avgPeakTime.toFixed(1)} hours
-            </span>
-          </div>
-
-          <div className="stat-item">
-            <span className="stat-label">Average Effect Duration:</span>
-            <span className="stat-value">
-              {nutritionDistribution.avgEffectDuration.toFixed(1)} hours
-            </span>
-          </div>
-        </>
-      )}
-
-      {mealStatistics && (
-        <div className="stat-item">
-          <span className="stat-label">Max Effect:</span>
-          <span className="stat-value">
-            {mealStatistics.maxEffect.toFixed(1)} units
-          </span>
         </div>
       )}
-    </div>
-  </div>
-)}
     </div>
   );
 };
 
+// Helper function for date presets when TimeContext is not available
+const applyDatePreset = (days) => {
+  const now = new Date();
+  const start = new Date(now);
+  start.setDate(start.getDate() - days);
+  const startStr = TimeManager.formatDate(start, 'YYYY-MM-DD');
 
+  let end;
+  if (days === 1) {
+    // For "Last 24h": past day plus 12 hours
+    end = new Date(now);
+    end.setHours(end.getHours() + 12);
+  } else {
+    // Default: add one future day
+    end = new Date(now);
+    end.setDate(end.getDate() + 1);
+  }
+  const endStr = TimeManager.formatDate(end, 'YYYY-MM-DD');
+
+  return { start: startStr, end: endStr };
+};
 
 export default MealVisualization;

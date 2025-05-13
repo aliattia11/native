@@ -1154,7 +1154,7 @@ const CustomTooltip = useCallback(({ active, payload }) => {
                     <YAxis
                       yAxisId="activityEffect"
                       orientation="right"
-                      domain={[-4, 1]}
+                      domain={[-4, 3]}
                       ticks={[-1, -0.5, 0, 0.5, 1]} // Ticks representing activity effect
 
                       label={{ value: 'Activity Effect', angle: -90, position: 'insideRight' }}

@@ -1279,6 +1279,46 @@ td[data-column-id="absorptionType"] {
   display: none;
 }
 
+
+/* Insulin-related styles */
+.tooltip-insulin-section {
+  background-color: rgba(0, 200, 83, 0.1);
+  padding: 8px;
+  border-radius: 4px;
+  margin-bottom: 10px;
+  border-left: 3px solid #00C853;
+}
+
+.tooltip-insulin-dose {
+  font-size: 14px;
+  margin: 4px 0;
+}
+
+.tooltip-insulin-time {
+  font-size: 12px;
+  font-style: italic;
+  color: #666;
+}
+
+/* Update display options to include insulin toggle */
+.display-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+  margin-bottom: 15px;
+}
+
+.display-option {
+  display: flex;
+  align-items: center;
+  margin-right: 15px;
+  cursor: pointer;
+}
+
+.display-option input[type="checkbox"] {
+  margin-right: 5px;
+}
+
 /* Meal type color indicators in effect chart */
 .tooltip-meal-item.breakfast .tooltip-meal-type { background-color: #ffc107; color: #212529; }
 .tooltip-meal-item.lunch .tooltip-meal-type { background-color: #fd7e14; color: #fff; }
