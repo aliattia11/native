@@ -1318,6 +1318,174 @@ td[data-column-id="absorptionType"] {
 .display-option input[type="checkbox"] {
   margin-right: 5px;
 }
+/* Ultra-compact controls styling */
+.ultra-compact-controls {
+  background-color: #f8f9fa;
+  border-radius: 6px;
+  padding: 8px;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+
+.controls-top-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.date-area {
+  display: flex;
+  flex-direction: column;
+}
+
+.date-inputs {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.mini-date {
+  width: 115px;
+  padding: 2px 4px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.date-dash {
+  font-size: 12px;
+  color: #6c757d;
+}
+
+.date-buttons {
+  display: flex;
+  gap: 4px;
+  margin-left: 5px;
+}
+
+.tiny-btn {
+  background-color: #e9ecef;
+  border: 1px solid #ced4da;
+  border-radius: 3px;
+  padding: 2px 6px;
+  font-size: 11px;
+  cursor: pointer;
+  color: #495057;
+}
+
+.tiny-btn:hover {
+  background-color: #dee2e6;
+}
+
+.tz-text {
+  font-size: 10px;
+  color: #6c757d;
+  margin-top: 1px;
+}
+
+.chart-toggle-tabs {
+  display: flex;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.chart-toggle-tabs .tab {
+  background-color: #f8f9fa;
+  border: none;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.chart-toggle-tabs .tab:first-child {
+  border-right: 1px solid #dee2e6;
+}
+
+.chart-toggle-tabs .tab.active {
+  background-color: #007bff;
+  color: white;
+}
+
+/* Options grid */
+.compact-options-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  background-color: #f0f0f0;
+  padding: 6px;
+  border-radius: 4px;
+  margin-top: 4px;
+}
+
+.options-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.compact-option {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  font-size: 12px;
+}
+
+.compact-option input[type="checkbox"] {
+  margin-right: 6px;
+  width: 14px;
+  height: 14px;
+}
+
+.meal-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 2px;
+}
+
+.mini-select {
+  padding: 2px 4px;
+  border: 1px solid #ced4da;
+  border-radius: 3px;
+  font-size: 12px;
+}
+
+.update-mini-btn {
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 3px;
+  padding: 3px 6px;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+}
+
+.mini-setting {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+}
+
+.mini-input {
+  width: 40px;
+  padding: 2px 4px;
+  border: 1px solid #ced4da;
+  border-radius: 3px;
+  font-size: 12px;
+}
+
+/* Make the FaSync icon smaller */
+.update-mini-btn svg {
+  width: 10px;
+  height: 10px;
+}
 
 /* Meal type color indicators in effect chart */
 .tooltip-meal-item.breakfast .tooltip-meal-type { background-color: #ffc107; color: #212529; }

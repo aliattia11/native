@@ -61,6 +61,8 @@ const MealVisualization = ({
   } = timeContext || {};
 
   const lastFetchedDateRange = useRef({ start: null, end: null });
+const [showTargetMealEffect, setShowTargetMealEffect] = useState(true);
+const [showMealSummary, setShowMealSummary] = useState(false); // Set to false by default to deactivate
 
   // Enhanced BloodSugarData context usage
   const {
@@ -513,11 +515,13 @@ const formatLegendText = useCallback((value) => {
 
   // Custom meal effect tooltip
  // REPLACE your CustomMealTooltip function with this updated version
+
 const CustomMealTooltip = useCallback(({ active, payload, label }) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload;
     const now = new Date().getTime();
     const isHistorical = data.timestamp < now;
+
 
     // Validate all critical data values
     const bloodSugar = isHistorical
@@ -533,6 +537,7 @@ const CustomMealTooltip = useCallback(({ active, payload, label }) => {
     const mealImpact = data.mealImpactMgdL ||
       (data.totalMealEffect && !isNaN(data.totalMealEffect) ?
         parseFloat((data.totalMealEffect * 1.0).toFixed(1)) : 0);
+
 
     return (
       <div className="meal-effect-tooltip">
@@ -563,9 +568,10 @@ const CustomMealTooltip = useCallback(({ active, payload, label }) => {
           ) : (
             <>
               <p>Baseline estimate: {estimatedBS} mg/dL</p>
-              {data.totalMealEffect > 0 && (
+              {/* Only show meal effect for future data, not historical */}
+              {data.totalMealEffect > 0 && !isHistorical && (
                 <p className="tooltip-projected">
-                  With meal effect: <strong>{isHistorical ? bloodSugarWithEffect : bloodSugar} mg/dL</strong>
+                  With meal effect: <strong>{bloodSugar} mg/dL</strong>
                 </p>
               )}
             </>
@@ -591,15 +597,15 @@ const CustomMealTooltip = useCallback(({ active, payload, label }) => {
             </p>
 
             {/* Target status classification */}
-            {targetWithEffect > targetGlucose * 1.3 ? (
-              <p className="tooltip-status high">HIGH</p>
-            ) : targetWithEffect < targetGlucose * 0.7 ? (
-              <p className="tooltip-status low">LOW</p>
-            ) : (
-              <p className="tooltip-status normal">IN RANGE</p>
-            )}
-          </div>
-        )}
+              {targetWithEffect > targetGlucose * 1.3 ? (
+      <p className="tooltip-status high">HIGH</p>
+    ) : targetWithEffect < targetGlucose * 0.7 ? (
+      <p className="tooltip-status low">LOW</p>
+    ) : (
+      <p className="tooltip-status normal">IN RANGE</p>
+    )}
+  </div>
+)}
 
         {/* Meal effects details */}
         {data.mealEffects && Object.keys(data.mealEffects).length > 0 && (
@@ -805,37 +811,35 @@ const renderMealEffectChart = () => (
   </>
 )}
 
-      {/* Second visualization: Target with meal effect line */}
-      {showBloodSugar && showMealEffect && (
-        <Line
-          yAxisId="bloodSugar"
-          type="monotone"
-          dataKey="targetWithMealEffect"
-          name="Target + Meal Effect"
-          stroke="#FF7300"  // Same color as target for association
-          strokeWidth={2}
-          strokeDasharray="2 2"
-          dot={(props) => {
-            const { cx, cy, payload } = props;
-            // Only show dots where meal effect exists
-            if (!payload.totalMealEffect || payload.totalMealEffect <= 0) return null;
+    {/* Second visualization: Target with meal effect line */}
+{showBloodSugar && showMealEffect && showTargetMealEffect && (
+  <Line
+    yAxisId="bloodSugar"
+    type="monotone"
+    dataKey="targetWithMealEffect"
+    name="Target + Meal Effect"
+    stroke="#FF7300"  // Same color as target for association
+    strokeWidth={2}
+    strokeDasharray="2 2"
+    dot={(props) => {
+      const { cx, cy, payload } = props;
+      // Only show dots where meal effect exists
+      if (!payload.totalMealEffect || payload.totalMealEffect <= 0) return null;
 
-            return (
-              <circle
-                cx={cx}
-                cy={cy}
-                r={3}
-                fill="#FFCC80"
-                stroke="#FF7300"
-                strokeWidth={1}
-
-              />
-            );
-          }}
-          activeDot={{ r: 6, strokeWidth: 1, fill: '#FFCC80' }}
+      return (
+        <circle
+          cx={cx}
+          cy={cy}
+          r={3}
+          fill="#FFCC80"
+          stroke="#FF7300"
+          strokeWidth={1}
         />
-      )}
-
+      );
+    }}
+    activeDot={{ r: 6, strokeWidth: 1, fill: '#FFCC80' }}
+  />
+)}
       {/* Meal Bars */}
       {(viewMode === 'combined' || viewMode === 'meals') && showMeals && filteredMeals.map(meal => (
         <Bar
@@ -1404,80 +1408,99 @@ const renderMealEffectChart = () => (
 
           {/* Chart type toggle (only shown in chart view) */}
           {activeView === 'chart' && (
-            <>
+              <>
               <div className="chart-type-controls">
                 <button
-                  className={`chart-type-btn ${chartType === 'mealEffect' ? 'active' : ''}`}
-                  onClick={() => handleChartTypeChange('mealEffect')}
+                    className={`chart-type-btn ${chartType === 'mealEffect' ? 'active' : ''}`}
+                    onClick={() => handleChartTypeChange('mealEffect')}
                 >
                   Meal Effect
                 </button>
                 <button
-                  className={`chart-type-btn ${chartType === 'nutrition' ? 'active' : ''}`}
-                  onClick={() => handleChartTypeChange('nutrition')}
+                    className={`chart-type-btn ${chartType === 'nutrition' ? 'active' : ''}`}
+                    onClick={() => handleChartTypeChange('nutrition')}
                 >
                   Nutrition Distribution
                 </button>
               </div>
 
               {/* Display options */}
-              <div className="display-options">
-                <label className="display-option">
-                  <input
+              <label className="display-option">
+                <input
                     type="checkbox"
-                    checked={showMeals}
-                    onChange={() => setShowMeals(!showMeals)}
-                  />
-                  Show Meals
-                </label>
-                <label className="display-option">
-                  <input
-                    type="checkbox"
-                    checked={showMealEffect}
-                    onChange={() => setShowMealEffect(!showMealEffect)}
-                  />
-                  Show Meal Effect
-                </label>
-                <label className="display-option">
-                  <input
-                    type="checkbox"
-                    checked={showBloodSugar}
-                    onChange={() => setShowBloodSugar(!showBloodSugar)}
-                  />
-                  Show Blood Sugar
-                </label>
-                <label className="display-option">
-                  <input
-                    type="checkbox"
-                    checked={includeFutureEffect}
-                    onChange={toggleFutureEffect}
-                  />
-                  Project Future Effect
-                </label>
-                {includeFutureEffect && (
-                  <div className="future-hours">
-                    <label>Future Hours:</label>
-                    <input
-                      type="number"
-                      min="1"
-                      max="24"
-                      value={futureHours}
-                      onChange={(e) => setFutureHoursInContext(parseInt(e.target.value) || 7)}
-                    />
-                  </div>
-                )}
-                <div className="effect-duration">
-                  <label>Effect Duration (hours):</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="24"
-                    value={effectDurationHours}
-                    onChange={(e) => setEffectDurationHours(parseInt(e.target.value) || 6)}
-                  />
-                </div>
-              </div>
-            </>
+                    checked={showMealSummary}
+                    onChange={() => setShowMealSummary(!showMealSummary)}
+                />
+                Show Meal Summary
+              </label>
+            <div className="display-options">
+            <label className="display-option">
+            <input
+            type="checkbox"
+            checked={showMeals}
+          onChange={() => setShowMeals(!showMeals)}
+        />
+        Show Meals
+        </label>
+        <label className="display-option">
+        <input
+        type="checkbox"
+        checked={showMealEffect}
+      onChange={() => setShowMealEffect(!showMealEffect)}
+    />
+Show Meal Effect
+</label>
+  <label className="display-option">
+    <input
+        type="checkbox"
+        checked={showBloodSugar}
+        onChange={() => setShowBloodSugar(!showBloodSugar)}
+    />
+    Show Blood Sugar
+  </label>
+  <label className="display-option">
+    <input
+        type="checkbox"
+        checked={showTargetMealEffect}
+        onChange={() => setShowTargetMealEffect(!showTargetMealEffect)}
+    />
+    Show Target With Meal Effect
+  </label>
+  <label className="display-option">
+    <input
+        type="checkbox"
+        checked={includeFutureEffect}
+        onChange={toggleFutureEffect}
+    />
+    Project Future Effect
+  </label>
+{
+  includeFutureEffect && (
+      <div className="future-hours">
+        <label>Future Hours:</label>
+        <input
+            type="number"
+            min="1"
+            max="24"
+            value={futureHours}
+            onChange={(e) => setFutureHoursInContext(parseInt(e.target.value) || 7)}
+        />
+      </div>
+
+  )
+}
+  <div className="effect-duration">
+    <label>Effect Duration (hours):</label>
+    <input
+        type="number"
+        min="1"
+        max="24"
+        value={effectDurationHours}
+        onChange={(e) => setEffectDurationHours(parseInt(e.target.value) || 6)}
+    />
+  </div>
+</div>
+</>
           )}
         </div>
       )}
@@ -1485,7 +1508,7 @@ const renderMealEffectChart = () => (
       {error && <div className="error-message">{error}</div>}
 
       {!loading && filteredMeals.length === 0 ? (
-        <div className="no-data-message">
+          <div className="no-data-message">
           No meals found for the selected date range and filters.
         </div>
       ) : (
@@ -1633,8 +1656,8 @@ const renderMealEffectChart = () => (
         </div>
       )}
 
-      {/* Statistics summary - shown at bottom of all views when data is available */}
-     {!loading && filteredMeals.length > 0 && (
+{/* Statistics summary - shown at bottom only when enabled */}
+{!loading && filteredMeals.length > 0 && showMealSummary && (
   <div className="meal-statistics">
     <h3>Meal Impact Summary</h3>
     <div className="stats-grid">
