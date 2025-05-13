@@ -1,20 +1,22 @@
 /**
  * BG_Effect.js - Utility functions for blood glucose effect calculations
- * 
+ *
  * This utility provides functions to calculate and visualize the effects of
  * various factors (meals, insulin, activity) on blood glucose levels.
  */
 
+/****** MEAL EFFECT CALCULATIONS ******/
+
 /**
  * Calculate the effect of a meal on blood glucose levels over time
- * 
+ *
  * @param {Object} meal - The meal data object
  * @param {Object} patientConstants - Patient-specific constants
  * @param {number} effectDurationHours - Duration of effect in hours
  * @param {Object} TimeManager - TimeManager utility for time calculations
  * @returns {Array} Array of effect points over time
  */
-export const calculateMealEffect = (meal, patientConstants, effectDurationHours = 6, TimeManager) => {
+function calculateMealEffect(meal, patientConstants, effectDurationHours = 6, TimeManager) {
   if (!meal || !patientConstants) {
     console.log("Missing meal or patientConstants data");
     return [];
@@ -42,7 +44,7 @@ export const calculateMealEffect = (meal, patientConstants, effectDurationHours 
     const durationHours = Math.min(effectDurationHours, 10);
 
     // Generate the effect curve similar to the original implementation
-     const startTime = meal.timestamp;
+    const startTime = meal.timestamp;
     const results = [];
 
     // Generate points at 5-minute intervals instead of 15 for smoother curves
@@ -82,7 +84,42 @@ export const calculateMealEffect = (meal, patientConstants, effectDurationHours 
     console.error("Error calculating meal effect:", error);
     return [];
   }
-};
+}
+
+/**
+ * Calculate total carbohydrate equivalents from nutrition data
+ *
+ * @param {Object} nutrition - Nutrition data (carbs, protein, fat)
+ * @param {Object} patientConstants - Patient-specific constants
+ * @returns {number} - Total carbohydrate equivalents
+ */
+function calculateCarbEquivalents(nutrition, patientConstants) {
+  if (!nutrition) return 0;
+
+  // Extract nutritional values
+  const carbs = nutrition.carbs || nutrition.totalCarbs || 0;
+  const protein = nutrition.protein || nutrition.totalProtein || 0;
+  const fat = nutrition.fat || nutrition.totalFat || 0;
+  const fiber = nutrition.fiber || 0;
+
+  // Get conversion factors from patient constants or use defaults
+  const proteinFactor = patientConstants?.protein_factor || 0.5;
+  const fatFactor = patientConstants?.fat_factor || 0.2;
+  const fiberFactor = patientConstants?.fiber_factor || 0.1;
+
+  // Calculate protein and fat carb equivalents
+  const proteinCarbEquiv = protein * proteinFactor;
+  const fatCarbEquiv = fat * fatFactor;
+  const fiberReduction = fiber * fiberFactor;
+
+  // Calculate total carb equivalents (carbs + protein equiv + fat equiv - fiber reduction)
+  const totalCarbEquiv = carbs + proteinCarbEquiv + fatCarbEquiv - fiberReduction;
+
+  // Ensure result is not negative
+  return Math.max(0, totalCarbEquiv);
+}
+
+/****** DATA VISUALIZATION AND TIMELINE GENERATION ******/
 
 /**
  * Generate combined timeline data showing meal impacts on blood glucose
@@ -94,13 +131,13 @@ export const calculateMealEffect = (meal, patientConstants, effectDurationHours 
  * @param {Object} TimeManager - TimeManager utility
  * @returns {Array} Combined timeline data with meal effects
  */
-export const generateMealTimelineData = (
+function generateMealTimelineData(
   mealData,
   bloodGlucoseData,
   options = {},
   contextFunctions = {},
   TimeManager
-) => {
+) {
   const {
     timeScale = { start: 0, end: 0, tickInterval: 3600000 },
     targetGlucose = 100,
@@ -139,7 +176,9 @@ export const generateMealTimelineData = (
 
     // If including future effects, extend the timeline
     if (includeFutureEffect) {
-      const futureTime = TimeManager.getFutureProjectionTime(futureHours);
+      const futureTime = TimeManager.getFutureProjectionTime
+        ? TimeManager.getFutureProjectionTime(futureHours)
+        : new Date().getTime() + (futureHours * 60 * 60 * 1000);
       maxTime = Math.max(maxTime, futureTime);
     }
 
@@ -188,10 +227,9 @@ export const generateMealTimelineData = (
       // Create the time point data structure
       const timePoint = {
         timestamp: currentTime,
-        formattedTime: TimeManager.formatDate(
-          new Date(currentTime),
-          TimeManager.formats.DATETIME_DISPLAY
-        ),
+        formattedTime: TimeManager.formatDate
+          ? TimeManager.formatDate(new Date(currentTime), TimeManager.formats?.DATETIME_DISPLAY || 'datetime')
+          : new Date(currentTime).toLocaleString(),
         meals: [],
         mealEffects: {},
         totalMealEffect: 0,
@@ -291,47 +329,111 @@ export const generateMealTimelineData = (
       timelineData.push(timePoint);
       currentTime += interval;
     }
-const now = new Date().getTime();
-const processedTimelineData = timelineData.map(point => {
-  const isHistorical = point.timestamp < now;
 
-  // Create a new object to avoid mutating the original
-  const processedPoint = { ...point };
-
-  // Always save the baseline blood sugar, regardless of historical/future
-  processedPoint.baselineBloodSugar = processedPoint.estimatedBloodSugar;
-
-  // For historical points that aren't actual readings, show only baseline values
-  if (isHistorical && !point.isActualReading) {
-    // Store the meal effect version for tooltips
-    processedPoint.bloodSugarWithMealEffect = processedPoint.bloodSugar;
-    // Set displayed blood sugar to baseline (no meal effect)
-    processedPoint.bloodSugar = processedPoint.estimatedBloodSugar;
-  }
-  // For future points, ensure we maintain both values
-  else if (!isHistorical) {
-    // Keep bloodSugar as is (with meal effects)
-    // Make sure estimatedBloodSugar has a valid value for future points
-    if (!processedPoint.estimatedBloodSugar || processedPoint.estimatedBloodSugar === 0) {
-      // Find a reasonable baseline value - either from context or target glucose
-      // If no meal effect, blood sugar should equal baseline
-      processedPoint.estimatedBloodSugar = point.totalMealEffect > 0 ?
-        (processedPoint.bloodSugar - (point.mealImpactMgdL || 0)) :
-        processedPoint.bloodSugar;
-    }
-  }
-
-  return processedPoint;
-});
-
-console.log(`Processed ${processedTimelineData.length} timeline data points with historical/future split`);
-return processedTimelineData;
-
+    const processedTimelineData = prepareTimelineData(timelineData, targetGlucose);
+    console.log(`Processed ${processedTimelineData.length} timeline data points with historical/future split`);
+    return processedTimelineData;
   } catch (error) {
     console.error('Error generating meal timeline data:', error);
     return [];
   }
-};
+}
+
+/**
+ * Process timeline data for historical vs. future display
+ *
+ * @param {Array} timelineData - Raw timeline data
+ * @param {number} targetGlucose - Target blood glucose level
+ * @returns {Array} - Processed timeline data
+ */
+function prepareTimelineData(timelineData, targetGlucose) {
+  if (!timelineData || !Array.isArray(timelineData)) return [];
+
+  const now = new Date().getTime();
+
+  return timelineData.map(point => {
+    const isHistorical = point.timestamp < now;
+    const newPoint = { ...point };
+
+    // Always save the baseline blood sugar, regardless of historical/future
+    newPoint.baselineBloodSugar = newPoint.estimatedBloodSugar;
+
+    // For historical points that aren't actual readings, show only baseline values
+    if (isHistorical && !point.isActualReading) {
+      // Store the meal effect version for tooltips
+      newPoint.bloodSugarWithMealEffect = newPoint.bloodSugar;
+      // Set displayed blood sugar to baseline (no meal effect)
+      newPoint.bloodSugar = newPoint.estimatedBloodSugar;
+    }
+    // For future points, ensure we maintain both values
+    else if (!isHistorical) {
+      // Keep bloodSugar as is (with meal effects)
+      // Make sure estimatedBloodSugar has a valid value for future points
+      if (!newPoint.estimatedBloodSugar || newPoint.estimatedBloodSugar === 0) {
+        // Find a reasonable baseline value - either from context or target glucose
+        newPoint.estimatedBloodSugar = point.totalMealEffect > 0 ?
+          (newPoint.bloodSugar - (point.mealImpactMgdL || 0)) :
+          newPoint.bloodSugar;
+      }
+    }
+
+    return newPoint;
+  });
+}
+
+/**
+ * Prepare chart data for rendering, with specific historical vs future handling
+ *
+ * @param {Array} data - The processed timeline data
+ * @param {Object} options - Configuration options
+ * @returns {Array} - Data ready for chart rendering
+ */
+function prepareChartData(data, options = {}) {
+  if (!data || !Array.isArray(data)) return [];
+
+  const { targetGlucose = 100 } = options;
+  const now = new Date().getTime();
+
+  return data.map(point => {
+    const isHistorical = point.timestamp < now;
+    const newPoint = { ...point };
+
+    // For historical data (before now)
+    if (isHistorical) {
+      if (!point.isActualReading) {
+        // For estimated points, hide the bloodSugar (dark purple) line
+        // but keep estimatedBloodSugar (light purple) line
+        newPoint.bloodSugar = null;
+      }
+      // For actual readings, keep both values so dots appear correctly
+    }
+    // For future data (after now)
+    else {
+      // IMPORTANT: Don't null out estimatedBloodSugar for future points
+      // Keep both lines for future projection
+
+      // Ensure we have a valid estimatedBloodSugar for the baseline
+      if (newPoint.estimatedBloodSugar === null || newPoint.estimatedBloodSugar === undefined ||
+          newPoint.estimatedBloodSugar === 0) {
+        // If missing, use the original baseline from the bloodSugar context
+        // or fall back to target glucose as a reasonable baseline
+        newPoint.estimatedBloodSugar = newPoint.baselineBloodSugar || targetGlucose;
+      }
+
+      // Make sure bloodSugar (with meal effect) is properly set for future points
+      if (!point.isActualReading) {
+        // Keep the bloodSugar value for the dark purple line (with meal effect)
+      }
+    }
+
+    // Store the original bloodSugar value for tooltips
+    newPoint.bloodSugarWithMealEffect = point.bloodSugar;
+
+    return newPoint;
+  });
+}
+
+/****** INSULIN EFFECT CALCULATIONS ******/
 
 /**
  * Calculate effect of insulin on blood glucose levels
@@ -341,36 +443,175 @@ return processedTimelineData;
  * @param {number} duration - Effect duration in hours
  * @returns {Array} Array of effect points over time
  */
-export const calculateInsulinEffect = (insulinDose, patientConstants, duration = 6) => {
-  // Implementation for insulin effect calculation
-  // This would be similar to calculateMealEffect but with insulin-specific calculations
-  // To be implemented based on insulin physiological model
-
-  // Placeholder return for now
+function calculateInsulinEffect(insulinDose, patientConstants, duration = 6) {
+  // To be implemented for insulin integration
   return [];
-};
+}
+
+/****** DATA ANALYSIS AND STATISTICS ******/
 
 /**
- * Calculate effect of physical activity on blood glucose levels
+ * Calculate nutritional distribution from a list of meals
  *
- * @param {Object} activity - Activity data object
+ * @param {Array} meals - Array of meal objects
  * @param {Object} patientConstants - Patient-specific constants
- * @param {number} duration - Effect duration in hours
- * @returns {Array} Array of effect points over time
+ * @returns {Object} - Aggregated nutrition data
  */
-export const calculateActivityEffect = (activity, patientConstants, duration = 6) => {
-  // Implementation for activity effect calculation
-  // This would model how physical activity impacts blood glucose
-  // To be implemented based on activity physiological model
+function calculateNutritionDistribution(meals, patientConstants) {
+  if (!meals || !Array.isArray(meals) || meals.length === 0) {
+    return {
+      avgCarbs: 0,
+      avgProtein: 0,
+      avgFat: 0,
+      avgCarbEquivalent: 0,
+      avgPeakTime: 0,
+      avgEffectDuration: 0
+    };
+  }
 
-  // Placeholder return for now
-  return [];
-};
+  const totalCarbs = meals.reduce((sum, meal) => sum + (meal.nutrition?.totalCarbs || 0), 0);
+  const totalProtein = meals.reduce((sum, meal) => sum + (meal.nutrition?.totalProtein || 0), 0);
+  const totalFat = meals.reduce((sum, meal) => sum + (meal.nutrition?.totalFat || 0), 0);
+
+  // Calculate total carb equivalents using our new function
+  const totalCarbEquiv = meals.reduce((sum, meal) => {
+    if (!meal.nutrition) return sum;
+    return sum + calculateCarbEquivalents(meal.nutrition, patientConstants);
+  }, 0);
+
+  // Calculate estimated peak time based on meal composition
+  const totalPeakTime = meals.reduce((sum, meal) => {
+    const carbs = meal.nutrition?.totalCarbs || 0;
+    const protein = meal.nutrition?.totalProtein || 0;
+    const fat = meal.nutrition?.totalFat || 0;
+    const total = carbs + protein + fat;
+
+    // Higher carb meals peak faster
+    const carbRatio = total > 0 ? carbs / total : 0.5;
+    const basePeak = 0.5 + ((1 - carbRatio) * 0.5);
+
+    // Adjust for absorption type
+    const absorptionType = meal.nutrition?.absorptionType || 'medium';
+    const absorptionFactor = absorptionType === 'fast' ? 1.2 :
+                           absorptionType === 'slow' ? 0.8 : 1.0;
+
+    return sum + (basePeak / absorptionFactor);
+  }, 0);
+
+  // Calculate estimated effect duration based on meal composition
+  const totalDuration = meals.reduce((sum, meal) => {
+    const fat = meal.nutrition?.totalFat || 0;
+    const protein = meal.nutrition?.totalProtein || 0;
+
+    // Higher fat/protein extends duration
+    const baseDuration = 2 + (fat * 0.02) + (protein * 0.01);
+
+    // Adjust for absorption type
+    const absorptionType = meal.nutrition?.absorptionType || 'medium';
+    const absorptionFactor = absorptionType === 'fast' ? 1.2 :
+                           absorptionType === 'slow' ? 0.8 : 1.0;
+
+    return sum + (baseDuration / absorptionFactor);
+  }, 0);
+
+  return {
+    avgCarbs: totalCarbs / meals.length,
+    avgProtein: totalProtein / meals.length,
+    avgFat: totalFat / meals.length,
+    avgCarbEquivalent: totalCarbEquiv / meals.length,
+    avgPeakTime: totalPeakTime / meals.length,
+    avgEffectDuration: totalDuration / meals.length
+  };
+}
+
+/**
+ * Calculate statistics for meal effects
+ *
+ * @param {Array} meals - Array of meal objects
+ * @param {Array} combinedData - Combined data points with meal effects
+ * @returns {Object} - Statistical analysis
+ */
+function calculateMealStatistics(meals, combinedData) {
+  if (!meals || !combinedData || meals.length === 0 || combinedData.length === 0) {
+    return {
+      maxEffect: 0,
+      avgEffect: 0,
+      effectVariance: 0,
+      mealTypes: {}
+    };
+  }
+
+  // Find the maximum meal effect in the combined data
+  const maxEffect = Math.max(...combinedData
+    .filter(d => d.totalMealEffect > 0)
+    .map(d => d.totalMealEffect));
+
+  // Calculate average meal effect
+  const effectPoints = combinedData.filter(d => d.totalMealEffect > 0);
+  const avgEffect = effectPoints.length > 0 ?
+    effectPoints.reduce((sum, d) => sum + d.totalMealEffect, 0) / effectPoints.length : 0;
+
+  // Calculate variance in meal effects
+  const effectVariance = effectPoints.length > 0 ?
+    Math.sqrt(effectPoints.reduce((sum, d) => sum + Math.pow(d.totalMealEffect - avgEffect, 2), 0) / effectPoints.length) : 0;
+
+  // Count meal types
+  const mealTypes = meals.reduce((count, meal) => {
+    const type = meal.mealType || 'unknown';
+    count[type] = (count[type] || 0) + 1;
+    return count;
+  }, {});
+
+  return {
+    maxEffect,
+    avgEffect,
+    effectVariance,
+    mealTypes
+  };
+}
+
+/****** UTILITY FUNCTIONS ******/
+
+/**
+ * Apply date preset for non-TimeContext users
+ *
+ * @param {number} days - Number of days to include
+ * @returns {Object} - Date range object with start and end dates
+ */
+function applyDatePreset(days) {
+  const now = new Date();
+  const start = new Date(now);
+  start.setDate(start.getDate() - days);
+
+  // Simple date formatter for YYYY-MM-DD format
+  const formatToYYYYMMDD = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const startStr = formatToYYYYMMDD(start);
+
+  let end;
+  if (days === 1) {
+    // For "Last 24h": past day plus 12 hours
+    end = new Date(now);
+    end.setHours(end.getHours() + 12);
+  } else {
+    // Default: add one future day
+    end = new Date(now);
+    end.setDate(end.getDate() + 1);
+  }
+  const endStr = formatToYYYYMMDD(end);
+
+  return { start: startStr, end: endStr };
+}
 
 /**
  * Calculate combined effect of multiple factors (meals, insulin, activity)
  * on blood glucose levels
- * 
+ *
  * @param {Array} mealData - Array of meal objects
  * @param {Array} insulinData - Array of insulin dose objects
  * @param {Array} activityData - Array of activity objects
@@ -380,17 +621,30 @@ export const calculateActivityEffect = (activity, patientConstants, duration = 6
  * @param {Object} TimeManager - TimeManager utility
  * @returns {Array} Combined timeline data with all effects
  */
-export const generateCombinedEffectsTimeline = (
-  mealData, 
-  insulinData, 
+function generateCombinedEffectsTimeline(
+  mealData,
+  insulinData,
   activityData,
-  bloodGlucoseData, 
-  options = {}, 
-  contextFunctions = {}, 
+  bloodGlucoseData,
+  options = {},
+  contextFunctions = {},
   TimeManager
-) => {
-  // This would combine all effect types into one timeline
-  // Would leverage the individual effect calculation functions
+) {
+  // This will be enhanced to combine all effect types into one timeline
   // For now, just call the meal timeline generator
   return generateMealTimelineData(mealData, bloodGlucoseData, options, contextFunctions, TimeManager);
+}
+
+// Export all functions
+export {
+  calculateMealEffect,
+  generateMealTimelineData,
+  prepareChartData,
+  prepareTimelineData,
+  calculateInsulinEffect,
+  generateCombinedEffectsTimeline,
+  calculateCarbEquivalents,
+  calculateNutritionDistribution,
+  calculateMealStatistics,
+  applyDatePreset
 };
