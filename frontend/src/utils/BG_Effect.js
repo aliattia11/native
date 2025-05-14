@@ -159,27 +159,45 @@ function generateMealTimelineData(
       return [];
     }
 
-    // Find the earliest and latest timestamps
+    // CRITICAL FIX: Ensure we have a sufficient time range for all views
+    const now = new Date().getTime();
+
+    // Step 1: Use timeScale if provided, and ensure it has sufficient range
+    let minTime = timeScale && typeof timeScale.start === 'number' ? timeScale.start : now - (24 * 60 * 60 * 1000);
+    let maxTime = timeScale && typeof timeScale.end === 'number' ? timeScale.end : now + (24 * 60 * 60 * 1000);
+
+    // Step 2: Find meal and blood glucose timestamps
     const allMealTimes = mealData.map(m => m.timestamp).filter(t => !isNaN(t) && t > 0);
-    const allBGTimes = bloodGlucoseData
+    const allBGTimes = (bloodGlucoseData || [])
       .map(d => d.readingTime)
       .filter(t => !isNaN(t) && t > 0);
 
-    const allTimestamps = [...allMealTimes, ...allBGTimes];
-    if (allTimestamps.length === 0) {
-      console.log("No valid timestamps found");
-      return [];
+    // Step 3: Consider meal and BG data points in timeframe calculation, but don't let them restrict range
+    if (allMealTimes.length > 0) {
+      minTime = Math.min(minTime, Math.min(...allMealTimes));
+      maxTime = Math.max(maxTime, Math.max(...allMealTimes));
     }
 
-    let minTime = Math.min(...allTimestamps);
-    let maxTime = Math.max(...allTimestamps);
+    if (allBGTimes.length > 0) {
+      minTime = Math.min(minTime, Math.min(...allBGTimes));
+      maxTime = Math.max(maxTime, Math.max(...allBGTimes));
+    }
 
-    // If including future effects, extend the timeline
-    if (includeFutureEffect) {
-      const futureTime = TimeManager.getFutureProjectionTime
-        ? TimeManager.getFutureProjectionTime(futureHours)
-        : new Date().getTime() + (futureHours * 60 * 60 * 1000);
-      maxTime = Math.max(maxTime, futureTime);
+    // Step 4: CRITICAL - Ensure we have enough future time to show meal effects
+    // Include at least enough future time for the full effect duration
+    const minFutureTime = now + (effectDurationHours * 60 * 60 * 1000);
+
+    // If we need more future time than currently calculated, extend it
+    if (maxTime < minFutureTime) {
+      maxTime = minFutureTime;
+    }
+
+    // Additional safety check: If we have a very narrow time window, expand it
+    const timeRange = maxTime - minTime;
+    if (timeRange < 6 * 60 * 60 * 1000) { // Less than 6 hours
+      console.log("Expanding narrow time range for proper meal effect visualization");
+      minTime = now - (12 * 60 * 60 * 1000); // At least 12 hours back
+      maxTime = now + (12 * 60 * 60 * 1000); // At least 12 hours forward
     }
 
     console.log(`Timeline range: ${new Date(minTime)} to ${new Date(maxTime)}`);
@@ -213,9 +231,18 @@ function generateMealTimelineData(
         };
       });
 
-    // Create a timeline using 15-minute intervals
+    // IMPROVEMENT: Create a timeline using consistent interval logic
     const timelineData = [];
-    const interval = 15 * 60 * 1000; // 15 minutes in milliseconds
+    let interval = 15 * 60 * 1000; // Default 15 minutes
+
+    // Adjust interval based on timeline length to prevent too many points
+    const totalHours = (maxTime - minTime) / (60 * 60 * 1000);
+    if (totalHours > 72) { // More than 3 days
+      interval = 30 * 60 * 1000; // Use 30-minute intervals
+    } else if (totalHours <= 6) { // 6 hours or less
+      interval = 5 * 60 * 1000; // Use 5-minute intervals for higher resolution
+    }
+
     let currentTime = minTime;
     let pointsWithEffects = 0;
 

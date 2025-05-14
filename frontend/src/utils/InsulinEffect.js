@@ -253,16 +253,16 @@ export const generateInsulinTimelineData = (insulinDoses, options, TimeManager) 
 
     for (let time = timeScale.start; time <= timeScale.end; time += interval) {
       const timePoint = {
-        timestamp: time,
-        formattedTime: TimeManager.formatDate(
-          new Date(time),
-          TimeManager.formats.DATETIME_DISPLAY
-        ),
-        insulinDoses: {},
-        insulinBars: {}, // For bidirectional bars
-        activeInsulin: 0,
-        bgImpact: 0
-      };
+  timestamp: time,
+  formattedTime: TimeManager.formatDate(
+    new Date(time),
+    TimeManager.formats.DATETIME_DISPLAY || 'YYYY-MM-DD HH:mm:ss'  // Provide default
+  ),
+  insulinDoses: {},
+  insulinBars: {},
+  activeInsulin: 0,
+  bgImpact: 0
+};
 
       // Check if any insulin dose was administered at this time point (±7.5 min)
       insulinDoses.forEach(dose => {

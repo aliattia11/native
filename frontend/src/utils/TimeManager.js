@@ -192,13 +192,19 @@ class TimeManager {
    * @param {string} format - Format string
    * @returns {string} Formatted date string
    */
-  static formatDate(date, format) {
-    if (!date) return '';
+static formatDate(date, format) {
+  if (!date) return '';
 
-    const d = new Date(date);
+  // Add this check for undefined format
+  if (!format) {
+    format = this.formats.DATETIME_DISPLAY; // Use default format
+  }
 
-    // Handle invalid dates
-    if (isNaN(d.getTime())) return '';
+  const d = new Date(date);
+
+  // Handle invalid dates
+  if (isNaN(d.getTime())) return '';
+
 
     // Extract date components
     const year = d.getFullYear();

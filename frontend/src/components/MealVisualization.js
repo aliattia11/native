@@ -211,28 +211,51 @@ const SimpleMealEffectChart = ({
   }, [patientConstants, calculateCarbEquivalents]);
 
   // Process raw insulin data
-  const processInsulinData = useCallback((rawInsulinData) => {
-    if (!Array.isArray(rawInsulinData)) {
-      console.error('processInsulinData received non-array data:', rawInsulinData);
-      return [];
-    }
+const processInsulinData = useCallback((rawInsulinData) => {
+  if (!Array.isArray(rawInsulinData)) {
+    console.error('processInsulinData received non-array data:', rawInsulinData);
+    return [];
+  }
 
-    return rawInsulinData.map(dose => {
-      // Parse the administration time
-      const administrationTime = TimeManager.parseTimestamp(dose.taken_at || dose.scheduled_time);
-      const formattedTime = TimeManager.formatDate(
-        administrationTime,
-        TimeManager.formats.DATETIME_DISPLAY
-      );
+  return rawInsulinData.map(dose => {
+    try {
+      // Safely parse the administration time with fallbacks
+      let administrationTime;
+      try {
+        // Try to parse the time, with fallbacks
+        administrationTime = dose.taken_at || dose.scheduled_time;
+        if (!administrationTime) {
+          console.warn('Insulin dose missing timestamp:', dose);
+          administrationTime = new Date().toISOString(); // Default to now as fallback
+        }
+
+        // Convert to timestamp
+        administrationTime = TimeManager.parseTimestamp(administrationTime).valueOf();
+      } catch (err) {
+        console.error('Error parsing insulin timestamp:', err);
+        administrationTime = new Date().getTime(); // Fallback to current time
+      }
+
+      // Safely format times
+      let formattedTime;
+      try {
+        formattedTime = TimeManager.formatDate(
+          new Date(administrationTime),
+          TimeManager.formats.DATETIME_DISPLAY
+        );
+      } catch (err) {
+        console.error('Error formatting time:', err);
+        formattedTime = 'Unknown time';
+      }
 
       return {
         id: dose.id || dose._id,
-        medication: dose.medication || dose.insulinType,
+        medication: dose.medication || dose.insulinType || 'unknown_insulin',
         dose: parseFloat(dose.dose) || 0,
-        administrationTime: administrationTime.valueOf(),
+        administrationTime: administrationTime,
         formattedTime,
-        date: TimeManager.formatDate(administrationTime, 'YYYY-MM-DD'),
-        time: TimeManager.formatDate(administrationTime, 'HH:mm'),
+        date: TimeManager.formatDate(new Date(administrationTime), TimeManager.formats.DATE),
+        time: TimeManager.formatDate(new Date(administrationTime), TimeManager.formats.TIME),
         suggestedDose: parseFloat(dose.suggested_dose) || 0,
         notes: dose.notes || '',
         mealId: dose.meal_id,
@@ -244,8 +267,21 @@ const SimpleMealEffectChart = ({
           duration_hours: patientConstants?.medication_factors?.[dose.medication]?.duration_hours || 4.0
         }
       };
-    }).sort((a, b) => b.administrationTime - a.administrationTime); // Sort by timestamp descending
-  }, [patientConstants]);
+    } catch (error) {
+      console.error('Error processing insulin dose:', error, dose);
+      // Return a minimal valid object so the app doesn't crash
+      return {
+        id: dose.id || dose._id || 'unknown',
+        medication: 'unknown_insulin',
+        dose: 0,
+        administrationTime: Date.now(),
+        formattedTime: 'Unknown time',
+        date: TimeManager.formatDate(new Date(), TimeManager.formats.DATE),
+        time: TimeManager.formatDate(new Date(), TimeManager.formats.TIME)
+      };
+    }
+  }).filter(dose => dose !== null).sort((a, b) => b.administrationTime - a.administrationTime);
+}, [patientConstants]);
 
   // Helper function to merge meal and insulin timeline data
   const mergeTimelineData = useCallback((mealData, insulinData) => {
@@ -398,12 +434,17 @@ const fetchInsulinData = useCallback(async (timeSettings) => {
 
     console.log("Fetching insulin data for date range:", timeSettings);
 
-    // Construct URL with proper parameter syntax (using ? for first param, & for subsequent)
-    let url = `http://localhost:5000/api/insulin-data?start_date=${timeSettings.startDate}&end_date=${timeSettings.endDate}`;
+    // Validate timeSettings before using
+    if (!timeSettings || !timeSettings.startDate || !timeSettings.endDate) {
+      throw new Error('Invalid time settings for API call');
+    }
+
+    // Construct URL with proper parameter syntax
+    let url = `http://localhost:5000/api/insulin-data?start_date=${encodeURIComponent(timeSettings.startDate)}&end_date=${encodeURIComponent(timeSettings.endDate)}`;
 
     // Add patient ID if provided
     if (patientId) {
-      url += `&patient_id=${patientId}`;
+      url += `&patient_id=${encodeURIComponent(patientId)}`;
     }
 
     console.log("Insulin data URL:", url);
@@ -413,23 +454,27 @@ const fetchInsulinData = useCallback(async (timeSettings) => {
       { headers: { Authorization: `Bearer ${token}` } }
     );
 
+    let processedInsulin = [];
+
     if (insulinResponse.data && insulinResponse.data.insulin_logs) {
-      const processedInsulin = processInsulinData(insulinResponse.data.insulin_logs);
+      processedInsulin = processInsulinData(insulinResponse.data.insulin_logs);
       console.log("Processed insulin doses:", processedInsulin.length);
 
-      // Return the processed data instead of setting state directly
-      return processedInsulin;
+      // Set the state
+      setInsulinDoses(processedInsulin);
+      setFilteredInsulinDoses(processedInsulin);
     } else {
       console.error('Invalid insulin response structure:', insulinResponse.data);
-      return [];
     }
+
+    return processedInsulin;
   } catch (error) {
     console.error('Error fetching insulin data:', error);
     return [];
   } finally {
     setLoadingInsulin(false);
   }
-}, [patientId, processInsulinData]); // Remove fetchActiveInsulin from dependencies
+}, [patientId, processInsulinData]);
 
   const fetchData = useCallback(async () => {
   try {
@@ -855,64 +900,74 @@ const fetchInsulinData = useCallback(async (timeSettings) => {
   }, [targetGlucose, patientConstants]);
 
   // Custom dot for blood sugar readings on chart
-  const CustomBloodSugarDot = useCallback((props) => {
-    const { cx, cy, payload, index } = props;
+  // Update the CustomBloodSugarDot component to include keys
+const CustomBloodSugarDot = useCallback((props) => {
+  const { cx, cy, payload, index } = props;
 
-    // Only render dots for actual readings
-    if (!payload || !payload.isActualReading || !cx || !cy) return null;
+  // Only render dots for actual readings
+  if (!payload || !payload.isActualReading || !cx || !cy) return null;
 
-    // Determine dot properties based on reading type and relation to target
-    const targetDiff = payload.bloodSugar - (targetGlucose || 100);
-    const radius = 4;
-    const strokeWidth = 2;
+  // Determine dot properties based on reading type and relation to target
+  const targetDiff = payload.bloodSugar - (targetGlucose || 100);
+  const radius = 4;
+  const strokeWidth = 2;
 
-    // Base color on relationship to target
-    let strokeColor;
-    if (targetDiff > (targetGlucose || 100) * 0.3) {
-      strokeColor = '#ff4444'; // High
-    } else if (targetDiff < -(targetGlucose || 100) * 0.3) {
-      strokeColor = '#ff8800'; // Low
-    } else {
-      strokeColor = '#8031A7'; // Normal
-    }
+  // Base color on relationship to target
+  let strokeColor;
+  if (targetDiff > (targetGlucose || 100) * 0.3) {
+    strokeColor = '#ff4444'; // High
+  } else if (targetDiff < -(targetGlucose || 100) * 0.3) {
+    strokeColor = '#ff8800'; // Low
+  } else {
+    strokeColor = '#8031A7'; // Normal
+  }
 
-    let fillColor = "#ffffff"; // White fill for all actual readings
+  let fillColor = "#ffffff"; // White fill for all actual readings
 
-    return (
-      <circle
-        cx={cx}
-        cy={cy}
-        r={radius}
+  // Add key prop to solve React warning
+  return (
+    <circle
+      key={`dot-${index}-${payload.timestamp || Date.now()}`}
+      cx={cx}
+      cy={cy}
+      r={radius}
+      stroke={strokeColor}
+      strokeWidth={strokeWidth}
+      fill={fillColor}
+    />
+  );
+}, [targetGlucose]);
+
+// Similarly update the CustomInsulinDot
+const CustomInsulinDot = useCallback((props) => {
+  const { cx, cy, payload, index } = props;
+
+  // Only render for points with insulin doses
+  if (!payload || !payload.insulinDose || payload.insulinDose <= 0 || !cx || !cy) return null;
+
+  const radius = 5;
+  const strokeColor = '#4a90e2'; // Blue for insulin
+  const fillColor = '#ffffff'; // White fill
+
+  // Add key prop to solve React warning
+  return (
+    <svg
+      key={`insulin-dot-${index}-${payload.timestamp || Date.now()}`}
+      x={cx - radius}
+      y={cy - radius}
+      width={radius * 2}
+      height={radius * 2}
+    >
+      {/* Diamond shape for insulin */}
+      <polygon
+        points={`${radius},0 ${radius*2},${radius} ${radius},${radius*2} 0,${radius}`}
         stroke={strokeColor}
-        strokeWidth={strokeWidth}
+        strokeWidth={1.5}
         fill={fillColor}
       />
-    );
-  }, [targetGlucose]);
-
-  // Custom dot for insulin doses
-  const CustomInsulinDot = useCallback((props) => {
-    const { cx, cy, payload } = props;
-
-    // Only render for points with insulin doses
-    if (!payload || !payload.insulinDose || payload.insulinDose <= 0 || !cx || !cy) return null;
-
-    const radius = 5;
-    const strokeColor = '#4a90e2'; // Blue for insulin
-    const fillColor = '#ffffff'; // White fill
-
-    return (
-      <svg x={cx - radius} y={cy - radius} width={radius * 2} height={radius * 2}>
-        {/* Diamond shape for insulin */}
-        <polygon
-          points={`${radius},0 ${radius*2},${radius} ${radius},${radius*2} 0,${radius}`}
-          stroke={strokeColor}
-          strokeWidth={1.5}
-          fill={fillColor}
-        />
-      </svg>
-    );
-  }, []);
+    </svg>
+  );
+}, []);
 
   // Check if current time is within chart range with safer null checks
   const currentTimeInRange = useMemo(() => {
