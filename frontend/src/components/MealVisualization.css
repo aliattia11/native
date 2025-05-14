@@ -1,123 +1,102 @@
 /* MealVisualization.css */
-
 .meal-visualization {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
-    Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
   padding: 20px;
-  background-color: #f8f9fa;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  margin-bottom: 20px;
+  background-color: #ffffff;
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  margin-bottom: 30px;
 }
 
 .meal-visualization.embedded {
-  padding: 0;
+  padding: 10px;
   box-shadow: none;
-  background-color: transparent;
+  margin-bottom: 10px;
 }
 
-.meal-visualization .title {
+.title {
   font-size: 1.8rem;
-  margin-top: 0;
-  margin-bottom: 20px;
-  color: #343a40;
-  border-bottom: 2px solid #dee2e6;
-  padding-bottom: 10px;
-}
-
-.timezone-info {
-  font-size: 0.8rem;
-  color: #6c757d;
   margin-bottom: 15px;
+  color: #333;
+  text-align: center;
 }
 
-.timezone-note {
-  font-style: italic;
+.loading, .error-message, .no-data-message {
+  padding: 20px;
+  text-align: center;
+  font-size: 1rem;
+  border-radius: 5px;
+  margin: 20px 0;
 }
 
-/* View toggle buttons */
-.view-toggle {
-  display: flex;
-  margin-bottom: 20px;
+.loading {
+  background-color: #f0f8ff;
+  color: #0d47a1;
 }
 
-.toggle-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 8px 16px;
-  background-color: #e9ecef;
-  border: 1px solid #ced4da;
-  color: #495057;
-  cursor: pointer;
-  transition: all 0.2s ease;
+.error-message {
+  background-color: #ffebee;
+  color: #c62828;
+  border-left: 4px solid #c62828;
 }
 
-.toggle-btn:first-child {
-  border-radius: 4px 0 0 4px;
+.no-data-message {
+  background-color: #fffde7;
+  color: #f57f17;
+  border-left: 4px solid #f57f17;
 }
 
-.toggle-btn:last-child {
-  border-radius: 0 4px 4px 0;
-}
-
-.toggle-btn.active {
-  background-color: #007bff;
-  border-color: #007bff;
-  color: white;
-}
-
-.toggle-btn:hover:not(.active) {
-  background-color: #dee2e6;
-}
-
-/* Controls section */
+/* Controls styling */
 .controls {
   margin-bottom: 20px;
+  padding: 15px;
+  background-color: #f5f5f5;
+  border-radius: 8px;
+}
+
+.date-controls, .filter-controls, .display-options {
+  margin-bottom: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid #e0e0e0;
 }
 
 .date-controls {
   display: flex;
   flex-wrap: wrap;
-  gap: 15px;
-  margin-bottom: 15px;
+  justify-content: space-between;
   align-items: center;
 }
 
 .date-range-inputs {
   flex: 1;
-  min-width: 300px;
+  margin-right: 15px;
 }
 
 .quick-ranges {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
 }
 
 .quick-ranges button {
+  background-color: #e0e0e0;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 15px;
+  cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
-  background-color: #e9ecef;
-  border: 1px solid #ced4da;
-  border-radius: 4px;
-  color: #495057;
-  cursor: pointer;
-  transition: all 0.2s ease;
+  gap: 5px;
+  font-size: 0.9rem;
+  color: #333;
 }
 
 .quick-ranges button:hover {
-  background-color: #dee2e6;
+  background-color: #d0d0d0;
 }
 
 .filter-controls {
   display: flex;
   justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 15px;
-  margin-bottom: 15px;
   align-items: center;
 }
 
@@ -131,1365 +110,446 @@
   display: flex;
   align-items: center;
   gap: 5px;
-  font-weight: 500;
 }
 
 .meal-type-filter select {
   padding: 8px;
-  border: 1px solid #ced4da;
   border-radius: 4px;
+  border: 1px solid #ccc;
   background-color: white;
 }
 
 .update-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  background-color: #28a745;
+  background-color: #2196f3;
+  color: white;
   border: none;
   border-radius: 4px;
-  color: white;
+  padding: 8px 16px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transition: background-color 0.2s;
 }
 
 .update-btn:hover {
-  background-color: #218838;
+  background-color: #1976d2;
 }
 
 .update-btn:disabled {
-  background-color: #6c757d;
+  background-color: #90caf9;
   cursor: not-allowed;
 }
 
 .spin {
-  animation: spin 1s linear infinite;
+  animation: spin 1.5s linear infinite;
 }
 
 @keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
-.chart-type-controls {
+.display-options {
   display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 15px;
-}
-
-.chart-type-btn {
-  padding: 8px 16px;
-  background-color: #e9ecef;
-  border: 1px solid #ced4da;
-  border-radius: 4px;
-  color: #495057;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.chart-type-btn.active {
-  background-color: #007bff;
-  border-color: #007bff;
-  color: white;
-}
-
-.chart-type-btn:hover:not(.active) {
-  background-color: #dee2e6;
-}
-
-/* Content container */
-.content-container {
-  min-height: 400px;
-}
-
-/* Chart styles */
-.chart-container {
-  background-color: white;
-  border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  padding: 15px;
-  margin-bottom: 20px;
-  height: 450px;
-}
-
-/* Custom tooltip styles */
-.custom-tooltip {
-  background-color: rgba(255, 255, 255, 0.95);
-  border: 1px solid #ced4da;
-  border-radius: 4px;
-  padding: 10px;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-}
-
-.tooltip-time {
-  font-weight: bold;
-  margin-top: 0;
-  margin-bottom: 5px;
-  padding-bottom: 5px;
-  border-bottom: 1px solid #dee2e6;
-}
-
-.tooltip-label {
-  margin: 3px 0;
-}
-
-.tooltip-carbs {
-  color: #8884d8;
-  margin: 3px 0;
-}
-
-.tooltip-protein {
-  color: #82ca9d;
-  margin: 3px 0;
-}
-
-.tooltip-fat {
-  color: #ffc658;
-  margin: 3px 0;
-}
-
-.tooltip-calories {
-  color: #ff7300;
-  margin: 3px 0;
-  font-weight: 500;
-}
-
-.tooltip-insulin {
-  color: #ff4444;
-  margin: 3px 0;
-  font-weight: 500;
-}
-
-/* Table styles */
-.table-container {
-  overflow-x: auto;
-}
-
-.meal-table {
-  width: 100%;
-  border-collapse: collapse;
-  background-color: white;
-  border-radius: 8px;
-  overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.meal-table th {
-  background-color: #f1f3f5;
-  padding: 12px;
-  text-align: left;
-  font-weight: 600;
-  color: #495057;
-  border-bottom: 2px solid #dee2e6;
-  position: relative;
-  cursor: pointer;
-}
-
-.meal-table th:hover {
-  background-color: #e9ecef;
-}
-
-.meal-table td {
-  padding: 12px;
-  border-bottom: 1px solid #dee2e6;
-  color: #212529;
-}
-
-.meal-row:hover {
-  background-color: #f8f9fa;
-}
-
-.meal-row.meal-type-breakfast {
-  border-left: 4px solid #ffc107;
-}
-
-.meal-row.meal-type-lunch {
-  border-left: 4px solid #17a2b8;
-}
-
-.meal-row.meal-type-dinner {
-  border-left: 4px solid #6f42c1;
-}
-
-.meal-row.meal-type-snack {
-  border-left: 4px solid #20c997;
-}
-
-.meal-row.meal-type-normal {
-  border-left: 4px solid #6c757d;
-}
-
-.meal-date {
-  font-weight: 500;
-}
-
-.meal-type {
-  display: inline-block;
-  padding: 4px 8px;
-  border-radius: 4px;
-  color: white;
-  font-weight: 500;
-  text-align: center;
-}
-
-.meal-type.breakfast {
-  background-color: #ffc107;
-}
-
-.meal-type.lunch {
-  background-color: #17a2b8;
-}
-
-.meal-type.dinner {
-  background-color: #6f42c1;
-}
-
-.meal-type.snack {
-  background-color: #20c997;
-}
-
-.meal-type.normal {
-  background-color: #6c757d;
-}
-
-.view-details-btn {
-  padding: 5px 10px;
-  background-color: #007bff;
-  border: none;
-  border-radius: 4px;
-  color: white;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.view-details-btn:hover {
-  background-color: #0069d9;
-}
-
-/* Pagination */
-.pagination {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  padding: 15px 0;
-  align-items: center;
-}
-
-.pagination button {
-  padding: 5px 10px;
-  border: 1px solid #ced4da;
-  background-color: white;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-.pagination button:disabled {
-  color: #adb5bd;
-  cursor: not-allowed;
-}
-
-.pagination button:not(:disabled):hover {
-  background-color: #e9ecef;
-}
-
-.pagination input {
-  width: 50px;
-  padding: 5px;
-  border: 1px solid #ced4da;
-  border-radius: 4px;
-  text-align: center;
-}
-
-.pagination select {
-  padding: 5px;
-  border: 1px solid #ced4da;
-  border-radius: 4px;
-}
-
-/* Detail view */
-.meal-detail-view {
-  background-color: white;
-  border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  padding: 20px;
-}
-
-.meal-detail-view h3 {
-  margin-top: 0;
-  margin-bottom: 20px;
-  color: #343a40;
-  border-bottom: 2px solid #dee2e6;
-  padding-bottom: 10px;
-}
-
-.meal-detail-view h4 {
-  margin-top: 20px;
-  margin-bottom: 10px;
-  color: #495057;
-  font-weight: 600;
-}
-
-.meal-detail-header {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 20px;
   flex-wrap: wrap;
   gap: 15px;
 }
 
-.meal-time, .meal-type {
+.display-option {
   display: flex;
   align-items: center;
-  gap: 10px;
-}
-
-.label {
-  font-weight: 600;
-  color: #495057;
-}
-
-.meal-nutrition-summary {
-  background-color: #f8f9fa;
-  padding: 15px;
-  border-radius: 6px;
-  margin-bottom: 20px;
-}
-
-.nutrition-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 15px;
-}
-
-.nutrition-item {
-  display: flex;
-  flex-direction: column;
   gap: 5px;
 }
 
-.percentage-bar {
-  width: 100%;
-  height: 10px;
-  background-color: #dee2e6;
-  border-radius: 10px;
-  overflow: hidden;
-}
-
-.percentage-fill {
-  height: 100%;
-  border-radius: 10px;
-}
-
-.percentage-fill.carbs {
-  background-color: #8884d8;
-}
-
-.percentage-fill.protein {
-  background-color: #82ca9d;
-}
-
-.percentage-fill.fat {
-  background-color: #ffc658;
-}
-
-.food-items-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-bottom: 20px;
-}
-
-.food-items-table th {
-  background-color: #f1f3f5;
-  padding: 8px;
-  text-align: left;
-  border-bottom: 1px solid #dee2e6;
-}
-
-.food-items-table td {
-  padding: 8px;
-  border-bottom: 1px solid #dee2e6;
-}
-
-.meal-insulin {
-  background-color: #f8f9fa;
-  padding: 15px;
-  border-radius: 6px;
-  margin-bottom: 20px;
-}
-
-.insulin-details {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 15px;
-}
-
-.insulin-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.insulin-factors {
-  grid-column: 1 / -1;
-  margin-top: 10px;
-}
-
-.insulin-factors h5 {
-  margin-top: 10px;
-  margin-bottom: 5px;
-}
-
-.factors-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 8px;
-}
-
-.factor-item {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.factor-label {
-  font-size: 0.85em;
-  color: #6c757d;
-}
-
-.factor-value {
-  font-weight: 500;
-}
-
-.meal-blood-glucose {
-  margin-bottom: 20px;
-}
-
-.blood-glucose-value {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.meal-activities {
-  background-color: #f8f9fa;
-  padding: 15px;
-  border-radius: 6px;
-  margin-bottom: 20px;
-}
-
-.activities-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 15px;
-}
-
-.activity-item {
-  padding: 10px;
-  background-color: white;
-  border-radius: 6px;
-  border: 1px solid #dee2e6;
-  min-width: 200px;
-}
-
-.meal-notes {
-  margin-bottom: 20px;
-}
-
-.notes-content {
-  background-color: #f8f9fa;
-  padding: 15px;
-  border-radius: 6px;
-  white-space: pre-line;
-}
-
-.detail-actions {
-  margin-top: 30px;
-  display: flex;
-  justify-content: flex-end;
-}
-
-.back-button {
-  padding: 8px 16px;
-  background-color: #6c757d;
-  border: none;
-  border-radius: 4px;
-  color: white;
+.display-option input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
   cursor: pointer;
-  transition: all 0.2s ease;
 }
 
-.back-button:hover {
-  background-color: #5a6268;
-}
-
-.no-detail-message {
-  background-color: #f8f9fa;
-  padding: 40px;
-  text-align: center;
-  border-radius: 8px;
-  color: #6c757d;
-}
-
-.no-data-message {
-  background-color: white;
-  padding: 40px;
-  text-align: center;
-  border-radius: 8px;
-  color: #6c757d;
-  font-size: 1.1rem;
-  margin-bottom: 20px;
-}
-
-/* Loading and error states */
-.loading {
-  background-color: #f8f9fa;
-  padding: 40px;
-  text-align: center;
-  border-radius: 8px;
-  color: #6c757d;
-  font-size: 1.1rem;
-}
-
-.error-message {
-  background-color: #f8d7da;
-  padding: 15px;
-  text-align: center;
-  border-radius: 8px;
-  color: #721c24;
-  margin-bottom: 20px;
-}
-
-/* Statistics summary */
-.meal-statistics {
-  background-color: white;
-  border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  padding: 15px;
-  margin-top: 20px;
-}
-
-.meal-statistics h3 {
-  margin-top: 0;
-  margin-bottom: 15px;
-  color: #343a40;
-  font-size: 1.3rem;
-}
-
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 15px;
-}
-
-.stat-item {
+.effect-duration, .future-hours {
   display: flex;
-  flex-direction: column;
-  gap: 3px;
+  align-items: center;
+  gap: 10px;
 }
 
-.stat-label {
-  font-size: 0.9rem;
-  color: #6c757d;
+.effect-duration input, .future-hours input {
+  width: 60px;
+  padding: 5px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
 }
 
-.stat-value {
-  font-size: 1.2rem;
-  font-weight: 600;
-  color: #212529;
+/* View mode toggle */
+.view-mode-toggle {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 20px;
 }
 
-/* Responsive adjustments */
-@media screen and (max-width: 768px) {
-  .date-controls,
-  .filter-controls,
-  .chart-type-controls {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .date-range-inputs,
-  .quick-ranges,
-  .meal-type-filter {
-    width: 100%;
-  }
-
-  .nutrition-grid,
-  .insulin-details,
-  .stats-grid {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .activities-list {
-    flex-direction: column;
-  }
-
-  .activity-item {
-    width: 100%;
-  }
+.toggle-btn {
+  padding: 10px 20px;
+  background-color: #f5f5f5;
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s;
+  font-weight: 500;
+  border-radius: 0;
+  flex: 1;
+  max-width: 180px;
 }
 
-@media screen and (max-width: 480px) {
-  .nutrition-grid,
-  .insulin-details,
-  .stats-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .meal-detail-header {
-    flex-direction: column;
-  }
+.toggle-btn:first-child {
+  border-radius: 5px 0 0 5px;
 }
 
-/* Add these new styles to MealVisualization.css */
+.toggle-btn:last-child {
+  border-radius: 0 5px 5px 0;
+}
 
-/* Carb equivalent info styling */
-.carb-equivalent-info {
-  margin-bottom: 15px;
+.toggle-btn.active {
+  background-color: #2196f3;
+  color: white;
+}
+
+.toggle-btn:hover:not(.active) {
+  background-color: #e0e0e0;
+}
+
+/* Chart container */
+.chart-container {
   position: relative;
+  height: 500px;
+}
+
+/* Timezone info */
+.timezone-info {
+  text-align: right;
+  margin-bottom: 10px;
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.timezone-note {
+  font-style: italic;
+  font-size: 0.8rem;
+}
+
+/* Info panel */
+.carb-equivalent-info {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 10;
 }
 
 .info-button {
-  background-color: #f8f9fa;
+  background-color: rgba(255, 255, 255, 0.8);
   border: 1px solid #ddd;
-  border-radius: 4px;
-  padding: 8px 12px;
+  border-radius: 5px;
+  padding: 5px 10px;
+  font-size: 0.8rem;
   display: flex;
   align-items: center;
   gap: 5px;
-  font-size: 14px;
   cursor: pointer;
+  transition: background-color 0.2s;
 }
 
 .info-button:hover {
-  background-color: #e9ecef;
+  background-color: rgba(255, 255, 255, 1);
 }
 
 .info-panel {
   position: absolute;
-  top: 100%;
-  left: 0;
-  width: 400px;
+  top: 40px;
+  right: 0;
+  width: 350px;
   background-color: white;
   border: 1px solid #ddd;
-  border-radius: 4px;
+  border-radius: 5px;
   padding: 15px;
-  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-  z-index: 100;
-  margin-top: 10px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+  z-index: 20;
 }
 
 .info-panel h4 {
   margin-top: 0;
-  color: #495057;
+  color: #2196f3;
+}
+
+.info-panel p {
+  margin: 0.8em 0;
+  font-size: 0.9rem;
 }
 
 .info-panel ul {
   padding-left: 20px;
+  margin: 10px 0;
 }
 
 .info-panel li {
-  margin-bottom: 8px;
+  margin-bottom: 5px;
+  font-size: 0.9rem;
 }
 
 .close-button {
-  background-color: #6c757d;
-  color: white;
+  background-color: #f5f5f5;
   border: none;
-  border-radius: 4px;
+  border-radius: 5px;
   padding: 5px 10px;
   margin-top: 10px;
   cursor: pointer;
 }
 
 .close-button:hover {
-  background-color: #5a6268;
+  background-color: #e0e0e0;
 }
 
-/* Carb equivalent display in meal details */
-.carb-equivalent {
-  display: inline-block;
-  font-size: 0.85em;
-  color: #6c757d;
-  margin-left: 5px;
-}
-
-.total-carb-equivalent {
-  font-weight: bold;
-  color: #495057;
-}
-
-/* Tooltip enhancements */
-.custom-tooltip .tooltip-total-carb-equiv {
-  border-top: 1px dashed #ddd;
-  padding-top: 5px;
-  margin-top: 3px;
-}
-
-/* Highlight carb equivalents in table */
-td[data-column-id="carbEquivalent"] {
-  font-weight: bold;
-  background-color: rgba(136, 132, 216, 0.1);
-}
-
-/* Stack bar chart enhancements */
-.recharts-layer.recharts-bar-rectangle[name="Protein as Carbs (0.5x)"] rect,
-.recharts-layer.recharts-bar-rectangle[name="Fat as Carbs (0.2x)"] rect {
-  opacity: 0.9;
-}
-/* Meal effect visualization styling */
-
-/* Absorption type indicators */
-.absorption-type {
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 0.85em;
-  font-weight: 500;
-}
-
-.absorption-type.fast {
-  background-color: rgba(255, 99, 71, 0.2);
-  color: #cc3300;
-}
-
-.absorption-type.medium {
-  background-color: rgba(65, 105, 225, 0.2);
-  color: #1a56db;
-}
-
-.absorption-type.slow {
-  background-color: rgba(60, 179, 113, 0.2);
-  color: #157347;
-}
-
-.absorption-type.very_slow {
-  background-color: rgba(138, 43, 226, 0.2);
-  color: #6610f2;
-}
-
-/* Absorption info panel */
-.absorption-info {
-  margin-bottom: 15px;
-  position: relative;
-}
-
-.effect-controls {
-  display: flex;
-  margin-top: 10px;
-  padding: 10px;
-  background-color: #f8f9fa;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-}
-
-.timeline-interval {
-  display: flex;
-  align-items: center;
-}
-
-.timeline-interval label {
-  margin-right: 10px;
-  font-weight: 500;
-}
-
-.timeline-interval select {
-  padding: 4px 8px;
-  border: 1px solid #ced4da;
-  border-radius: 4px;
-}
-
-/* Meal effect chart tooltip */
-.effect-tooltip {
-  max-width: 300px;
-}
-
-.tooltip-total-effect {
-  font-size: 1.1em;
-  font-weight: bold;
-  margin-bottom: 8px;
-  border-bottom: 1px solid #ddd;
-  padding-bottom: 4px;
-}
-
-.tooltip-contributions {
-  font-weight: 500;
-  margin-bottom: 4px;
-}
-
-.tooltip-meal-list {
-  list-style-type: none;
-  padding-left: 0;
-  margin: 0;
-}
-
-.tooltip-meal-item {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 4px 0;
-  border-bottom: 1px dotted #eee;
-}
-
-.tooltip-meal-time {
-  font-size: 0.85em;
-  color: #666;
-}
-
-.tooltip-meal-type {
-  padding: 1px 4px;
-  border-radius: 3px;
-  background-color: #e9ecef;
-}
-
-.tooltip-meal-absorption {
-  font-style: italic;
-  font-size: 0.85em;
-  color: #666;
-}
-
-.tooltip-meal-effect {
-  margin-left: auto;
-  font-weight: bold;
-}
-
-/* Individual meal effect visualization in detail view */
-.meal-effect-visualization {
-  grid-column: 1 / -1;
-  margin-top: 15px;
-  padding-top: 15px;
-  border-top: 1px solid #eee;
-}
-
-.mini-effect-chart {
-  background-color: #f8f9fa;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  padding: 10px;
-  margin: 10px 0;
-}
-
-.effect-explanation {
-  font-size: 0.9em;
-  color: #555;
-  padding: 8px;
-  background-color: #f0f0f0;
-  border-radius: 4px;
-}
-
-/* Chart type buttons */
-.chart-type-btn[data-type="effect"] {
-  background-color: #6c757d;
-  color: white;
-}
-
-.chart-type-btn[data-type="effect"].active {
-  background-color: #495057;
-}
-
-/* Make absorption column more readable */
-td[data-column-id="absorptionType"] {
-  white-space: nowrap;
-}
-
-.view-mode-toggle {
-  display: flex;
-  justify-content: center;
-  margin: 10px 0;
-  padding: 5px;
-  background: #f8f9fa;
+/* Custom tooltip styling */
+.meal-effect-tooltip {
+  background-color: white;
+  border: 1px solid #e0e0e0;
   border-radius: 5px;
+  padding: 10px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+  max-width: 320px;
 }
 
-.view-mode-toggle .toggle-btn {
-  padding: 5px 15px;
-  margin: 0 5px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  background-color: #f5f5f5;
-  cursor: pointer;
-  font-size: 14px;
-  transition: all 0.2s ease;
-}
-
-.view-mode-toggle .toggle-btn.active {
-  background-color: #4285f4;
-  color: white;
-  border-color: #2a75f3;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-}
-
-
-
-/* Add these styles to your MealVisualization.css file */
-
-.tooltip-meal-impact {
-  color: #4CAF50;
-  font-weight: 500;
-}
-
-/* Make meal effect area more visible */
-.recharts-layer.recharts-area path.recharts-area-area {
-  filter: drop-shadow(0px 1px 3px rgba(76, 175, 80, 0.3));
-}
-
-/* Add subtle highlight to the blood sugar line */
-.recharts-layer.recharts-line path.recharts-curve.recharts-line-curve {
-  filter: drop-shadow(0px 0px 1px rgba(129, 49, 167, 0.3));
-}
-
-/* Enhanced styles for actual readings dots */
-.recharts-dot.recharts-line-dot {
-  stroke-width: 2px;
-}
-
-/* Enhance tooltip styling */
-.meal-effect-tooltip {
-  background: rgba(255, 255, 255, 0.95);
-  border: 1px solid #ccc;
-  padding: 12px;
-  border-radius: 6px;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-  max-width: 300px;
+.tooltip-time {
+  font-weight: bold;
+  font-size: 0.9rem;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 5px;
+  margin-bottom: 8px;
+  color: #333;
 }
 
 .tooltip-section {
   margin-bottom: 10px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid #eee;
-}
-
-.tooltip-section:last-child {
-  border-bottom: none;
-  margin-bottom: 0;
 }
 
 .tooltip-section h4 {
-  margin: 0 0 6px;
-  color: #333;
-  font-size: 14px;
-}
-
-.tooltip-time {
-  font-weight: 600;
-  font-size: 15px;
-  color: #333;
-  margin-bottom: 10px;
-  border-bottom: 1px solid #eee;
-  padding-bottom: 6px;
-}
-
-/* Add these styles to your MealVisualization.css file */
-
-.tooltip-meal-impact {
-  color: #4CAF50;
-  font-weight: 500;
   margin: 5px 0;
-  display: flex;
-  align-items: center;
+  font-size: 0.85rem;
+  color: #555;
 }
 
-.tooltip-high {
-  color: #ff4444;
+.tooltip-meal-impact, .tooltip-projected, .tooltip-target-impact {
+  font-size: 0.85rem;
+  margin: 3px 0;
 }
 
-.tooltip-low {
-  color: #ff8800;
+.tooltip-insulin-impact {
+  font-size: 0.85rem;
+  margin: 3px 0;
+  color: #4a90e2;
 }
 
-.tooltip-normal {
-  color: #00C851;
-}
-
-/* Optional target zone highlight */
-.target-zone-highlight {
-  fill: rgba(0, 200, 81, 0.05);
-}
-
-/* Make the baseline more visible */
-.recharts-line.baseline-line .recharts-line-curve {
-  stroke-dasharray: 3;
-}
-
-/* Enhanced tooltip styling */
-.status {
+.tooltip-net-impact {
+  font-size: 0.9rem;
   font-weight: 500;
-  margin-top: 5px;
-  padding: 2px 6px;
-  border-radius: 4px;
-  display: inline-block;
-  background-color: rgba(0,0,0,0.05);
+  margin: 3px 0;
 }
 
-/* Add these styles to your MealVisualization.css file */
-
-/* Target impact line styling */
-.target-impact-line {
-  stroke-dasharray: 3;
-  opacity: 0.8;
+.tooltip-insulin-dose {
+  font-size: 0.9rem;
+  color: #4a90e2;
+  margin: 3px 0;
 }
 
-/* Enhanced tooltip styling */
-.meal-effect-tooltip {
-  background: rgba(255, 255, 255, 0.95);
-  border: 1px solid #ccc;
-  padding: 12px;
-  border-radius: 6px;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-  max-width: 300px;
-}
-
-.tooltip-section {
-  margin-bottom: 10px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid #eee;
-}
-
-.tooltip-section:last-child {
-  border-bottom: none;
-  margin-bottom: 0;
-}
-
-.tooltip-section h4 {
-  margin: 0 0 6px;
-  color: #333;
-  font-size: 14px;
-}
-
-.tooltip-time {
-  font-weight: 600;
-  font-size: 15px;
-  color: #333;
-  margin-bottom: 10px;
-  border-bottom: 1px solid #eee;
-  padding-bottom: 6px;
-}
-
-.tooltip-meal-section {
-  border-left: 3px solid #4CAF50;
-  padding-left: 8px;
-  background-color: rgba(76, 175, 80, 0.05);
+.tooltip-active-insulin {
+  font-size: 0.85rem;
+  color: #4a90e2;
+  margin: 3px 0;
 }
 
 .tooltip-target-section {
-  border-left: 3px solid #FF7300;
-  padding-left: 8px;
-  background-color: rgba(255, 115, 0, 0.05);
-}
-
-.tooltip-projected {
-  font-weight: 500;
-  color: #8031A7;
-}
-
-.tooltip-target-impact {
-  font-weight: 500;
-  color: #FF7300;
+  background-color: #fff8e1;
+  padding: 8px;
+  border-radius: 5px;
+  margin-bottom: 10px;
 }
 
 .tooltip-percent {
-  margin-left: 6px;
-  font-size: 0.9em;
-  color: #666;
+  font-size: 0.8rem;
+  color: #777;
+  margin-left: 5px;
 }
 
 .tooltip-status {
   display: inline-block;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-weight: 600;
-  font-size: 12px;
-  margin-top: 4px;
+  padding: 3px 8px;
+  border-radius: 10px;
+  font-size: 0.7rem;
+  font-weight: bold;
+  margin-top: 5px;
 }
 
 .tooltip-status.high {
-  background-color: rgba(255, 68, 68, 0.1);
-  color: #ff4444;
-}
-
-.tooltip-status.low {
-  background-color: rgba(255, 136, 0, 0.1);
-  color: #ff8800;
+  background-color: #ffebee;
+  color: #c62828;
 }
 
 .tooltip-status.normal {
-  background-color: rgba(0, 200, 81, 0.1);
-  color: #00C851;
+  background-color: #e8f5e9;
+  color: #2e7d32;
 }
 
-/* Chart legend styling */
-.chart-legend {
-  margin-top: 20px;
-  padding: 15px;
-  border: 1px solid #eee;
-  border-radius: 4px;
-  background-color: #fafafa;
+.tooltip-status.low {
+  background-color: #fff8e1;
+  color: #ff8f00;
 }
 
-.chart-legend h4 {
-  margin-top: 0;
+.tooltip-meal-section {
+  background-color: #e8f5e9;
+  padding: 8px;
+  border-radius: 5px;
   margin-bottom: 10px;
-  font-size: 16px;
-  color: #333;
 }
 
-.legend-items {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-.legend-item {
-  display: flex;
-  align-items: center;
-  margin-bottom: 8px;
-  flex: 1 1 45%;
-}
-
-.legend-color {
-  display: inline-block;
-  width: 16px;
-  height: 16px;
-  margin-right: 8px;
-  border-radius: 3px;
-}
-
-.legend-area {
-  display: inline-block;
-  width: 16px;
-  height: 16px;
-  margin-right: 8px;
-  border-radius: 3px;
-}
-
-/* Add these CSS rules to filter out rendering artifacts */
-.recharts-line-curve {
-  filter: drop-shadow(0 0 1px rgba(0,0,0,0.1));
-}
-
-/* Hide any lines with extremely large y values */
-.recharts-line[name="Blood Sugar with Meal Effect"] path[d*="L-"],
-.recharts-line[name="Baseline Blood Sugar"] path[d*="L-"],
-.recharts-line[name="Blood Sugar with Meal Effect"] path[d*="NaN"],
-.recharts-line[name="Baseline Blood Sugar"] path[d*="NaN"] {
-  display: none;
-}
-
-
-/* Insulin-related styles */
 .tooltip-insulin-section {
-  background-color: rgba(0, 200, 83, 0.1);
+  background-color: #e3f2fd;
   padding: 8px;
-  border-radius: 4px;
+  border-radius: 5px;
   margin-bottom: 10px;
-  border-left: 3px solid #00C853;
 }
 
-.tooltip-insulin-dose {
-  font-size: 14px;
-  margin: 4px 0;
+.tooltip-net-section {
+  background-color: #f3e5f5;
+  padding: 8px;
+  border-radius: 5px;
+  margin-bottom: 10px;
 }
 
-.tooltip-insulin-time {
-  font-size: 12px;
+.tooltip-data-type {
+  font-size: 0.8rem;
+  color: #777;
   font-style: italic;
-  color: #666;
+  margin-top: 10px;
+  border-top: 1px dotted #eee;
+  padding-top: 5px;
 }
 
-/* Update display options to include insulin toggle */
-.display-options {
+.tooltip-meal-effect, .tooltip-insulin-contribution {
+  font-size: 0.8rem;
+  margin: 2px 0;
+}
+
+.tooltip-total-effect {
+  font-size: 0.8rem;
+  font-weight: 500;
+  margin-top: 5px;
+  border-top: 1px dotted #ddd;
+  padding-top: 5px;
+}
+
+/* Active insulin indicator styling */
+.active-insulin-indicator {
   display: flex;
+  align-items: center;
+  background-color: #e3f2fd;
+  border: 1px solid #bbdefb;
+  border-radius: 5px;
+  padding: 8px 12px;
+  margin: 10px 0;
+  color: #1565c0;
+}
+
+.active-insulin-icon {
+  font-size: 1.2rem;
+  margin-right: 10px;
+  color: #1976d2;
+}
+
+.active-insulin-text {
+  display: flex;
+  align-items: center;
   flex-wrap: wrap;
-  gap: 15px;
-  margin-bottom: 15px;
+  gap: 10px;
 }
 
-.display-option {
-  display: flex;
-  align-items: center;
-  margin-right: 15px;
-  cursor: pointer;
+.active-insulin-time {
+  color: #5c6bc0;
+  font-size: 0.85rem;
+  font-style: italic;
 }
 
-.display-option input[type="checkbox"] {
-  margin-right: 5px;
-}
-/* Ultra-compact controls styling */
-.ultra-compact-controls {
-  background-color: #f8f9fa;
-  border-radius: 6px;
-  padding: 8px;
-  margin-bottom: 10px;
-  font-size: 13px;
+/* Insulin-specific chart element styles */
+.recharts-dot.custom-insulin-dot {
+  fill: #ffffff;
+  stroke: #4a90e2;
+  stroke-width: 1.5;
 }
 
-.controls-top-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 8px;
-  margin-bottom: 8px;
+/* Media queries for responsive layout */
+@media (max-width: 768px) {
+  .controls {
+    padding: 10px;
+  }
+
+  .date-controls {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .date-range-inputs {
+    margin-right: 0;
+    margin-bottom: 15px;
+    width: 100%;
+  }
+
+  .quick-ranges {
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .filter-controls {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 15px;
+  }
+
+  .view-mode-toggle {
+    flex-wrap: wrap;
+  }
+
+  .toggle-btn {
+    max-width: none;
+  }
+
+  .display-options {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .info-panel {
+    width: 280px;
+    left: 50%;
+    transform: translateX(-50%);
+    right: auto;
+  }
 }
 
-.date-area {
-  display: flex;
-  flex-direction: column;
+/* Colors for insulin visualization elements */
+.insulin-color {
+  color: #4a90e2;
 }
 
-.date-inputs {
-  display: flex;
-  align-items: center;
-  gap: 5px;
+.insulin-effect-area {
+  fill: #4a90e2;
+  fill-opacity: 0.3;
 }
 
-.mini-date {
-  width: 115px;
-  padding: 2px 4px;
-  border: 1px solid #ced4da;
-  border-radius: 4px;
-  font-size: 12px;
+.net-effect-line {
+  stroke: #37474F;
+  stroke-width: 2;
+  stroke-dasharray: 5 5;
 }
 
-.date-dash {
-  font-size: 12px;
-  color: #6c757d;
+.insulin-placeholder-text {
+  font-size: 1.5rem;
+  fill: #999;
 }
-
-.date-buttons {
-  display: flex;
-  gap: 4px;
-  margin-left: 5px;
-}
-
-.tiny-btn {
-  background-color: #e9ecef;
-  border: 1px solid #ced4da;
-  border-radius: 3px;
-  padding: 2px 6px;
-  font-size: 11px;
-  cursor: pointer;
-  color: #495057;
-}
-
-.tiny-btn:hover {
-  background-color: #dee2e6;
-}
-
-.tz-text {
-  font-size: 10px;
-  color: #6c757d;
-  margin-top: 1px;
-}
-
-.chart-toggle-tabs {
-  display: flex;
-  border: 1px solid #dee2e6;
-  border-radius: 4px;
-  overflow: hidden;
-}
-
-.chart-toggle-tabs .tab {
-  background-color: #f8f9fa;
-  border: none;
-  padding: 4px 10px;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.chart-toggle-tabs .tab:first-child {
-  border-right: 1px solid #dee2e6;
-}
-
-.chart-toggle-tabs .tab.active {
-  background-color: #007bff;
-  color: white;
-}
-
-/* Options grid */
-.compact-options-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  background-color: #f0f0f0;
-  padding: 6px;
-  border-radius: 4px;
-  margin-top: 4px;
-}
-
-.options-col {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.compact-option {
-  display: flex;
-  align-items: center;
-  margin: 0;
-  font-size: 12px;
-}
-
-.compact-option input[type="checkbox"] {
-  margin-right: 6px;
-  width: 14px;
-  height: 14px;
-}
-
-.meal-filter-row {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  margin-bottom: 2px;
-}
-
-.mini-select {
-  padding: 2px 4px;
-  border: 1px solid #ced4da;
-  border-radius: 3px;
-  font-size: 12px;
-}
-
-.update-mini-btn {
-  background-color: #007bff;
-  color: white;
-  border: none;
-  border-radius: 3px;
-  padding: 3px 6px;
-  font-size: 11px;
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  cursor: pointer;
-}
-
-.mini-setting {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 12px;
-}
-
-.mini-input {
-  width: 40px;
-  padding: 2px 4px;
-  border: 1px solid #ced4da;
-  border-radius: 3px;
-  font-size: 12px;
-}
-
-/* Make the FaSync icon smaller */
-.update-mini-btn svg {
-  width: 10px;
-  height: 10px;
-}
-
-/* Meal type color indicators in effect chart */
-.tooltip-meal-item.breakfast .tooltip-meal-type { background-color: #ffc107; color: #212529; }
-.tooltip-meal-item.lunch .tooltip-meal-type { background-color: #fd7e14; color: #fff; }
-.tooltip-meal-item.dinner .tooltip-meal-type { background-color: #6f42c1; color: #fff; }
-.tooltip-meal-item.snack .tooltip-meal-type { background-color: #20c997; color: #212529; }
-.tooltip-meal-item.normal .tooltip-meal-type { background-color: #6c757d; color: #fff; }
