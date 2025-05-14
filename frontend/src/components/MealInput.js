@@ -60,7 +60,8 @@ const MealInput = () => {
   const [expandedCard, setExpandedCard] = useState(null);
   const [bloodSugarSource, setBloodSugarSource] = useState('direct');
   const [userTimeZone, setUserTimeZone] = useState('');
-  // New state for import functionality
+
+  // Import functionality states
   const [importStatus, setImportStatus] = useState(null);
   const [showRecentMeals, setShowRecentMeals] = useState(false);
   const [recentMeals, setRecentMeals] = useState([]);
