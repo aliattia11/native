@@ -43,7 +43,7 @@ const SimpleMealEffectChart = ({
   isDoctor = false,
   patientId = null,
   showControls = true,
-  height = '500px',
+  height = '600px',
   embedded = false,
   onDataLoaded = null,
   onChartReady = null
@@ -759,10 +759,13 @@ const fetchInsulinData = useCallback(async (timeSettings) => {
           parseFloat((data.totalMealEffect * (patientConstants?.carb_to_bg_factor || 4.0)).toFixed(1)) : 0);
 
       // Extract insulin information
-      const insulinDose = data.insulinDose || (data.insulinDoses && Object.values(data.insulinDoses).reduce((sum, dose) => sum + dose, 0)) || 0;
-      const activeInsulin = data.activeInsulin || 0;
-      const insulinImpact = data.insulinImpactMgdL || 0;
-      const netEffect = data.netEffectMgdL || 0;
+   const insulinDose = data.insulinDose ||
+  (data.insulinDoses && Object.values(data.insulinDoses).reduce((sum, dose) => sum + dose, 0)) || 0;
+// CHANGE: Take absolute value of activeInsulin for display
+const activeInsulin = Math.abs(data.activeInsulin) || 0;
+// CHANGE: Take absolute value of insulinImpact for display
+const insulinImpact = Math.abs(data.insulinImpactMgdL) || 0;
+const netEffect = data.netEffectMgdL || 0;
 
       return (
         <div className="meal-effect-tooltip">
@@ -992,7 +995,7 @@ const CustomInsulinDot = useCallback((props) => {
     };
 
     return (
-      <ResponsiveContainer width="100%" height={500}>
+      <ResponsiveContainer width="100%" height={600}>
         <ComposedChart
           data={prepareChartData(combinedData, { targetGlucose: targetGlucose || 100 })}
           margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
@@ -1018,7 +1021,7 @@ const CustomInsulinDot = useCallback((props) => {
             <YAxis
               yAxisId="bloodSugar"
               orientation="left"
-              domain={['dataMin - 20', 'dataMax + 20']}
+              domain={[0, 'dataMax + 50']}
               tickFormatter={(value) => Math.round(value)}
               label={{ value: 'Blood Sugar (mg/dL)', angle: -90, position: 'insideLeft' }}
             />
@@ -1029,7 +1032,7 @@ const CustomInsulinDot = useCallback((props) => {
             <YAxis
               yAxisId="mealCarbs"
               orientation={showBloodSugar ? "right" : "left"}
-              domain={[0, 'dataMax + 10']}
+              domain={[0, 'dataMax + 150']}
               label={{
                 value: 'Carbohydrates (g)',
                 angle: -90,
@@ -1038,26 +1041,28 @@ const CustomInsulinDot = useCallback((props) => {
             />
           )}
 
-          {/* Y-axis for insulin units */}
-          {(viewMode === 'combined' || viewMode === 'insulin') && showInsulin && (
-            <YAxis
-              yAxisId="insulinAxis"
-              orientation="right"
-              domain={[0, 'dataMax + 2']} // Adjust based on insulin dose range
-              label={{
-                value: 'Insulin (units)',
-                angle: -90,
-                position: 'insideRight'
-              }}
-            />
-          )}
+         {/* Y-axis for insulin units - UPDATED to invert direction */}
+{(viewMode === 'combined' || viewMode === 'insulin') && showInsulin && (
+  <YAxis
+    yAxisId="insulinAxis"
+    orientation="right"
+    // CHANGE: Set domain to negative values for insulin (top-down visualization)
+    domain={['dataMin - 30', 0]} // Changed from [0, 'dataMax + 2'] to invert direction
+    tickFormatter={(value) => Math.abs(value)} // Show positive tick values
+    label={{
+      value: 'Insulin (units)',
+      angle: -90,
+      position: 'insideRight'
+    }}
+  />
+)}
 
           {/* Y-axis for meal effect */}
           {(viewMode === 'combined' || viewMode === 'effect') && showMealEffect && (
             <YAxis
               yAxisId="mealEffect"
               orientation="right"
-              domain={[0, 2]} // Fixed domain to make small effects more visible
+              domain={[0, 350]} // Fixed domain to make small effects more visible
               label={{ value: 'Meal Effect (units)', angle: -90, position: 'insideRight' }}
             />
           )}
@@ -1221,44 +1226,74 @@ const CustomInsulinDot = useCallback((props) => {
     stroke="#4CAF50" // Green stroke
     fillOpacity={0.4}
     strokeWidth={1.5}
+
     isAnimationActive={false}
     activeDot={{ r: 6, strokeWidth: 1, fill: '#82ca9d' }}
   />
 )}
 
-          {/* Insulin doses as bars */}
-          {(viewMode === 'combined' || viewMode === 'insulin') && showInsulin && (
-            <Bar
-              yAxisId="insulinAxis"
-              dataKey={(dataPoint) => {
-                // Sum up all insulin doses
-                let total = 0;
-                if (dataPoint && dataPoint.insulinDoses) {
-                  total = Object.values(dataPoint.insulinDoses).reduce((sum, dose) => sum + dose, 0);
-                }
-                return total;
-              }}
-              name="Insulin Doses"
-              fill={getInsulinColor()}
-              barSize={40}
-              fillOpacity={0.7}
-              stroke={getInsulinColor()}
-              strokeWidth={1}
-            />
-          )}
+     {/* Insulin doses as bars - UPDATED to use negative values */}
+{(viewMode === 'combined' || viewMode === 'insulin') && showInsulin && (
+  <Bar
+    yAxisId="insulinAxis"
+    dataKey={(dataPoint) => {
+      // Sum up all insulin doses
+      let total = 0;
+      if (dataPoint && dataPoint.insulinDoses) {
+        total = Object.values(dataPoint.insulinDoses).reduce((sum, dose) => sum + dose, 0);
+      }
+      // CHANGE: Return negative value for top-down bars
+      return total > 0 ? -total : null;
+    }}
+    name="Insulin Doses"
+    fill={getInsulinColor()}
+    barSize={40}
+    fillOpacity={0.7}
+    stroke={getInsulinColor()}
+    strokeWidth={1}
+  />
+)}
 
-        {/* Active insulin area */}
+       {/* Active insulin area - UPDATED to use negative values for top-down visualization */}
 {(viewMode === 'combined' || viewMode === 'insulin') && showInsulin && showInsulinEffect && (
   <Area
     yAxisId="insulinAxis"
     type="monotone"
-    dataKey="activeInsulin"
+    // CHANGE: Use modified insulin data (negated)
+    dataKey={(dataPoint) => dataPoint.activeInsulin > 0 ? -dataPoint.activeInsulin : null}
     name="Active Insulin"
     fill="#4a90e2"
     fillOpacity={0.3}
     stroke="#4a90e2"
     strokeWidth={1.5}
-    dot={CustomInsulinDot}
+    // CHANGE: Custom dot positioning for inverted insulin display
+    dot={(props) => {
+      const { cx, cy, payload } = props;
+      // Only show dots for insulin doses
+      if (!payload || !payload.insulinDose || payload.insulinDose <= 0 || !cx || !cy) return null;
+
+      const radius = 5;
+      const strokeColor = '#4a90e2'; // Blue for insulin
+      const fillColor = '#ffffff'; // White fill
+
+      return (
+        <svg
+          key={`insulin-dot-${payload.timestamp || Date.now()}`}
+          x={cx - radius}
+          y={cy - radius}
+          width={radius * 2}
+          height={radius * 2}
+        >
+          {/* Diamond shape for insulin */}
+          <polygon
+            points={`${radius},0 ${radius*2},${radius} ${radius},${radius*2} 0,${radius}`}
+            stroke={strokeColor}
+            strokeWidth={1.5}
+            fill={fillColor}
+          />
+        </svg>
+      );
+    }}
     activeDot={{ r: 6, strokeWidth: 1, fill: '#4a90e2' }}
   />
 )}

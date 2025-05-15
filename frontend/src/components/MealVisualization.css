@@ -553,3 +553,82 @@
   font-size: 1.5rem;
   fill: #999;
 }
+/* Add or update these rules in your MealVisualization.css file */
+.chart-container {
+  margin-top: 20px;
+  position: relative;
+  height: 650px; /* Adjust to accommodate the taller chart */
+}
+
+/* Improve tooltip readability with the new chart layout */
+.meal-effect-tooltip {
+  background-color: rgba(255, 255, 255, 0.95);
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  padding: 10px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  max-width: 280px;
+  font-size: 13px;
+}
+
+/* Make the insulin section more prominent */
+.tooltip-insulin-section {
+  border-top: 1px solid #e0e0e0;
+  border-bottom: 1px solid #e0e0e0;
+  padding-top: 5px;
+  padding-bottom: 5px;
+  margin: 5px 0;
+}
+
+/* Create visual distinction for negative effects (insulin) */
+.tooltip-insulin-impact {
+  color: #4a90e2;
+  font-weight: 500;
+}
+
+/* Add these styles to your MealVisualization.css file */
+
+.meal-effect-tooltip {
+  background-color: rgba(255, 255, 255, 0.98);
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  padding: 12px;
+  box-shadow: 0 3px 14px rgba(0, 0, 0, 0.25);
+  max-width: 320px;
+  max-height: 80vh;
+  overflow-y: auto;
+  z-index: 9999;
+  pointer-events: none;
+  margin-left: 20px; /* Add some side margin */
+}
+
+/* Make the tooltip stand out more from the background */
+.meal-effect-tooltip h4 {
+  margin-top: 8px;
+  margin-bottom: 4px;
+  color: #333;
+  font-weight: 600;
+}
+
+/* Improve spacing in the tooltip sections */
+.tooltip-section {
+  margin-bottom: 10px;
+  padding-bottom: 5px;
+  border-bottom: 1px dashed #eee;
+}
+
+.tooltip-section:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+/* Make the time more prominent */
+.tooltip-time {
+  font-weight: bold;
+  font-size: 14px;
+  margin-bottom: 8px;
+  color: #2c3e50;
+  border-bottom: 1px solid #e0e0e0;
+  padding-bottom: 5px;
+}
