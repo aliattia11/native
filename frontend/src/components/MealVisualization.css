@@ -1,4 +1,4 @@
-/* MealVisualization.css */
+/* MealVisualization.css - Updated version with more compact controls */
 .meal-visualization {
   padding: 20px;
   background-color: #ffffff;
@@ -45,17 +45,18 @@
   border-left: 4px solid #f57f17;
 }
 
-/* Controls styling */
+/* Controls styling - UPDATED for compactness */
 .controls {
-  margin-bottom: 20px;
-  padding: 15px;
+  margin-bottom: 10px; /* Reduced from 20px */
+  padding: 10px; /* Reduced from 15px */
   background-color: #f5f5f5;
   border-radius: 8px;
 }
 
+/* Reduce padding and margins for control sections */
 .date-controls, .filter-controls, .display-options {
-  margin-bottom: 10px;
-  padding: 10px 0;
+  margin-bottom: 6px; /* Reduced from 10px */
+  padding: 6px 0; /* Reduced from 10px 0 */
   border-bottom: 1px solid #e0e0e0;
 }
 
@@ -77,16 +78,17 @@
   gap: 10px;
 }
 
+/* Make buttons smaller */
 .quick-ranges button {
   background-color: #e0e0e0;
   border: none;
   border-radius: 4px;
-  padding: 8px 15px;
+  padding: 6px 12px; /* Reduced from 8px 15px */
   cursor: pointer;
   display: flex;
   align-items: center;
   gap: 5px;
-  font-size: 0.9rem;
+  font-size: 0.85rem; /* Reduced from 0.9rem */
   color: #333;
 }
 
@@ -150,10 +152,12 @@
   100% { transform: rotate(360deg); }
 }
 
+/* Make display options more compact with grid layout */
 .display-options {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 15px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px; /* Reduced from 15px */
+  padding-bottom: 0;
 }
 
 .display-option {
@@ -168,6 +172,7 @@
   cursor: pointer;
 }
 
+/* Make inputs smaller */
 .effect-duration, .future-hours {
   display: flex;
   align-items: center;
@@ -175,21 +180,22 @@
 }
 
 .effect-duration input, .future-hours input {
-  width: 60px;
-  padding: 5px;
+  width: 50px; /* Reduced from 60px */
+  padding: 3px 5px; /* Reduced from 5px */
   border: 1px solid #ccc;
   border-radius: 4px;
 }
 
-/* View mode toggle */
+/* Reduce view-mode-toggle margin */
 .view-mode-toggle {
   display: flex;
   justify-content: center;
-  margin-bottom: 20px;
+  margin-bottom: 10px; /* Reduced from 20px */
 }
 
+/* Make toggle buttons more compact */
 .toggle-btn {
-  padding: 10px 20px;
+  padding: 8px 15px; /* Reduced from 10px 20px */
   background-color: #f5f5f5;
   border: none;
   cursor: pointer;
@@ -220,7 +226,8 @@
 /* Chart container */
 .chart-container {
   position: relative;
-  height: 500px;
+  height: 650px; /* Adjusted to accommodate the taller chart */
+  margin-top: 20px;
 }
 
 /* Timezone info */
@@ -307,33 +314,50 @@
   background-color: #e0e0e0;
 }
 
-/* Custom tooltip styling */
+/* Custom tooltip styling - UPDATED for meal details */
 .meal-effect-tooltip {
-  background-color: white;
-  border: 1px solid #e0e0e0;
-  border-radius: 5px;
-  padding: 10px;
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+  background-color: rgba(255, 255, 255, 0.98);
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  padding: 12px;
+  box-shadow: 0 3px 14px rgba(0, 0, 0, 0.25);
   max-width: 320px;
+  max-height: 80vh;
+  overflow-y: auto;
+  z-index: 9999;
+  pointer-events: none;
+  margin-left: 20px;
 }
 
-.tooltip-time {
-  font-weight: bold;
-  font-size: 0.9rem;
-  border-bottom: 1px solid #eee;
-  padding-bottom: 5px;
-  margin-bottom: 8px;
+/* Make the tooltip stand out more from the background */
+.meal-effect-tooltip h4 {
+  margin-top: 8px;
+  margin-bottom: 4px;
   color: #333;
+  font-weight: 600;
 }
 
+/* Improve spacing in the tooltip sections */
 .tooltip-section {
   margin-bottom: 10px;
+  padding-bottom: 5px;
+  border-bottom: 1px dashed #eee;
 }
 
-.tooltip-section h4 {
-  margin: 5px 0;
-  font-size: 0.85rem;
-  color: #555;
+.tooltip-section:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+/* Make the time more prominent */
+.tooltip-time {
+  font-weight: bold;
+  font-size: 14px;
+  margin-bottom: 8px;
+  color: #2c3e50;
+  border-bottom: 1px solid #e0e0e0;
+  padding-bottom: 5px;
 }
 
 .tooltip-meal-impact, .tooltip-projected, .tooltip-target-impact {
@@ -345,6 +369,7 @@
   font-size: 0.85rem;
   margin: 3px 0;
   color: #4a90e2;
+  font-weight: 500;
 }
 
 .tooltip-net-impact {
@@ -414,6 +439,11 @@
   padding: 8px;
   border-radius: 5px;
   margin-bottom: 10px;
+  border-top: 1px solid #e0e0e0;
+  border-bottom: 1px solid #e0e0e0;
+  padding-top: 5px;
+  padding-bottom: 5px;
+  margin: 5px 0;
 }
 
 .tooltip-net-section {
@@ -445,15 +475,58 @@
   padding-top: 5px;
 }
 
-/* Active insulin indicator styling */
+/* Enhanced tooltip meal details styling - NEW */
+.tooltip-meal-details {
+  margin-top: 8px;
+  border-top: 1px solid #eee;
+  padding-top: 8px;
+}
+
+.tooltip-meal {
+  margin-bottom: 6px;
+  padding: 5px;
+  background-color: #f9f9f9;
+  border-radius: 4px;
+}
+
+.tooltip-meal-type {
+  font-weight: bold;
+  margin-bottom: 4px;
+  color: #2196f3;
+}
+
+.tooltip-meal-table {
+  width: 100%;
+  font-size: 0.85em;
+}
+
+.tooltip-meal-table td {
+  padding: 1px 4px;
+}
+
+.tooltip-meal-table td:first-child {
+  color: #666;
+  width: 40%;
+}
+
+.tooltip-meal-table .total-row {
+  border-top: 1px dotted #ccc;
+  font-weight: 500;
+}
+
+.tooltip-meal-table .total-row td:first-child {
+  color: #333;
+}
+
+/* Active insulin indicator styling - UPDATED for compactness */
 .active-insulin-indicator {
   display: flex;
   align-items: center;
   background-color: #e3f2fd;
   border: 1px solid #bbdefb;
   border-radius: 5px;
-  padding: 8px 12px;
-  margin: 10px 0;
+  padding: 6px 10px; /* Reduced from 8px 12px */
+  margin: 6px 0; /* Reduced from 10px 0 */
   color: #1565c0;
 }
 
@@ -520,9 +593,7 @@
   }
 
   .display-options {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 10px;
+    grid-template-columns: 1fr;
   }
 
   .info-panel {
@@ -553,82 +624,72 @@
   font-size: 1.5rem;
   fill: #999;
 }
-/* Add or update these rules in your MealVisualization.css file */
-.chart-container {
-  margin-top: 20px;
-  position: relative;
-  height: 650px; /* Adjust to accommodate the taller chart */
-}
-
-/* Improve tooltip readability with the new chart layout */
+/* Make tooltip interactive */
 .meal-effect-tooltip {
-  background-color: rgba(255, 255, 255, 0.95);
-  border: 1px solid #ccc;
-  border-radius: 6px;
-  padding: 10px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
-  max-width: 280px;
-  font-size: 13px;
+  pointer-events: none; /* Initially non-interactive */
+  transition: opacity 0.2s ease;
 }
 
-/* Make the insulin section more prominent */
-.tooltip-insulin-section {
-  border-top: 1px solid #e0e0e0;
-  border-bottom: 1px solid #e0e0e0;
-  padding-top: 5px;
-  padding-bottom: 5px;
-  margin: 5px 0;
+.meal-effect-tooltip.sticky {
+  pointer-events: auto; /* Allow mouse interaction when sticky */
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3); /* Stronger shadow when sticky */
+  border: 1px solid #2196f3; /* Blue border when sticky */
+  max-height: 70vh; /* Limit maximum height */
+  overflow-y: auto; /* Enable scrolling */
 }
 
-/* Create visual distinction for negative effects (insulin) */
-.tooltip-insulin-impact {
-  color: #4a90e2;
-  font-weight: 500;
+
+
+/* Adjust tooltip time to accommodate close button */
+.sticky .tooltip-time {
+  margin-right: 20px;
 }
 
-/* Add these styles to your MealVisualization.css file */
 
-.meal-effect-tooltip {
-  background-color: rgba(255, 255, 255, 0.98);
-  border: 1px solid #ccc;
-  border-radius: 8px;
-  padding: 12px;
-  box-shadow: 0 3px 14px rgba(0, 0, 0, 0.25);
-  max-width: 320px;
-  max-height: 80vh;
-  overflow-y: auto;
-  z-index: 9999;
+
+/* Improved tooltip container */
+.tooltip-container {
+  position: absolute;
+  z-index: 1000;
   pointer-events: none;
-  margin-left: 20px; /* Add some side margin */
 }
 
-/* Make the tooltip stand out more from the background */
-.meal-effect-tooltip h4 {
-  margin-top: 8px;
-  margin-bottom: 4px;
-  color: #333;
-  font-weight: 600;
+.tooltip-container.sticky {
+  pointer-events: auto;
+  overflow: visible;
 }
 
-/* Improve spacing in the tooltip sections */
-.tooltip-section {
-  margin-bottom: 10px;
-  padding-bottom: 5px;
-  border-bottom: 1px dashed #eee;
+/* Ensure the tooltip stays within bounds */
+.tooltip-container.sticky .meal-effect-tooltip {
+  position: relative; /* Changed from absolute */
+  transform: none;    /* Remove transform */
+  max-height: 400px;  /* Limit height */
+  overflow-y: auto;   /* Enable scrolling */
+  pointer-events: auto; /* Enable interaction */
+  top: 0;
+  left: 0;
 }
 
-.tooltip-section:last-child {
-  border-bottom: none;
-  margin-bottom: 0;
-  padding-bottom: 0;
-}
-
-/* Make the time more prominent */
-.tooltip-time {
-  font-weight: bold;
+/* Make close button more accessible */
+.tooltip-close-btn {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid #ccc;
+  border-radius: 50%;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
   font-size: 14px;
-  margin-bottom: 8px;
-  color: #2c3e50;
-  border-bottom: 1px solid #e0e0e0;
-  padding-bottom: 5px;
+  color: #333;
+  z-index: 1001; /* Ensure it's above other tooltip content */
+}
+
+.tooltip-close-btn:hover {
+  background: #e0e0e0;
+  color: #000;
 }

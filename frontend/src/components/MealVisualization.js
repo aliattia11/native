@@ -94,7 +94,8 @@ const SimpleMealEffectChart = ({
   const [filteredInsulinDoses, setFilteredInsulinDoses] = useState([]);
   const [loadingInsulin, setLoadingInsulin] = useState(false);
   const [activeInsulin, setActiveInsulin] = useState(null);
-
+const [stickyTooltip, setStickyTooltip] = useState(null);
+const [tooltipPosition, setTooltipPosition] = useState({ left: 0, top: 0 });
   // UI State
   const [mealTypeFilter, setMealTypeFilter] = useState('all');
   const [sortConfig, setSortConfig] = useState({ key: 'timestamp', direction: 'desc' });
@@ -735,172 +736,247 @@ const fetchInsulinData = useCallback(async (timeSettings) => {
   }, []);
 
   // Custom meal effect tooltip with insulin information
-  const CustomMealTooltip = useCallback(({ active, payload, label }) => {
-    if (active && payload && payload.length) {
-      const data = payload[0].payload;
-      const now = new Date().getTime();
-      const isHistorical = data.timestamp < now;
+const EnhancedTooltip = ({
+  active,
+  payload,
+  label,
+  stickyData,
+  position,
+  isSticky,
+  onClose
+}) => {
+  // Use either sticky data or regular tooltip data
+  const data = isSticky ? stickyData : (active && payload && payload.length ? payload[0].payload : null);
 
-      // Validate all critical data values
-      const bloodSugar = isHistorical
-        ? (!isNaN(data.estimatedBloodSugar) ? Math.round(data.estimatedBloodSugar) : 'N/A')
-        : (!isNaN(data.bloodSugar) ? Math.round(data.bloodSugar) : 'N/A');
+  if (!data) return null;
 
-      const estimatedBS = !isNaN(data.estimatedBloodSugar) ? Math.round(data.estimatedBloodSugar) : 'N/A';
-      const bloodSugarWithEffect = !isNaN(data.bloodSugarWithMealEffect) ?
-        Math.round(data.bloodSugarWithMealEffect) : bloodSugar;
-      const targetWithEffect = !isNaN(data.targetWithMealEffect) ?
-        Math.round(data.targetWithMealEffect) : 'N/A';
-      const expectedWithNetEffect = !isNaN(data.expectedBloodSugarWithNetEffect) ?
-        Math.round(data.expectedBloodSugarWithNetEffect) : bloodSugar;
+  const now = new Date().getTime();
+  const isHistorical = data.timestamp < now;
 
-      const mealImpact = data.mealImpactMgdL ||
-        (data.totalMealEffect && !isNaN(data.totalMealEffect) ?
-          parseFloat((data.totalMealEffect * (patientConstants?.carb_to_bg_factor || 4.0)).toFixed(1)) : 0);
+  // Calculate all the values for display - using your existing tooltip logic
+  const bloodSugar = isHistorical
+    ? (!isNaN(data.estimatedBloodSugar) ? Math.round(data.estimatedBloodSugar) : 'N/A')
+    : (!isNaN(data.bloodSugar) ? Math.round(data.bloodSugar) : 'N/A');
 
-      // Extract insulin information
-   const insulinDose = data.insulinDose ||
-  (data.insulinDoses && Object.values(data.insulinDoses).reduce((sum, dose) => sum + dose, 0)) || 0;
-// CHANGE: Take absolute value of activeInsulin for display
-const activeInsulin = Math.abs(data.activeInsulin) || 0;
-// CHANGE: Take absolute value of insulinImpact for display
-const insulinImpact = Math.abs(data.insulinImpactMgdL) || 0;
-const netEffect = data.netEffectMgdL || 0;
+  const estimatedBS = !isNaN(data.estimatedBloodSugar) ? Math.round(data.estimatedBloodSugar) : 'N/A';
+  const bloodSugarWithEffect = !isNaN(data.bloodSugarWithMealEffect) ?
+    Math.round(data.bloodSugarWithMealEffect) : bloodSugar;
+  const targetWithEffect = !isNaN(data.targetWithMealEffect) ?
+    Math.round(data.targetWithMealEffect) : 'N/A';
+  const expectedWithNetEffect = !isNaN(data.expectedBloodSugarWithNetEffect) ?
+    Math.round(data.expectedBloodSugarWithNetEffect) : bloodSugar;
 
-      return (
-        <div className="meal-effect-tooltip">
-          <p className="tooltip-time">{data.formattedTime}</p>
+  const mealImpact = data.mealImpactMgdL ||
+    (data.totalMealEffect && !isNaN(data.totalMealEffect) ?
+      parseFloat((data.totalMealEffect * (patientConstants?.carb_to_bg_factor || 4.0)).toFixed(1)) : 0);
 
-          {/* Show insulin information if present */}
-          {insulinDose > 0 && (
-            <div className="tooltip-section tooltip-insulin-section">
-              <h4>Insulin:</h4>
-              <p className="tooltip-insulin-dose">
-                Dose: <strong>{insulinDose.toFixed(1)} units</strong>
-              </p>
-              {activeInsulin > 0 && (
-                <p className="tooltip-active-insulin">
-                  Active: <strong>{activeInsulin.toFixed(2)} units</strong>
-                </p>
-              )}
-              {insulinImpact < 0 && (
-                <p className="tooltip-insulin-impact">
-                  Impact: <strong>{insulinImpact.toFixed(1)} mg/dL</strong>
-                </p>
-              )}
-            </div>
-          )}
+  const insulinDose = data.insulinDose ||
+    (data.insulinDoses && Object.values(data.insulinDoses).reduce((sum, dose) => sum + dose, 0)) || 0;
+  const activeInsulin = Math.abs(data.activeInsulin) || 0;
+  const insulinImpact = Math.abs(data.insulinImpactMgdL) || 0;
+  const netEffect = data.netEffectMgdL || 0;
 
-          {/* Show meal effect information if present */}
-          {data.totalMealEffect > 0 && (
-            <div className="tooltip-section tooltip-meal-section">
-              <h4>Meal Impact:</h4>
-              <p className="tooltip-meal-impact">
-                Effect: <strong>+{mealImpact.toFixed(1)} mg/dL</strong>
-              </p>
-            </div>
-          )}
+  // Calculate position styles for sticky tooltip
+  const style = isSticky ? {
+    position: 'absolute',
+    left: position.left + 'px',
+    top: position.top + 'px',
+    transform: 'translate(-50%, -100%)', // Position above the point
+    opacity: 1
+  } : {};
 
-          {/* Show net effect if both insulin and meal effects are present */}
-          {(insulinImpact < 0 || mealImpact > 0) && (
-            <div className="tooltip-section tooltip-net-section">
-              <h4>Net Effect:</h4>
-              <p className="tooltip-net-impact">
-                Combined: <strong>{netEffect > 0 ? '+' : ''}{netEffect.toFixed(1)} mg/dL</strong>
-              </p>
-              {!isHistorical && (
-                <p className="tooltip-projected">
-                  Projected BG: <strong>{expectedWithNetEffect} mg/dL</strong>
-                </p>
-              )}
-            </div>
-          )}
+  return (
+    <div
+      className={`meal-effect-tooltip ${isSticky ? 'sticky' : ''}`}
+      style={style}
+    >
+      {isSticky && (
+        <button className="tooltip-close-btn" onClick={onClose}>
+          ✕
+        </button>
+      )}
 
-          {/* Indicate if showing historical or future data */}
-          <p className="tooltip-data-type">
-            {isHistorical ?
-              <em>Showing historical data {!data.isActualReading && "(baseline estimate)"}</em> :
-              <em>Showing future projection with combined effects</em>}
+      <p className="tooltip-time">{data.formattedTime}</p>
+
+      {/* Show insulin information if present */}
+      {insulinDose > 0 && (
+        <div className="tooltip-section tooltip-insulin-section">
+          <h4>Insulin:</h4>
+          <p className="tooltip-insulin-dose">
+            Dose: <strong>{insulinDose.toFixed(1)} units</strong>
           </p>
-
-          {/* Blood glucose information */}
-          <div className="tooltip-section">
-            <h4>Blood Glucose:</h4>
-            {data.isActualReading ? (
-              <p>Measured: <strong>{bloodSugar} mg/dL</strong></p>
-            ) : (
-              <>
-                <p>Baseline estimate: {estimatedBS} mg/dL</p>
-                {/* Only show meal effect for future data, not historical */}
-                {(data.totalMealEffect > 0 || insulinImpact < 0) && !isHistorical && (
-                  <p className="tooltip-projected">
-                    With all effects: <strong>{bloodSugar} mg/dL</strong>
-                  </p>
-                )}
-              </>
-            )}
-            {data.status && (
-              <p className="status" style={{ color: data.status.color }}>
-                Status: {data.status.label}
-              </p>
-            )}
-          </div>
-
-          {/* Target glucose information (second visualization) */}
-          {data.totalMealEffect > 0 && (
-            <div className="tooltip-section tooltip-target-section">
-              <h4>Default Impact:</h4>
-              <p>Target glucose: {targetGlucose} mg/dL</p>
-              <p className="tooltip-target-impact">
-                With meal effect: <strong>{targetWithEffect} mg/dL</strong>
-                <span className="tooltip-percent">
-                  ({Math.round((targetWithEffect/targetGlucose)*100)}% of target)
-                </span>
-              </p>
-
-              {/* Target status classification */}
-              {targetWithEffect > targetGlucose * 1.3 ? (
-                <p className="tooltip-status high">HIGH</p>
-              ) : targetWithEffect < targetGlucose * 0.7 ? (
-                <p className="tooltip-status low">LOW</p>
-              ) : (
-                <p className="tooltip-status normal">IN RANGE</p>
-              )}
-            </div>
+          {activeInsulin > 0 && (
+            <p className="tooltip-active-insulin">
+              Active: <strong>{activeInsulin.toFixed(2)} units</strong>
+            </p>
           )}
-
-          {/* Meal effects details */}
-          {data.mealEffects && Object.keys(data.mealEffects).length > 0 && (
-            <div className="tooltip-section">
-              <h4>Active Meal Effects:</h4>
-              {Object.entries(data.mealEffects).map(([mealId, effect], idx) => (
-                <p key={idx} className="tooltip-meal-effect">
-                  Meal {idx+1}: Impact {!isNaN(effect) ? effect.toFixed(1) : '0'} units
-                </p>
-              ))}
-              <p className="tooltip-total-effect">
-                Total effect: {!isNaN(data.totalMealEffect) ? data.totalMealEffect.toFixed(1) : '0'} units
-              </p>
-            </div>
-          )}
-
-          {/* Insulin contributions details */}
-          {data.insulinContributions && data.insulinContributions.length > 0 && (
-            <div className="tooltip-section">
-              <h4>Active Insulin Doses:</h4>
-              {data.insulinContributions.map((contrib, idx) => (
-                <p key={idx} className="tooltip-insulin-contribution">
-                  {formatInsulinName(contrib.insulinType)}: {contrib.activeUnits.toFixed(2)} units
-                  ({Math.round(contrib.activityPercent)}% active)
-                </p>
-              ))}
-            </div>
+          {insulinImpact < 0 && (
+            <p className="tooltip-insulin-impact">
+              Impact: <strong>{insulinImpact.toFixed(1)} mg/dL</strong>
+            </p>
           )}
         </div>
-      );
-    }
-    return null;
-  }, [targetGlucose, patientConstants]);
+      )}
+
+      {/* Show meal effect information if present */}
+      {data.totalMealEffect > 0 && (
+        <div className="tooltip-section tooltip-meal-section">
+          <h4>Meal Impact:</h4>
+          <p className="tooltip-meal-impact">
+            Effect: <strong>+{mealImpact.toFixed(1)} mg/dL</strong>
+          </p>
+        </div>
+      )}
+
+      {/* Show net effect if both insulin and meal effects are present */}
+      {(insulinImpact < 0 || mealImpact > 0) && (
+        <div className="tooltip-section tooltip-net-section">
+          <h4>Net Effect:</h4>
+          <p className="tooltip-net-impact">
+            Combined: <strong>{netEffect > 0 ? '+' : ''}{netEffect.toFixed(1)} mg/dL</strong>
+          </p>
+          {!isHistorical && (
+            <p className="tooltip-projected">
+              Projected BG: <strong>{expectedWithNetEffect} mg/dL</strong>
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Meal nutritional details section */}
+      {data.meals && data.meals.length > 0 && (
+        <div className="tooltip-section tooltip-meal-details">
+          <h4>Meal Details:</h4>
+          {data.meals.map((meal, idx) => (
+            <div key={idx} className="tooltip-meal">
+              <p className="tooltip-meal-type">{meal.mealType.charAt(0).toUpperCase() + meal.mealType.slice(1)}</p>
+              <table className="tooltip-meal-table">
+                <tbody>
+                  <tr>
+                    <td>Carbs:</td>
+                    <td><strong>{meal.carbs.toFixed(1)}g</strong></td>
+                  </tr>
+                  <tr>
+                    <td>Protein equiv:</td>
+                    <td><strong>{(meal.protein * (patientConstants?.protein_factor || 0.5)).toFixed(1)}g</strong></td>
+                  </tr>
+                  <tr>
+                    <td>Fat equiv:</td>
+                    <td><strong>{(meal.fat * (patientConstants?.fat_factor || 0.2)).toFixed(1)}g</strong></td>
+                  </tr>
+                  <tr className="total-row">
+                    <td>Total equiv:</td>
+                    <td><strong>{meal.totalCarbEquiv.toFixed(1)}g</strong></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Indicate if showing historical or future data */}
+      <p className="tooltip-data-type">
+        {isHistorical ?
+          <em>Showing historical data {!data.isActualReading && "(baseline estimate)"}</em> :
+          <em>Showing future projection with combined effects</em>}
+      </p>
+
+      {/* Blood glucose information */}
+      <div className="tooltip-section">
+        <h4>Blood Glucose:</h4>
+        {data.isActualReading ? (
+          <p>Measured: <strong>{bloodSugar} mg/dL</strong></p>
+        ) : (
+          <>
+            <p>Baseline estimate: {estimatedBS} mg/dL</p>
+            {/* Only show meal effect for future data, not historical */}
+            {(data.totalMealEffect > 0 || insulinImpact < 0) && !isHistorical && (
+              <p className="tooltip-projected">
+                With all effects: <strong>{bloodSugar} mg/dL</strong>
+              </p>
+            )}
+          </>
+        )}
+        {data.status && (
+          <p className="status" style={{ color: data.status.color }}>
+            Status: {data.status.label}
+          </p>
+        )}
+      </div>
+
+      {/* Target glucose information (second visualization) */}
+      {data.totalMealEffect > 0 && (
+        <div className="tooltip-section tooltip-target-section">
+          <h4>Default Impact:</h4>
+          <p>Target glucose: {targetGlucose} mg/dL</p>
+          <p className="tooltip-target-impact">
+            With meal effect: <strong>{targetWithEffect} mg/dL</strong>
+            <span className="tooltip-percent">
+              ({Math.round((targetWithEffect/targetGlucose)*100)}% of target)
+            </span>
+          </p>
+
+          {/* Target status classification */}
+          {targetWithEffect > targetGlucose * 1.3 ? (
+            <p className="tooltip-status high">HIGH</p>
+          ) : targetWithEffect < targetGlucose * 0.7 ? (
+            <p className="tooltip-status low">LOW</p>
+          ) : (
+            <p className="tooltip-status normal">IN RANGE</p>
+          )}
+        </div>
+      )}
+
+      {/* Meal effects details */}
+      {data.mealEffects && Object.keys(data.mealEffects).length > 0 && (
+        <div className="tooltip-section">
+          <h4>Active Meal Effects:</h4>
+          {Object.entries(data.mealEffects).map(([mealId, effect], idx) => (
+            <p key={idx} className="tooltip-meal-effect">
+              Meal {idx+1}: Impact {!isNaN(effect) ? effect.toFixed(1) : '0'} units
+            </p>
+          ))}
+          <p className="tooltip-total-effect">
+            Total effect: {!isNaN(data.totalMealEffect) ? data.totalMealEffect.toFixed(1) : '0'} units
+          </p>
+        </div>
+      )}
+
+      {/* Insulin contributions details */}
+      {data.insulinContributions && data.insulinContributions.length > 0 && (
+        <div className="tooltip-section">
+          <h4>Active Insulin Doses:</h4>
+          {data.insulinContributions.map((contrib, idx) => (
+            <p key={idx} className="tooltip-insulin-contribution">
+              {formatInsulinName(contrib.insulinType)}: {contrib.activeUnits.toFixed(2)} units
+              ({Math.round(contrib.activityPercent)}% active)
+            </p>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+const handleChartClick = (data) => {
+  if (data && data.activePayload && data.activePayload.length) {
+    // Calculate position for the tooltip
+    const position = {
+      left: data.chartX,
+      top: data.chartY - 10 // Position slightly above click point
+    };
+
+    // Set the sticky tooltip data
+    setStickyTooltip(data.activePayload[0].payload);
+    setTooltipPosition(position);
+  }
+};
+
+// Add this to close the sticky tooltip
+const handleCloseTooltip = () => {
+  setStickyTooltip(null);
+};
+
 
   // Custom dot for blood sugar readings on chart
   // Update the CustomBloodSugarDot component to include keys
@@ -996,10 +1072,11 @@ const CustomInsulinDot = useCallback((props) => {
 
     return (
       <ResponsiveContainer width="100%" height={600}>
-        <ComposedChart
-          data={prepareChartData(combinedData, { targetGlucose: targetGlucose || 100 })}
-          margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
-          ref={chartRef}
+<ComposedChart
+  data={prepareChartData(combinedData, { targetGlucose: targetGlucose || 100 })}
+  margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+  ref={chartRef}
+  onClick={handleChartClick} // Add this line
         >
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis
@@ -1067,8 +1144,18 @@ const CustomInsulinDot = useCallback((props) => {
             />
           )}
 
-          <Tooltip content={<CustomMealTooltip />} />
-          <Legend formatter={formatLegendText} />
+<Tooltip
+  content={props => (
+    <EnhancedTooltip
+      {...props}
+      stickyData={stickyTooltip}
+      position={tooltipPosition}
+      isSticky={!!stickyTooltip}
+      onClose={handleCloseTooltip}
+    />
+  )}
+/>
+  <Legend formatter={formatLegendText} />
 
           {/* Target glucose reference lines */}
           {showBloodSugar && (
@@ -1622,7 +1709,31 @@ const CustomInsulinDot = useCallback((props) => {
               )}
             </div>
 
-            {renderMealEffectChart()}
+
+    {renderMealEffectChart()}
+
+    {/* ADD THE STICKY TOOLTIP CONTAINER RIGHT HERE */}
+{stickyTooltip && (
+  <div
+    className={`tooltip-container ${stickyTooltip ? 'sticky' : ''}`}
+    style={{
+      position: 'absolute',
+      left: tooltipPosition.left + 'px',
+      top: tooltipPosition.top + 'px',
+      transform: 'translate(-50%, 0)', // Changed from translate(-50%, -100%)
+      maxHeight: '60%', // Limit height to stay within chart
+      maxWidth: '320px',
+      zIndex: 1000
+    }}
+  >
+    <EnhancedTooltip
+      stickyData={stickyTooltip}
+      position={{left: 0, top: 0}} // Reset position since container handles it
+      isSticky={true}
+      onClose={handleCloseTooltip}
+    />
+  </div>
+)}
           </div>
         </div>
       )}
