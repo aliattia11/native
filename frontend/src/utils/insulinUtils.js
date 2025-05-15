@@ -330,11 +330,14 @@ export const calculateCombinedInsulinEffect = (insulinDoses, targetTime, patient
       return;
     }
 
-    // Get insulin parameters
+    // Get insulin parameters - THIS IS WHERE WE'RE USING THE FUNCTION
     const insulinType = dose.medication || dose.insulinType;
     const insulinParams = getInsulinParameters(insulinType, patientConstants);
 
-    // Skip if outside duration
+    // Log the actual parameters being used for verification
+    console.log(`Using ${insulinType} parameters: onset=${insulinParams.onset_hours}h, peak=${insulinParams.peak_hours}h, duration=${insulinParams.duration_hours}h`);
+
+    // Skip if outside duration - Now using the insulin-specific duration
     if (hoursSinceDose > insulinParams.duration_hours) {
       return;
     }
@@ -769,7 +772,7 @@ export const generateInsulinTimelineData = (insulinDoses, options, TimeManager) 
         timestamp: time,
         formattedTime: TimeManager.formatDate(
           new Date(time),
-          TimeManager.formats.DATETIME_DISPLAY || 'YYYY-MM-DD HH:mm:ss'  // Provide default
+          TimeManager.formats.DATETIME_DISPLAY || 'YYYY-MM-DD HH:mm:ss'
         ),
         insulinDoses: {},
         insulinBars: {},

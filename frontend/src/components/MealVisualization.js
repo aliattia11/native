@@ -120,7 +120,6 @@ const SimpleMealEffectChart = ({
 
   // Effect duration settings
   const [effectDurationHours, setEffectDurationHours] = useState(6);
-  const [insulinEffectDurationHours, setInsulinEffectDurationHours] = useState(6);
 
   // For custom date range when not using TimeContext
   const [localDateRange, setLocalDateRange] = useState({
@@ -367,7 +366,6 @@ const SimpleMealEffectChart = ({
       includeFutureEffect: includeFutureEffect || false,
       futureHours: futureHours || 6,
       effectDurationHours: effectDurationHours || 6,
-      insulinEffectDurationHours: insulinEffectDurationHours || 6,
       patientConstants: patientConstants || {}
     };
 
@@ -403,7 +401,7 @@ const SimpleMealEffectChart = ({
     return timelineWithNetEffects;
   }, [targetGlucose, includeFutureEffect, futureHours,
       getBloodSugarAtTime, getBloodSugarStatus, getFilteredData, TimeManager,
-      patientConstants, timeScale, effectDurationHours, insulinEffectDurationHours,
+      patientConstants, timeScale, effectDurationHours,
       mergeTimelineData, calculateNetEffects]);
 
   // Fetch active insulin data
@@ -1277,16 +1275,6 @@ const SimpleMealEffectChart = ({
                 max="24"
                 value={effectDurationHours}
                 onChange={(e) => setEffectDurationHours(parseInt(e.target.value) || 6)}
-              />
-            </div>
-            <div className="effect-duration">
-              <label>Insulin Effect Duration (hours):</label>
-              <input
-                type="number"
-                min="1"
-                max="24"
-                value={insulinEffectDurationHours}
-                onChange={(e) => setInsulinEffectDurationHours(parseInt(e.target.value) || 6)}
               />
             </div>
           </div>
