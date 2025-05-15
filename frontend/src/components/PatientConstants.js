@@ -5,7 +5,7 @@ import axios from 'axios';
 import styles from './PatientConstants.module.css';
 import TimeInput from './TimeInput';
 import TimeManager from '../utils/TimeManager';
-import TimeEffect from '../utils/TimeEffect';
+import { calculateMedicationEffect } from '../utils/insulinUtils';
 
 const PatientConstants = () => {
   const { patientConstants, loading, error, refreshConstants } = useConstants();
@@ -109,7 +109,8 @@ const PatientConstants = () => {
       const schedule = patientConstants.medication_schedules?.[medication];
 
       if (medData && schedule && medData.duration_based) {
-        const effect = TimeEffect.calculateMedicationEffect(medication, medData, schedule);
+        // Use imported calculateMedicationEffect instead of TimeEffect
+        const effect = calculateMedicationEffect(medication, medData, schedule);
         if (effect) {
           effects[medication] = effect;
         }

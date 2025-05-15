@@ -148,6 +148,54 @@ export const getInsulinParameters = (insulinType, patientConstants) => {
 };
 
 /**
+ * Standardized insulin activity model shared across application components
+ * @param {number} hoursSinceDose - Hours since insulin administration
+ * @param {Object} params - Insulin pharmacokinetic parameters
+ * @returns {number} - Activity percentage (0-100)
+ */
+export const calculateInsulinActivityPercentage = (hoursSinceDose, params) => {
+  // Extract parameters with defaults for safety
+  const onset_hours = params?.onset_hours || 0.5;
+  const peak_hours = params?.peak_hours || 2.0;
+  const duration_hours = params?.duration_hours || 4.0;
+
+  // Return 0 if outside valid time range
+  if (hoursSinceDose < 0 || hoursSinceDose > duration_hours) {
+    return 0;
+  }
+
+  // For peakless insulins like Glargine
+  if (params?.type === 'long_acting' && params?.is_peakless) {
+    // Gradual onset followed by flat effect
+    if (hoursSinceDose < onset_hours) {
+      return (hoursSinceDose / onset_hours) * 80; // Ramp up to 80% effect
+    }
+    // Flat effect with slight decay at end of duration
+    const timeLeft = duration_hours - hoursSinceDose;
+    const endDecayHours = Math.min(6, duration_hours * 0.15); // Last 15% of duration or 6 hours
+
+    if (timeLeft <= endDecayHours) {
+      return 80 * (timeLeft / endDecayHours);
+    }
+    return 80; // Constant 80% effect for most of duration
+  }
+
+  // Standard insulin with onset, peak, and decay phases
+  // Onset phase (0% to 30%)
+  if (hoursSinceDose < onset_hours) {
+    return 30 * (hoursSinceDose / onset_hours);
+  }
+
+  // Peak phase (30% to 100%)
+  if (hoursSinceDose < peak_hours) {
+    return 30 + (70 * (hoursSinceDose - onset_hours) / (peak_hours - onset_hours));
+  }
+
+  // Decay phase (100% to 0%)
+  return 100 * ((duration_hours - hoursSinceDose) / (duration_hours - peak_hours));
+};
+
+/**
  * Calculate the effect of an insulin dose on blood glucose over time
  *
  * @param {Object} dose - The insulin dose data object
@@ -190,21 +238,9 @@ export const calculateInsulinEffect = (dose, patientConstants) => {
     // Generate points at 5-minute intervals for smoother curves
     for (let minute = 0; minute <= durationMinutes; minute += 5) {
       const hoursSinceDose = minute / 60;
-      let activityPercent = 0;
 
-      // Calculate activity using a physiological model
-      if (hoursSinceDose < onset_hours) {
-        // Linear ramp up to onset
-        activityPercent = (hoursSinceDose / onset_hours) * 30; // 0-30%
-      } else if (hoursSinceDose < peak_hours) {
-        // Rise to peak
-        activityPercent = 30 + ((hoursSinceDose - onset_hours) /
-                               (peak_hours - onset_hours)) * 70; // 30-100%
-      } else if (hoursSinceDose <= duration_hours) {
-        // Decay from peak
-        activityPercent = 100 * ((duration_hours - hoursSinceDose) /
-                                (duration_hours - peak_hours)); // 100-0%
-      }
+      // Calculate activity using standardized model
+      const activityPercent = calculateInsulinActivityPercentage(hoursSinceDose, insulinParams);
 
       // Calculate active insulin units
       const activeUnits = (doseAmount * activityPercent) / 100;
@@ -295,32 +331,16 @@ export const calculateCombinedInsulinEffect = (insulinDoses, targetTime, patient
     }
 
     // Get insulin parameters
-    const insulinParams = getInsulinParameters(dose.medication || dose.insulinType, patientConstants);
-    const { onset_hours, peak_hours, duration_hours } = insulinParams;
+    const insulinType = dose.medication || dose.insulinType;
+    const insulinParams = getInsulinParameters(insulinType, patientConstants);
 
     // Skip if outside duration
-    if (hoursSinceDose > duration_hours) {
+    if (hoursSinceDose > insulinParams.duration_hours) {
       return;
     }
 
-    // Calculate activity percent
-    let activityPercent = 0;
-
-    if (hoursSinceDose < onset_hours) {
-      // Linear ramp up to onset
-      activityPercent = (hoursSinceDose / onset_hours) * 30; // 0-30%
-    } else if (hoursSinceDose < peak_hours) {
-      // Rise to peak
-      activityPercent = 30 + ((hoursSinceDose - onset_hours) /
-                             (peak_hours - onset_hours)) * 70; // 30-100%
-    } else {
-      // Decay from peak
-      activityPercent = 100 * ((duration_hours - hoursSinceDose) /
-                              (duration_hours - peak_hours)); // 100-0%
-    }
-
-    // Ensure it's between 0-100%
-    activityPercent = Math.max(0, Math.min(100, activityPercent));
+    // Calculate activity percent using standardized function
+    const activityPercent = calculateInsulinActivityPercentage(hoursSinceDose, insulinParams);
 
     // Calculate active insulin units
     const doseAmount = dose.dose || 0;
@@ -334,19 +354,387 @@ export const calculateCombinedInsulinEffect = (insulinDoses, targetTime, patient
       dose: doseAmount,
       activeUnits,
       activityPercent,
-      insulinType: dose.medication || dose.insulinType,
+      insulinType,
       hoursSinceDose
     });
   });
 
-  // Calculate blood glucose impact
-  const bgImpact = calculateBgImpactFromInsulin(totalActiveInsulin, patientConstants);
+  // Calculate blood glucose impact using patient-specific correction factor
+  const correctionFactor = patientConstants?.correction_factor || 50;
+  const bgImpact = -1 * totalActiveInsulin * correctionFactor;
 
   return {
     totalActiveInsulin,
     insulinContributions: contributions,
     bgImpact
   };
+};
+
+// =====================================
+// MEDICATION AND HEALTH EFFECT CALCULATIONS - MIGRATED FROM TimeEffect
+// =====================================
+
+/**
+ * Calculate medication effect based on time since last dose
+ * @param {string} medication - Medication identifier
+ * @param {object} medData - Medication data with onset, peak, duration
+ * @param {object} schedule - Medication schedule with dailyTimes
+ * @param {Date} currentTime - Current time to calculate effect for
+ * @returns {object} Effect data including factor and status
+ */
+export const calculateMedicationEffect = (medication, medData, schedule, currentTime = new Date()) => {
+  if (!medData) return { status: 'Unknown', factor: 1.0 };
+
+  if (medData.duration_based && schedule) {
+    const startDate = new Date(schedule.startDate);
+    const endDate = new Date(schedule.endDate);
+
+    // Check schedule validity
+    if (currentTime < startDate) {
+      return {
+        status: 'Scheduled to start',
+        startDate: startDate.toLocaleDateString(),
+        factor: 1.0
+      };
+    }
+
+    if (currentTime > endDate) {
+      return {
+        status: 'Schedule ended',
+        endDate: endDate.toLocaleDateString(),
+        factor: 1.0
+      };
+    }
+
+    // Find last dose time
+    const lastDoseTime = findLastDoseTime(schedule.dailyTimes, currentTime);
+    const hoursSinceLastDose = (currentTime - lastDoseTime) / (1000 * 60 * 60);
+
+    // Calculate effect based on medication phase
+    if (hoursSinceLastDose < medData.onset_hours) {
+      return {
+        status: 'Ramping up',
+        factor: 1.0 + ((medData.factor - 1.0) * (hoursSinceLastDose / medData.onset_hours)),
+        lastDose: lastDoseTime.toLocaleString(),
+        hoursSinceLastDose: Math.round(hoursSinceLastDose * 10) / 10
+      };
+    } else if (hoursSinceLastDose < medData.peak_hours) {
+      return {
+        status: 'Peak effect',
+        factor: medData.factor,
+        lastDose: lastDoseTime.toLocaleString(),
+        hoursSinceLastDose: Math.round(hoursSinceLastDose * 10) / 10
+      };
+    } else if (hoursSinceLastDose < medData.duration_hours) {
+      const remainingEffect = (medData.duration_hours - hoursSinceLastDose) /
+                           (medData.duration_hours - medData.peak_hours);
+      return {
+        status: 'Tapering',
+        factor: 1.0 + ((medData.factor - 1.0) * remainingEffect),
+        lastDose: lastDoseTime.toLocaleString(),
+        hoursSinceLastDose: Math.round(hoursSinceLastDose * 10) / 10
+      };
+    }
+
+    return {
+      status: 'No current effect',
+      factor: 1.0,
+      lastDose: lastDoseTime.toLocaleString(),
+      hoursSinceLastDose: Math.round(hoursSinceLastDose * 10) / 10
+    };
+  }
+
+  // Non-duration based medications
+  return {
+    status: 'Constant effect',
+    factor: medData.factor || 1.0
+  };
+};
+
+/**
+ * Find the last dose time based on daily schedule
+ * @param {Array} dailyTimes - List of daily time strings (HH:MM format)
+ * @param {Date} currentTime - Current reference time
+ * @returns {Date} Last dose time
+ */
+export const findLastDoseTime = (dailyTimes, currentTime = new Date()) => {
+  // Convert daily times to Date objects for the current or previous day
+  const doseTimes = dailyTimes.map(time => {
+    const [hours, minutes] = time.split(':');
+    const doseTime = new Date(currentTime);
+    doseTime.setHours(parseInt(hours, 10), parseInt(minutes, 10), 0, 0);
+
+    // If this time is in the future today, use yesterday's time
+    if (doseTime > currentTime) {
+      doseTime.setDate(doseTime.getDate() - 1);
+    }
+
+    return doseTime;
+  });
+
+  // Find the most recent dose time
+  if (doseTimes.length === 0) {
+    return new Date(currentTime.getTime() - 24 * 60 * 60 * 1000); // Default to 24h ago if no times
+  }
+
+  return doseTimes.reduce((latest, current) => {
+    return (current > latest && current <= currentTime) ? current : latest;
+  }, new Date(0));
+};
+
+/**
+ * Calculate insulin effect on blood glucose at a specific time
+ * @param {Object} insulin - Insulin dose information
+ * @param {number} timestamp - Target timestamp to calculate effect
+ * @param {Object} patientConstants - Patient constants
+ * @returns {Object} - Effect information including BG impact
+ */
+export const calculateInsulinBgEffect = (insulin, timestamp, patientConstants) => {
+  if (!insulin || !timestamp || !patientConstants) {
+    return { activeInsulin: 0, bgImpact: 0, activityPercent: 0 };
+  }
+
+  // Get administration time
+  const doseTime = insulin.administrationTime || insulin.taken_at || insulin.timestamp;
+  if (!doseTime) return { activeInsulin: 0, bgImpact: 0, activityPercent: 0 };
+
+  // Convert to timestamp if needed
+  const doseTimestamp = typeof doseTime === 'number' ? doseTime : new Date(doseTime).getTime();
+
+  // Calculate hours since dose
+  const hoursSinceDose = (timestamp - doseTimestamp) / (3600 * 1000);
+
+  // Get insulin parameters
+  const insulinType = insulin.medication || insulin.insulinType;
+  const insulinParams = patientConstants.medication_factors?.[insulinType] || {
+    onset_hours: 0.5,
+    peak_hours: 2.0,
+    duration_hours: 4.0
+  };
+
+  // Calculate activity percentage
+  const activityPercent = calculateInsulinActivityPercentage(hoursSinceDose, insulinParams);
+
+  // Calculate active insulin
+  const doseAmount = insulin.dose || 0;
+  const activeInsulin = (doseAmount * activityPercent) / 100;
+
+  // Calculate BG impact using correction factor
+  const correctionFactor = patientConstants.correction_factor || 50;
+  const bgImpact = -1 * activeInsulin * correctionFactor;
+
+  return {
+    activeInsulin,
+    bgImpact,
+    activityPercent,
+    insulinType,
+    hoursSinceDose
+  };
+};
+
+/**
+ * Calculate time of day factor for insulin needs
+ * @param {object} timeOfDayFactors - Factors by time period
+ * @param {Date} currentTime - Time to calculate factor for
+ * @returns {number} Time of day factor
+ */
+export const getTimeOfDayFactor = (timeOfDayFactors, currentTime = new Date()) => {
+  if (!timeOfDayFactors) return 1.0;
+
+  const hour = currentTime.getHours();
+
+  // Check each time period
+  for (const [, periodData] of Object.entries(timeOfDayFactors)) {
+    const [startHour, endHour] = periodData.hours;
+    if (hour >= startHour && hour < endHour) {
+      return periodData.factor;
+    }
+  }
+
+  // Default to daytime
+  return timeOfDayFactors.daytime?.factor || 1.0;
+};
+
+// =====================================
+// BLOOD GLUCOSE IMPACT CALCULATIONS - MIGRATED FROM TimeEffect
+// =====================================
+
+/**
+ * Calculate Blood Glucose Impact (BGImpact) for a meal
+ * @param {object} meal - Meal data with carbs, protein, fat
+ * @param {object} patientFactors - Patient-specific factors
+ * @returns {object} BGImpact data with value and components
+ */
+export const calculateBGImpact = (meal, patientFactors) => {
+  if (!meal || !patientFactors) {
+    return { bgImpactValue: 0, components: {}, active: false };
+  }
+
+  const {
+    carbs = 0,
+    protein = 0,
+    fat = 0,
+    fiber = 0,
+    glycemicIndex = null,
+    absorptionType = 'medium'
+  } = meal.nutrition || {};
+
+  // Get patient-specific factors
+  const {
+    proteinFactor = 0.5,
+    fatFactor = 0.2,
+    fiberFactor = 0.1,
+    absorptionFactors = { slow: 0.7, medium: 1.0, fast: 1.3 }
+  } = patientFactors;
+
+  // Calculate absorption factor
+  const absorptionFactor = absorptionFactors[absorptionType] || 1.0;
+
+  // Base impact calculation
+  const carbsContribution = carbs;
+  const proteinContribution = protein * proteinFactor;
+  const fatContribution = fat * fatFactor;
+  const fiberReduction = fiber * fiberFactor * -1; // Fiber reduces impact
+
+  // Calculate base BGImpact
+  let baseImpact = carbsContribution + proteinContribution + fatContribution + fiberReduction;
+  baseImpact = Math.max(0, baseImpact); // Ensure impact isn't negative
+
+  // Apply absorption factor
+  let adjustedImpact = baseImpact * absorptionFactor;
+
+  // Apply glycemic index adjustment if available
+  if (glycemicIndex !== null && glycemicIndex !== undefined) {
+    // Normalize glycemic index (0-100 scale)
+    // Higher GI means faster & higher impact
+    const giAdjustment = glycemicIndex / 55; // Medium GI is around 55
+    adjustedImpact = adjustedImpact * giAdjustment;
+  }
+
+  // Calculate meal timing effect
+  const mealTime = meal.timestamp ? new Date(meal.timestamp) : new Date();
+  const hour = mealTime.getHours();
+  let timeOfDayFactor = 1.0;
+
+  // Apply dawn phenomenon effect (higher impact in morning)
+  if (hour >= 5 && hour < 10) {
+    timeOfDayFactor = patientFactors.dawnPhenomenonFactor || 1.2;
+  }
+
+  // Apply final time of day adjustment
+  const finalImpact = adjustedImpact * timeOfDayFactor;
+
+  // Round to 1 decimal place
+  const roundedImpact = Math.round(finalImpact * 10) / 10;
+
+  return {
+    bgImpactValue: roundedImpact,
+    components: {
+      carbs: carbsContribution,
+      protein: proteinContribution,
+      fat: fatContribution,
+      fiber: fiberReduction
+    },
+    factors: {
+      absorption: absorptionFactor,
+      glycemicIndex: glycemicIndex ? (glycemicIndex / 55) : 1.0,
+      timeOfDay: timeOfDayFactor
+    },
+    baseImpact: Math.round(baseImpact * 10) / 10
+  };
+};
+
+/**
+ * Calculate Blood Glucose Impact curve over time
+ * @param {object} meal - Meal data with timestamp and nutrition
+ * @param {object} patientFactors - Patient-specific factors
+ * @param {number} hoursToProject - How many hours to project (default 6)
+ * @param {number} intervalMinutes - Data point interval in minutes (default 15)
+ * @returns {Array} Array of time points with projected BG impact
+ */
+export const calculateBGImpactCurve = (meal, patientFactors, hoursToProject = 6, intervalMinutes = 15) => {
+  if (!meal?.timestamp || !meal?.nutrition) {
+    return [];
+  }
+
+  // Get the BGImpact total value
+  const bgImpact = calculateBGImpact(meal, patientFactors);
+
+  // Get key parameters to model the curve
+  const { carbs = 0, protein = 0, fat = 0 } = meal.nutrition;
+  const absorptionType = meal.nutrition.absorption_type || 'medium';
+  const absorptionFactor = patientFactors?.absorptionFactors?.[absorptionType] || 1.0;
+
+  // Calculate meal curve shape parameters
+  // Higher fat/protein extends duration, higher absorption factor shortens it
+  const fatProteinRatio = (fat + protein) / Math.max(1, carbs + protein + fat);
+  const baseDuration = 3 + (fatProteinRatio * 3); // 3-6 hours depending on composition
+  const duration = baseDuration / absorptionFactor; // Adjust for absorption rate
+
+  // Calculate peak time (carb-heavy meals peak faster)
+  const carbRatio = carbs / Math.max(1, carbs + protein + fat);
+  const basePeakHours = 0.5 + ((1 - carbRatio) * 1.0); // 0.5-1.5 hours depending on carb content
+  const peakHours = basePeakHours / absorptionFactor; // Adjust for absorption
+
+  const mealTime = new Date(meal.timestamp);
+  const dataPoints = [];
+
+  // Generate data points for the curve
+  for (let i = 0; i <= hoursToProject * (60 / intervalMinutes); i++) {
+    const minutesSinceMeal = i * intervalMinutes;
+    const hoursSinceMeal = minutesSinceMeal / 60;
+
+    // Calculate time point
+    const timePoint = new Date(mealTime.getTime() + minutesSinceMeal * 60 * 1000);
+
+    // Calculate impact intensity at this time
+    let intensity = 0;
+
+    if (hoursSinceMeal < peakHours) {
+      // Rising phase - use quadratic curve for faster initial rise
+      intensity = Math.pow(hoursSinceMeal / peakHours, 1.8);
+    } else if (hoursSinceMeal < duration) {
+      // Falling phase - protein/fat extend the tail
+      let fallRatio = (hoursSinceMeal - peakHours) / (duration - peakHours);
+
+      // Apply digestion model based on meal composition
+      if (fatProteinRatio > 0.5) {
+        // High protein/fat meals have slower decay with a longer tail
+        intensity = 1.0 - Math.pow(fallRatio, 0.7);
+      } else {
+        // Carb-heavy meals decline more rapidly
+        intensity = 1.0 - Math.pow(fallRatio, 1.2);
+      }
+    } else {
+      // After full duration
+      intensity = 0;
+    }
+
+    // Scale intensity by total impact value
+    const impactValue = intensity * bgImpact.bgImpactValue;
+
+    // Format time if TimeManager is available
+    let formattedTime = timePoint.toLocaleTimeString();
+    if (typeof window !== 'undefined' && window.TimeManager && window.TimeManager.formatDate) {
+      formattedTime = window.TimeManager.formatDate(timePoint, window.TimeManager.formats.CHART_TICKS_SHORT);
+    }
+
+    dataPoints.push({
+      time: timePoint,
+      hoursSinceMeal,
+      intensity,
+      impactValue: Math.round(impactValue * 10) / 10,
+      timestamp: timePoint.getTime(),
+      formattedTime
+    });
+
+    // Stop if we've reached zero impact after the duration
+    if (hoursSinceMeal > duration * 1.2 && intensity === 0) {
+      break;
+    }
+  }
+
+  return dataPoints;
 };
 
 // =====================================
@@ -435,4 +823,24 @@ export const generateInsulinTimelineData = (insulinDoses, options, TimeManager) 
     console.error("Error generating insulin timeline data:", error);
     return [];
   }
+};
+
+export default {
+  getAvailableInsulinTypes,
+  formatInsulinName,
+  getInsulinTypesByCategory,
+  recommendInsulinType,
+  getInsulinParameters,
+  calculateInsulinActivityPercentage,
+  calculateInsulinEffect,
+  calculateBgImpactFromInsulin,
+  getBidirectionalValue,
+  calculateCombinedInsulinEffect,
+  calculateMedicationEffect,
+  findLastDoseTime,
+  calculateInsulinBgEffect,
+  getTimeOfDayFactor,
+  calculateBGImpact,
+  calculateBGImpactCurve,
+  generateInsulinTimelineData
 };

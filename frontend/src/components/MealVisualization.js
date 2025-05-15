@@ -17,8 +17,6 @@ import {
 } from 'recharts';
 import { useConstants } from '../contexts/ConstantsContext';
 import { useBloodSugarData } from '../contexts/BloodSugarDataContext';
-import TimeManager from '../utils/TimeManager';
-import TimeEffect from '../utils/TimeEffect';
 import TimeContext from '../contexts/TimeContext';
 import {
   calculateMealEffect,

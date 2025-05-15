@@ -3,7 +3,8 @@ import axios from 'axios';
 import moment from 'moment';
 import TimeManager from '../utils/TimeManager';
 import TimeContext from '../contexts/TimeContext';
-import TimeEffect from '../utils/TimeEffect'; // Add this import
+import { calculateBGImpact, calculateBGImpactCurve } from '../utils/insulinUtils';
+import { useConstants } from '../contexts/ConstantsContext';
 
 // Create the context
 const BloodSugarDataContext = createContext();
@@ -21,6 +22,7 @@ export const useBloodSugarData = () => {
 export const BloodSugarDataProvider = ({ children }) => {
   // Access TimeContext
   const timeContext = useContext(TimeContext);
+  const { patientConstants } = useConstants();
 
   // Core state
   const [bloodSugarData, setBloodSugarData] = useState([]);
@@ -107,8 +109,8 @@ export const BloodSugarDataProvider = ({ children }) => {
       dawnPhenomenonFactor: patientConstants?.dawn_phenomenon_factor || 1.2
     };
 
-    // Calculate BG impact using TimeEffect utility
-    const bgImpact = TimeEffect.calculateBGImpact({
+    // Use imported calculateBGImpact instead of TimeEffect
+    const bgImpact = calculateBGImpact({
       nutrition: {
         carbs,
         protein,
@@ -121,7 +123,8 @@ export const BloodSugarDataProvider = ({ children }) => {
     }, patientFactors);
 
     // Generate impact curve over time (6 hours, 15-minute intervals)
-    const bgImpactCurve = TimeEffect.calculateBGImpactCurve({
+    // Use imported calculateBGImpactCurve instead of TimeEffect
+    const bgImpactCurve = calculateBGImpactCurve({
       nutrition: {
         carbs,
         protein,
@@ -490,9 +493,6 @@ export const BloodSugarDataProvider = ({ children }) => {
 
   }, [estimationSettings, targetGlucose, timeScale, filteredData, getBloodSugarStatus, dateRange, getEstimationInterval]);
 
-
-
-
   // Fetch blood sugar data from API
   const fetchBloodSugarData = useCallback(async (patientId = null) => {
     // Avoid fetch if already loading
@@ -638,14 +638,16 @@ export const BloodSugarDataProvider = ({ children }) => {
         totalEffect += Math.max(0, effect);
       });
 
-      // Apply the insulin effect (each unit of insulin reduces blood sugar by ~50 mg/dL)
-      const insulinSensitivity = 50; // This could be personalized per patient
-      reading.predictedBloodSugar = Math.max(70, reading.bloodSugar - (totalEffect * insulinSensitivity));
+      // Apply the insulin effect using patient-specific correction factor
+      // Get correction factor from patient constants with fallback
+      const correctionFactor = patientConstants?.correction_factor || 50; // Use patient constant instead of hardcoded value
+
+      reading.predictedBloodSugar = Math.max(70, reading.bloodSugar - (totalEffect * correctionFactor));
       reading.insulinEffect = totalEffect;
     });
 
     return modifiedData;
-  }, [combinedData]);
+  }, [combinedData, patientConstants]); // Add patientConstants to dependencies
 
   // Utility function to get blood sugar at a specific time
   const getBloodSugarAtTime = useCallback((timestamp) => {
@@ -660,17 +662,17 @@ export const BloodSugarDataProvider = ({ children }) => {
   }, [combinedData]);
 
   // Update estimated data when filteredData changes
-useEffect(() => {
-  // Skip initial render and avoid redundant calculations
-  if (didInitialFetch.current && !processingData.current) {
-    // Add throttling to prevent too frequent updates
-    const timeoutId = setTimeout(() => {
-      generateEstimatedData();
-    }, 200);
+  useEffect(() => {
+    // Skip initial render and avoid redundant calculations
+    if (didInitialFetch.current && !processingData.current) {
+      // Add throttling to prevent too frequent updates
+      const timeoutId = setTimeout(() => {
+        generateEstimatedData();
+      }, 200);
 
-    return () => clearTimeout(timeoutId);
-  }
-}, [filteredData, estimationSettings, targetGlucose, generateEstimatedData]);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [filteredData, estimationSettings, targetGlucose, generateEstimatedData]);
 
   // Update local time scale when date range changes (if not using TimeContext)
   useEffect(() => {
@@ -690,7 +692,7 @@ useEffect(() => {
   }, [fetchBloodSugarData]);
 
   // Value to be provided by the context - define this AFTER all functions are defined
-   const contextValue = {
+  const contextValue = {
     // Data
     bloodSugarData,
     filteredData,

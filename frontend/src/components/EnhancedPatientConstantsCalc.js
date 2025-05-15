@@ -1,7 +1,8 @@
 // Import the new time utilities
 import TimeManager from '../utils/TimeManager';
-import TimeEffect from '../utils/TimeEffect';
 import axios from 'axios';
+// Replace TimeEffect import with insulinUtils for medication effect calculation
+import { calculateMedicationEffect } from '../utils/insulinUtils';
 
 import {
   MEASUREMENT_SYSTEMS,
@@ -69,7 +70,7 @@ const calculateHealthFactorsData = (patientConstants, options = {}) => {
       .filter(Boolean);
   }
 
-  // Calculate medications impact - Use TimeEffect for timing calculations
+  // Calculate medications impact - Using imported calculateMedicationEffect from insulinUtils
   if (patientConstants.active_medications?.length > 0) {
     result.medications = patientConstants.active_medications
       .map(medication => {
@@ -77,8 +78,8 @@ const calculateHealthFactorsData = (patientConstants, options = {}) => {
         const schedule = patientConstants.medication_schedules?.[medication];
         if (!medData) return null;
 
-        // Use TimeEffect to calculate medication timing effects
-        const medicationEffect = TimeEffect.calculateMedicationEffect(
+        // Use imported calculateMedicationEffect instead of TimeEffect
+        const medicationEffect = calculateMedicationEffect(
           medication,
           medData,
           schedule,
@@ -138,10 +139,8 @@ export const getHealthFactorsBreakdown = (patientConstants, currentDate = new Da
   };
 };
 
-// Use TimeEffect for medication effect calculations
-export const calculateMedicationEffect = (medication, medData, schedule, currentDate) => {
-  return TimeEffect.calculateMedicationEffect(medication, medData, schedule, currentDate);
-};
+// Replace TimeEffect reference with imported function
+export { calculateMedicationEffect };
 
 export const calculateHealthFactors = (patientConstants, currentDate = new Date()) => {
   if (!patientConstants) return 1.0;
@@ -157,7 +156,7 @@ export const calculateHealthFactors = (patientConstants, currentDate = new Date(
     }
   });
 
-  // Calculate medication impacts using TimeEffect
+  // Calculate medication impacts using imported calculateMedicationEffect
   const activeMedications = patientConstants.active_medications || [];
   activeMedications.forEach(medication => {
     const medData = patientConstants.medication_factors[medication];
@@ -166,7 +165,7 @@ export const calculateHealthFactors = (patientConstants, currentDate = new Date(
     if (medData.duration_based) {
       const schedule = patientConstants.medication_schedules?.[medication];
       if (schedule) {
-        const medicationEffect = TimeEffect.calculateMedicationEffect(
+        const medicationEffect = calculateMedicationEffect(
           medication,
           medData,
           schedule,
@@ -302,10 +301,6 @@ export const calculateTotalNutrients = (selectedFoods) => {
   }, { carbs: 0, protein: 0, fat: 0, absorptionType: 'medium' });
 };
 
-// Remove this function as we're no longer using time of day factors
-// export const get_time_of_day_factor = (patientConstants, currentTime = new Date()) => {
-//   return TimeEffect.getTimeOfDayFactor(patientConstants?.time_of_day_factors, currentTime);
-// };
 export const calculateCarbEquivalents = (nutrition, patientConstants) => {
   if (!nutrition || !patientConstants) {
     return 0;

@@ -658,39 +658,8 @@ def submit_meal(current_user):
 
         # Handle insulin logging in medication system
         if data.get('intendedInsulin') and data.get('intendedInsulinType'):
-            # Create medication log entry with consistent administration time
-            medication_log = {
-                'patient_id': str(current_user['_id']),
-                'medication': data['intendedInsulinType'],
-                'dose': float(data['intendedInsulin']),
-                'scheduled_time': administration_time,  # When insulin was scheduled to be taken
-                'taken_at': administration_time,  # When insulin was actually taken
-                'status': 'taken',  # Status is 'taken' as we're logging a dose that was administered
-                'created_at': current_time,  # Record creation time (server time)
-                'created_by': str(current_user['_id']),
-                'notes': data.get('notes', ''),
-                'is_insulin': True,
-                'meal_id': meal_id,
-                'meal_type': data['mealType'],
-                'blood_sugar': data.get('bloodSugar'),
-                'blood_sugar_timestamp': blood_sugar_timestamp,
-                'blood_sugar_id': blood_sugar_id,  # Add reference to blood sugar record if available
-                'suggested_dose': insulin_calc['total']
-            }
-
-            # Insert medication log
-            log_result = mongo.db.medication_logs.insert_one(medication_log)
-            medication_log_id = str(log_result.inserted_id)
-
-            # Update meal with medication log reference
-            mongo.db.meals.update_one(
-                {"_id": result.inserted_id},
-                {"$set": {"medication_log_id": medication_log_id}}
-            )
-
             try:
                 # Get insulin profile data based on patient constants
-                # Since medication factors are patient-specific, get from current_app.constants
                 insulin_type = data['intendedInsulinType']
                 patient_constants = current_app.constants.get_patient_constants()
                 insulin_profile = patient_constants.get('medication_factors', {}).get(insulin_type, {})
@@ -700,7 +669,7 @@ def submit_meal(current_user):
                 peak_hours = insulin_profile.get('peak_hours', 2.0)  # Default 2 hour peak
                 duration_hours = insulin_profile.get('duration_hours', 4.0)  # Default 4 hour duration
 
-                # Add insulin effect timing fields to medication log
+                # Create medication log entry with all necessary fields
                 medication_log = {
                     'patient_id': str(current_user['_id']),
                     'medication': data['intendedInsulinType'],
@@ -719,7 +688,7 @@ def submit_meal(current_user):
                     'blood_sugar_id': blood_sugar_id,
                     'suggested_dose': insulin_calc['total'],
 
-                    # New insulin effect tracking fields
+                    # Include insulin effect timing fields
                     'effect_start_time': administration_time,
                     'onset_time': administration_time + timedelta(hours=onset_hours),
                     'peak_time': administration_time + timedelta(hours=peak_hours),
@@ -741,22 +710,6 @@ def submit_meal(current_user):
                     {"$set": {"medication_log_id": medication_log_id}}
                 )
 
-                # Only update user's active medications list, don't create a separate medication record
-                if data['intendedInsulinType'] not in user.get('active_medications', []):
-                    mongo.db.users.update_one(
-                        {'_id': current_user['_id']},
-                        {
-                            '$addToSet': {
-                                'active_medications': data['intendedInsulinType']
-                            }
-                        }
-                    )
-                    logger.info(f"Added {data['intendedInsulinType']} to user's active medications")
-
-            except Exception as e:
-                logger.error(f"Error updating medication records: {str(e)}")
-                # Continue with meal submission even if medication record updates fail
-
                 # Update user's active medications if needed
                 if data['intendedInsulinType'] not in user.get('active_medications', []):
                     mongo.db.users.update_one(
@@ -769,13 +722,13 @@ def submit_meal(current_user):
                     )
                     logger.info(f"Added {data['intendedInsulinType']} to user's active medications")
 
+                logger.info(
+                    f"Successfully logged insulin dose: {medication_log['dose']} units of {medication_log['medication']} at {administration_time}")
+
             except Exception as e:
                 logger.error(f"Error updating medication records: {str(e)}")
+
                 # Continue with meal submission even if medication record updates fail
-
-            logger.info(
-                f"Successfully logged insulin dose: {medication_log['dose']} units of {medication_log['medication']} at {administration_time}")
-
         return jsonify({
             "message": "Meal logged successfully",
             "id": meal_id,

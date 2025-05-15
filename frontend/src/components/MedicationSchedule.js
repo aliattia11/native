@@ -5,7 +5,8 @@ import axios from 'axios';
 import { validateMedicationSchedule } from './EnhancedPatientConstantsCalc';
 import TimeInput from './TimeInput';
 import TimeManager from '../utils/TimeManager';
-import TimeEffect from '../utils/TimeEffect';
+// Replace TimeEffect import with calculateMedicationEffect from insulinUtils
+import { calculateMedicationEffect } from '../utils/insulinUtils';
 
 const MedicationSchedule = ({
   medication,
@@ -102,7 +103,8 @@ const MedicationSchedule = ({
 
     // Calculate medication effect if duration-based
     if (medicationData?.duration_based && currentSchedule) {
-      const effect = TimeEffect.calculateMedicationEffect(
+      // Use imported calculateMedicationEffect instead of TimeEffect
+      const effect = calculateMedicationEffect(
         medication,
         medicationData,
         currentSchedule
@@ -113,7 +115,8 @@ const MedicationSchedule = ({
     // Set up an interval to recalculate medication effect every minute
     const effectInterval = setInterval(() => {
       if (medicationData?.duration_based && currentSchedule) {
-        const effect = TimeEffect.calculateMedicationEffect(
+        // Use imported calculateMedicationEffect instead of TimeEffect
+        const effect = calculateMedicationEffect(
           medication,
           medicationData,
           currentSchedule
