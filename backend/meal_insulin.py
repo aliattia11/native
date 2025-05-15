@@ -248,18 +248,21 @@ def calculate_meal_nutrition(food_items):
 
 
 def calculate_suggested_insulin(user_id, nutrition, activities, blood_glucose=None, meal_type='normal',
-                               calculation_factors=None):
+                                calculation_factors=None):
     try:
         constants = Constants(user_id)
         patient_constants = constants.get_patient_constants()
 
-        # Base calculations
-        carb_insulin = nutrition['carbs'] / patient_constants['insulin_to_carb_ratio']
-        protein_contribution = (nutrition['protein'] * patient_constants['protein_factor']) / patient_constants[
-            'insulin_to_carb_ratio']
-        fat_contribution = (nutrition['fat'] * patient_constants['fat_factor']) / patient_constants[
-            'insulin_to_carb_ratio']
-        base_insulin = carb_insulin + protein_contribution + fat_contribution
+        # Calculate carb equivalents for nutrition components
+        total_carbs = nutrition['carbs']
+        protein_carb_equiv = nutrition['protein'] * patient_constants['protein_factor']
+        fat_carb_equiv = nutrition['fat'] * patient_constants['fat_factor']
+
+        # Calculate total carb equivalent (sum of actual carbs and protein/fat equivalents)
+        total_carb_equiv = total_carbs + protein_carb_equiv + fat_carb_equiv
+
+        # Calculate base insulin using total carb equivalents
+        base_insulin = total_carb_equiv / patient_constants['insulin_to_carb_ratio']
 
         # Get adjustment factors from frontend if available
         if calculation_factors:
@@ -267,7 +270,6 @@ def calculate_suggested_insulin(user_id, nutrition, activities, blood_glucose=No
                 absorption_factor = float(
                     calculation_factors.get('absorptionFactor', nutrition.get('absorption_factor', 1.0)))
                 meal_timing_factor = float(calculation_factors.get('mealTimingFactor', 1.0))
-                # Removed time_factor
                 activity_coefficient = float(calculation_factors.get('activityImpact', 1.0))
 
                 # Use the provided health multiplier instead of recalculating
@@ -293,11 +295,10 @@ def calculate_suggested_insulin(user_id, nutrition, activities, blood_glucose=No
             # Use default calculations if no factors provided
             absorption_factor = nutrition.get('absorption_factor', 1.0)
             meal_timing_factor = get_meal_timing_factor(meal_type)
-            # Removed time_factor
             activity_coefficient = calculate_activity_impact(activities)
             health_multiplier = calculate_health_factors(user_id)
 
-        # Calculate adjusted insulin (removed time_factor)
+        # Calculate adjusted insulin
         adjusted_insulin = base_insulin * absorption_factor * meal_timing_factor * activity_coefficient
 
         # Calculate correction insulin if needed
@@ -312,17 +313,25 @@ def calculate_suggested_insulin(user_id, nutrition, activities, blood_glucose=No
         result = {
             'total': round(total_insulin, 1),
             'breakdown': {
-                'carb_insulin': round(carb_insulin, 2),
-                'protein_contribution': round(protein_contribution, 2),
-                'fat_contribution': round(fat_contribution, 2),
+                # Nutrition data - ensure these are never None
+                'carbs': round(total_carbs, 2) if total_carbs is not None else 0,
+                'protein_carb_equiv': round(protein_carb_equiv, 2) if protein_carb_equiv is not None else 0,
+                'fat_carb_equiv': round(fat_carb_equiv, 2) if fat_carb_equiv is not None else 0,
+                'total_carb_equiv': round(total_carb_equiv, 2) if total_carb_equiv is not None else 0,
+
+                # Insulin calculation data
                 'base_insulin': round(base_insulin, 2),
                 'adjusted_insulin': round(adjusted_insulin, 2),
                 'correction_insulin': round(correction_insulin, 2),
+                'pre_active_total': round(pre_active_insulin_total, 2),
+                'active_insulin': round(active_insulin, 2),
+                'post_active_total': round(final_insulin, 2),
+
+                # Adjustment factors
                 'activity_coefficient': round(activity_coefficient, 2),
                 'health_multiplier': round(health_multiplier, 2),
                 'absorption_factor': absorption_factor,
                 'meal_timing_factor': meal_timing_factor,
-                # Removed time_factor from breakdown
             }
         }
 

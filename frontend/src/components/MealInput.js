@@ -48,6 +48,7 @@ const MealInput = () => {
   const [suggestedInsulin, setSuggestedInsulin] = useState('');
   const [suggestedInsulinType, setSuggestedInsulinType] = useState('');
   const [insulinBreakdown, setInsulinBreakdown] = useState(null);
+  const [activeInsulin, setActiveInsulin] = useState(0);
   const [insulinData, setInsulinData] = useState({
     type: '',
     dose: '',
@@ -94,45 +95,75 @@ const MealInput = () => {
     setActivityImpact(totalImpact);
   };
 
-  const calculateInsulinNeeds = useCallback(() => {
-    if (selectedFoods.length === 0 || !patientConstants) {
-      setSuggestedInsulin('');
-      setInsulinBreakdown(null);
-      return;
+
+  const fetchActiveInsulin = useCallback(async () => {
+  try {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    const response = await axios.get(
+      'http://localhost:5000/api/active-insulin',
+      { headers: { 'Authorization': `Bearer ${token}` } }
+    );
+
+    if (response.data && response.data.total_active_insulin !== undefined) {
+      setActiveInsulin(parseFloat(response.data.total_active_insulin));
     }
+  } catch (error) {
+    console.error('Error fetching active insulin:', error);
+  }
+}, []);
 
-    try {
-      const totalNutrition = calculateTotalNutrients(selectedFoods);
+// Call fetchActiveInsulin when component loads
+useEffect(() => {
+  fetchActiveInsulin();
+  // Set up a timer to refresh active insulin data
+  const timer = setInterval(() => {
+    fetchActiveInsulin();
+  }, 60000); // Refresh every minute
+  return () => clearInterval(timer);
+}, [fetchActiveInsulin]);
 
-      const insulinCalculation = calculateInsulinDose({
-        ...totalNutrition,
-        bloodSugar: parseFloat(bloodSugar) || 0,
-        activities: activitiesFromRecording.map(activity => ({
-          level: activity.level,
-          duration: activity.duration,
-          impact: activity.impact
-        })),
-        patientConstants,
-        mealType
-      });
+  const calculateInsulinNeeds = useCallback(async () => {
+  if (selectedFoods.length === 0 || !patientConstants) {
+    setSuggestedInsulin('');
+    setInsulinBreakdown(null);
+    return;
+  }
 
-      setSuggestedInsulin(insulinCalculation.total);
-      setInsulinBreakdown(insulinCalculation.breakdown);
+  try {
+    const totalNutrition = calculateTotalNutrients(selectedFoods);
 
-      // Get recommended insulin type based on meal context
-      if (mealType) {
-        const recommended = recommendInsulinType(
-          mealType,
-          selectedFoods,
-          new Date()
-        );
-        setSuggestedInsulinType(recommended);
-      }
-    } catch (error) {
-      console.error('Error calculating insulin:', error);
-      setMessage('Error calculating insulin needs: ' + error.message);
+    const insulinCalculation = await calculateInsulinDose({
+      ...totalNutrition,
+      bloodSugar: parseFloat(bloodSugar) || 0,
+      activities: activitiesFromRecording.map(activity => ({
+        level: activity.level,
+        duration: activity.duration,
+        impact: activity.impact
+      })),
+      patientConstants,
+      mealType,
+      activeInsulinValue: activeInsulin // Pass active insulin to the calculation
+    });
+
+    setSuggestedInsulin(insulinCalculation.total);
+    setInsulinBreakdown(insulinCalculation.breakdown);
+
+    // Get recommended insulin type based on meal context
+    if (mealType) {
+      const recommended = recommendInsulinType(
+        mealType,
+        selectedFoods,
+        new Date()
+      );
+      setSuggestedInsulinType(recommended);
     }
-  }, [selectedFoods, bloodSugar, activitiesFromRecording, patientConstants, mealType]);
+  } catch (error) {
+    console.error('Error calculating insulin:', error);
+    setMessage('Error calculating insulin needs: ' + error.message);
+  }
+}, [selectedFoods, bloodSugar, activitiesFromRecording, patientConstants, mealType, activeInsulin]); // Add activeInsulin to dependencies
 
   // Effect for calculating insulin needs and health factors
   useEffect(() => {
@@ -497,21 +528,22 @@ const MealInput = () => {
         suggestedInsulinType,
         notes: insulinData.notes,
         calculationFactors: {
-          absorptionFactor: insulinBreakdown?.absorptionFactor,
-          mealTimingFactor: insulinBreakdown?.mealTimingFactor,
-          activityImpact: activityImpactFromRecording,
-          healthMultiplier: healthFactors?.healthMultiplier,
-          medications: healthFactors?.medications?.map(med => ({
-            name: med.name,
-            factor: med.factor,
-            status: med.status,
-            hoursSinceLastDose: med.hoursSinceLastDose
-          })) || [],
-          conditions: healthFactors?.conditions?.map(condition => ({
-            name: condition.name,
-            factor: condition.factor
-          })) || []
-        }
+  absorptionFactor: insulinBreakdown?.absorptionFactor,
+  mealTimingFactor: insulinBreakdown?.mealTimingFactor,
+  activityImpact: activityImpactFromRecording,
+  activeInsulin: activeInsulin, // Add active insulin to factors
+  healthMultiplier: healthFactors?.healthMultiplier,
+  medications: healthFactors?.medications?.map(med => ({
+    name: med.name,
+    factor: med.factor,
+    status: med.status,
+    hoursSinceLastDose: med.hoursSinceLastDose
+  })) || [],
+  conditions: healthFactors?.conditions?.map(condition => ({
+    name: condition.name,
+    factor: condition.factor
+  })) || []
+}
       };
 
       // Add medication scheduling information if insulin is being logged
@@ -839,35 +871,41 @@ const MealInput = () => {
 
 
             <div className={styles.breakdownGrid}>
-              {/* Base Insulin Card */}
-              <div
-                className={`${styles.breakdownCard} ${expandedCard === 'base' ? styles.expanded : ''}`}
-                onClick={() => handleCardClick('base')}
-              >
-                <div className={styles.breakdownHeader}>
-                  <div className={styles.headerContent}>
-                    <span>Base Insulin Needs</span>
-                    {expandedCard === 'base' ? <FaChevronUp/> : <FaChevronDown/>}
-                  </div>
-                  <div className={styles.breakdownValue}>{insulinBreakdown.baseInsulin.toFixed(1)} units
-                  </div>
-                </div>
+          {/* Base Insulin Card */}
+<div
+  className={`${styles.breakdownCard} ${expandedCard === 'base' ? styles.expanded : ''}`}
+  onClick={() => handleCardClick('base')}
+>
+  <div className={styles.breakdownHeader}>
+    <div className={styles.headerContent}>
+      <span>Base Insulin Needs</span>
+      {expandedCard === 'base' ? <FaChevronUp/> : <FaChevronDown/>}
+    </div>
+    <div className={styles.breakdownValue}>{insulinBreakdown.baseInsulin.toFixed(1)} units
+    </div>
+  </div>
 
-                {expandedCard === 'base' && (
-                  <div className={styles.expandedContent}>
-                    <ul>
-                      <li>Carbohydrate insulin: {insulinBreakdown.carbInsulin.toFixed(1)} units</li>
-                      <li>Protein
-                        contribution: {insulinBreakdown.proteinContribution.toFixed(1)} units
-                      </li>
-                      <li>Fat contribution: {insulinBreakdown.fatContribution.toFixed(1)} units</li>
-                      <li className={styles.summaryLine}>
-                        Total Base Units: {insulinBreakdown.baseInsulin.toFixed(1)} units
-                      </li>
-                    </ul>
-                  </div>
-                )}
-              </div>
+  {expandedCard === 'base' && (
+    <div className={styles.expandedContent}>
+      <ul>
+        <li>Carbohydrates: {insulinBreakdown.carbsActual.toFixed(1)}g</li>
+        <li>Protein equivalent: {insulinBreakdown.proteinCarbEquiv.toFixed(1)}g</li>
+        <li>Fat equivalent: {insulinBreakdown.fatCarbEquiv.toFixed(1)}g</li>
+        <li className={styles.summaryLine}>
+          Total carb equivalent: {insulinBreakdown.totalCarbEquiv.toFixed(1)}g
+        </li>
+        <li className={styles.summaryLine}>
+          Base insulin: {insulinBreakdown.baseInsulin.toFixed(1)} units
+          <div className={styles.formulaExplanation}>
+            <small>
+              (Total carb equivalent ÷ Insulin-to-carb ratio)
+            </small>
+          </div>
+        </li>
+      </ul>
+    </div>
+  )}
+</div>
 
               {/* Activity Impact Card */}
               <div
@@ -1065,39 +1103,80 @@ const MealInput = () => {
                   </div>
                 )}
               </div>
+{/* Add a new card for active insulin */}
+{activeInsulin > 0 && (
+  <div
+    className={`${styles.breakdownCard} ${expandedCard === 'active' ? styles.expanded : ''} ${styles.activeInsulinCard}`}
+    onClick={() => handleCardClick('active')}
+  >
+    <div className={styles.breakdownHeader}>
+      <div className={styles.headerContent}>
+        <span>Active Insulin Adjustment</span>
+        {expandedCard === 'active' ? <FaChevronUp/> : <FaChevronDown/>}
+      </div>
+      <div className={styles.breakdownValue}>
+        -{insulinBreakdown.activeInsulin.toFixed(1)} units
+      </div>
+    </div>
 
-              {/* Final Calculation Card */}
-              <div
-                className={`${styles.breakdownCard} ${expandedCard === 'final' ? styles.expanded : ''}`}
-                onClick={() => handleCardClick('final')}
-              >
-                <div className={styles.breakdownHeader}>
-                  <div className={styles.headerContent}>
-                    <span>Suggested Insulin Dose</span>
-                    {expandedCard === 'final' ? <FaChevronUp/> : <FaChevronDown/>}
-                  </div>
-                  <div className={styles.breakdownValue}>{suggestedInsulin} units</div>
-                </div>
+    {expandedCard === 'active' && (
+      <div className={styles.expandedContent}>
+        <ul>
+          <li>Pre-active total: {insulinBreakdown.preActiveTotal.toFixed(1)} units</li>
+          <li>Active insulin on board: {insulinBreakdown.activeInsulin.toFixed(1)} units</li>
+          <li className={styles.summaryLine}>
+            Post-active adjustment: {insulinBreakdown.postActiveTotal.toFixed(1)} units
+            <div className={styles.formulaExplanation}>
+              <small>
+                (Base + Correction - Active Insulin)
+              </small>
+            </div>
+          </li>
+        </ul>
+      </div>
+    )}
+  </div>
+)}
 
-                {expandedCard === 'final' && (
-                  <div className={styles.expandedContent}>
-                    <div className={styles.calculationBreakdown}>
-                      <p>Adjusted Insulin: {insulinBreakdown.adjustedInsulin.toFixed(1)} units</p>
-                      {insulinBreakdown.correctionInsulin !== 0 && (
-                        <p>Correction: {insulinBreakdown.correctionInsulin.toFixed(1)} units</p>
-                      )}
-                      <p>Health Multiplier: ×{insulinBreakdown.healthMultiplier.toFixed(2)}</p>
-                      <div className={styles.formulaExplanation}>
-                        <small>
-                          Formula:
-                          ({insulinBreakdown.adjustedInsulin.toFixed(1)} + {insulinBreakdown.correctionInsulin.toFixed(1)})
-                          × {insulinBreakdown.healthMultiplier.toFixed(2)} = {suggestedInsulin} units
-                        </small>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
+{/* Final Calculation Card */}
+<div
+  className={`${styles.breakdownCard} ${expandedCard === 'final' ? styles.expanded : ''}`}
+  onClick={() => handleCardClick('final')}
+>
+  <div className={styles.breakdownHeader}>
+    <div className={styles.headerContent}>
+      <span>Suggested Insulin Dose</span>
+      {expandedCard === 'final' ? <FaChevronUp/> : <FaChevronDown/>}
+    </div>
+    <div className={styles.breakdownValue}>{suggestedInsulin} units</div>
+  </div>
+
+  {expandedCard === 'final' && (
+    <div className={styles.expandedContent}>
+      <div className={styles.calculationBreakdown}>
+        <p>Adjusted Insulin: {insulinBreakdown.adjustedInsulin.toFixed(1)} units</p>
+        {insulinBreakdown.correctionInsulin !== 0 && (
+          <p>Correction: {insulinBreakdown.correctionInsulin.toFixed(1)} units</p>
+        )}
+        {insulinBreakdown.activeInsulin > 0 && (
+          <p className={styles.activeInsulinSummary}>
+            Active Insulin: -{insulinBreakdown.activeInsulin.toFixed(1)} units
+          </p>
+        )}
+        <p>Subtotal: {insulinBreakdown.postActiveTotal.toFixed(1)} units</p>
+        <p>Health Multiplier: ×{insulinBreakdown.healthMultiplier.toFixed(2)}</p>
+        <div className={styles.formulaExplanation}>
+          <small>
+            Formula:
+            ({insulinBreakdown.adjustedInsulin.toFixed(1)} + {insulinBreakdown.correctionInsulin.toFixed(1)}
+            {insulinBreakdown.activeInsulin > 0 ? ` - ${insulinBreakdown.activeInsulin.toFixed(1)}` : ''})
+            × {insulinBreakdown.healthMultiplier.toFixed(2)} = {suggestedInsulin} units
+          </small>
+        </div>
+      </div>
+    </div>
+  )}
+</div>
             </div>
           </div>
         )}
@@ -1117,56 +1196,63 @@ const MealInput = () => {
           </div>
         )}
 
-        {backendCalculation && (
-          <div className={styles.backendCalculation}>
-            <h4>Last Backend Calculation Result</h4>
-            <ul>
-              <li>Total Insulin: {backendCalculation.total} units</li>
-              <li className={styles.breakdownSection}>
-                <strong>Base Units</strong>
-                <div>
-                  <li>Carbohydrate insulin: {backendCalculation.breakdown.carb_insulin} units</li>
-                  <li>Protein contribution: {backendCalculation.breakdown.protein_contribution} units</li>
-                  <li>Fat contribution: {backendCalculation.breakdown.fat_contribution} units</li>
-                  <li className={styles.summaryLine}>
-                    <strong>Total Base Units: {backendCalculation.breakdown.base_insulin} units</strong>
-                  </li>
-                </div>
-              </li>
 
-              <li className={styles.breakdownSection}>
-                <strong>Adjustment Factors</strong>
-                <div>
-                  <li>Absorption
-                    rate: {((backendCalculation.breakdown.absorption_factor - 1) * 100).toFixed(1)}%
-                  </li>
-                  <li>Meal
-                    timing: {((backendCalculation.breakdown.meal_timing_factor - 1) * 100).toFixed(1)}%
-                  </li>
-                  <li>Activity
-                    impact: {((backendCalculation.breakdown.activity_coefficient - 1) * 100).toFixed(1)}%
-                  </li>
-                  <li>Health
-                    multiplier: {((backendCalculation.breakdown.health_multiplier - 1) * 100).toFixed(1)}%
-                  </li>
-                </div>
-              </li>
+{backendCalculation && (
+  <div className={styles.backendCalculation}>
+    <h4>Last Backend Calculation Result</h4>
+    <ul>
+      <li>Total Insulin: {backendCalculation.total || 0} units</li>
+      <li className={styles.breakdownSection}>
+        <strong>Carb Equivalents</strong>
+        <div>
+          <li>Carbs: {backendCalculation.breakdown?.carbs || 0} g</li>
+          <li>Protein equivalent: {backendCalculation.breakdown?.protein_carb_equiv || 0} g</li>
+          <li>Fat equivalent: {backendCalculation.breakdown?.fat_carb_equiv || 0} g</li>
+          <li className={styles.summaryLine}>
+            <strong>Total Carb Equivalent: {backendCalculation.breakdown?.total_carb_equiv || 0} g</strong>
+          </li>
+        </div>
+      </li>
 
-              {backendCalculation.breakdown.correction_insulin !== 0 && (
-                <li className={styles.breakdownSection}>
-                  <strong>Correction Units</strong>
-                  <div>
-                    <li>Correction insulin: {backendCalculation.breakdown.correction_insulin} units</li>
-                  </div>
-                </li>
-              )}
+      <li className={styles.breakdownSection}>
+        <strong>Insulin Calculation</strong>
+        <div>
+          <li>Base insulin: {backendCalculation.breakdown?.base_insulin || 0} units</li>
+          {(backendCalculation.breakdown?.correction_insulin || 0) > 0 && (
+            <li>Correction insulin: {backendCalculation.breakdown?.correction_insulin || 0} units</li>
+          )}
+          <li>Pre-active total: {backendCalculation.breakdown?.pre_active_total || 0} units</li>
+          <li className={(backendCalculation.breakdown?.active_insulin || 0) > 0 ? styles.activeInsulinItem : ''}>
+            Active insulin: -{backendCalculation.breakdown?.active_insulin || 0} units
+          </li>
+          <li>Post-active total: {backendCalculation.breakdown?.post_active_total || 0} units</li>
+        </div>
+      </li>
 
-              <li className={styles.summaryLine}>
-                <strong>Final Total: {backendCalculation.total} units</strong>
-              </li>
-            </ul>
-          </div>
-        )}
+      <li className={styles.breakdownSection}>
+        <strong>Adjustment Factors</strong>
+        <div>
+          <li>Absorption
+            rate: {(((backendCalculation.breakdown?.absorption_factor || 1) - 1) * 100).toFixed(1)}%
+          </li>
+          <li>Meal
+            timing: {(((backendCalculation.breakdown?.meal_timing_factor || 1) - 1) * 100).toFixed(1)}%
+          </li>
+          <li>Activity
+            impact: {(((backendCalculation.breakdown?.activity_coefficient || 1) - 1) * 100).toFixed(1)}%
+          </li>
+          <li>Health
+            multiplier: {(((backendCalculation.breakdown?.health_multiplier || 1) - 1) * 100).toFixed(1)}%
+          </li>
+        </div>
+      </li>
+
+      <li className={styles.summaryLine}>
+        <strong>Final Total: {backendCalculation.total || 0} units</strong>
+      </li>
+    </ul>
+  </div>
+)}
 
         <button
           className={styles.submitButton}

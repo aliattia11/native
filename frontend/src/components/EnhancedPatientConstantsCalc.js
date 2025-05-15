@@ -1,6 +1,8 @@
 // Import the new time utilities
 import TimeManager from '../utils/TimeManager';
 import TimeEffect from '../utils/TimeEffect';
+import axios from 'axios';
+
 import {
   MEASUREMENT_SYSTEMS,
   VOLUME_MEASUREMENTS,
@@ -304,8 +306,50 @@ export const calculateTotalNutrients = (selectedFoods) => {
 // export const get_time_of_day_factor = (patientConstants, currentTime = new Date()) => {
 //   return TimeEffect.getTimeOfDayFactor(patientConstants?.time_of_day_factors, currentTime);
 // };
+export const calculateCarbEquivalents = (nutrition, patientConstants) => {
+  if (!nutrition || !patientConstants) {
+    return 0;
+  }
 
-export const calculateInsulinDose = ({
+  const totalCarbs = nutrition.carbs || 0;
+  const totalProtein = nutrition.protein || 0;
+  const totalFat = nutrition.fat || 0;
+
+  const proteinFactor = patientConstants.protein_factor || 0.5;
+  const fatFactor = patientConstants.fat_factor || 0.2;
+
+  const proteinCarbEquiv = totalProtein * proteinFactor;
+  const fatCarbEquiv = totalFat * fatFactor;
+
+  return {
+    proteinCarbEquiv,
+    fatCarbEquiv,
+    totalCarbEquiv: totalCarbs + proteinCarbEquiv + fatCarbEquiv
+  };
+};
+
+// Add this new function to fetch active insulin data
+export const fetchActiveInsulin = async () => {
+  try {
+    const token = localStorage.getItem('token');
+    if (!token) return 0;
+
+    const response = await axios.get(
+      'http://localhost:5000/api/active-insulin',
+      { headers: { 'Authorization': `Bearer ${token}` } }
+    );
+
+    if (response.data && response.data.total_active_insulin !== undefined) {
+      return parseFloat(response.data.total_active_insulin);
+    }
+    return 0;
+  } catch (error) {
+    console.error('Error fetching active insulin:', error);
+    return 0;
+  }
+};
+
+export const calculateInsulinDose = async ({
   carbs,
   protein,
   fat,
@@ -314,56 +358,82 @@ export const calculateInsulinDose = ({
   patientConstants,
   mealType,
   absorptionType = 'medium',
-  currentTime = new Date()
+  currentTime = new Date(),
+  activeInsulinValue = null // Allow passing active insulin directly
 }) => {
   if (!patientConstants) {
     throw new Error('Patient constants are required');
   }
 
-  // Base insulin calculation
-  const carbInsulin = carbs / patientConstants.insulin_to_carb_ratio;
-  const proteinContribution = (protein * patientConstants.protein_factor) / patientConstants.insulin_to_carb_ratio;
-  const fatContribution = (fat * patientConstants.fat_factor) / patientConstants.insulin_to_carb_ratio;
-  const baseInsulin = carbInsulin + proteinContribution + fatContribution;
+  // If active insulin wasn't passed, fetch it
+  let activeInsulin = activeInsulinValue;
+  if (activeInsulin === null) {
+    try {
+      activeInsulin = await fetchActiveInsulin();
+    } catch (error) {
+      console.warn('Error fetching active insulin, defaulting to 0:', error);
+      activeInsulin = 0;
+    }
+  }
+
+  // Calculate carb equivalents
+  const carbEquivalents = calculateCarbEquivalents({
+    carbs,
+    protein,
+    fat
+  }, patientConstants);
+
+  // Use total carb equivalents to calculate base insulin
+  const baseInsulin = carbEquivalents.totalCarbEquiv / patientConstants.insulin_to_carb_ratio;
 
   // Calculate adjustment factors
   const absorptionFactor = patientConstants.absorption_modifiers[absorptionType] || 1.0;
   const mealTimingFactor = (mealType && patientConstants.meal_timing_factors?.[mealType]) || 1.0;
-  // Remove timeOfDayFactor from the calculation - Using only meal timing factor
   const activityImpact = calculateActivityImpact(activities, patientConstants);
 
-  // Calculate timing adjusted insulin (removed timeOfDayFactor)
+  // Calculate timing adjusted insulin
   const adjustedInsulin = baseInsulin * absorptionFactor * mealTimingFactor * activityImpact;
 
   // Calculate correction insulin if needed
   let correctionInsulin = 0;
   if (bloodSugar && patientConstants.target_glucose && patientConstants.correction_factor) {
     correctionInsulin = (bloodSugar - patientConstants.target_glucose) / patientConstants.correction_factor;
+    // Don't allow negative correction insulin
+    correctionInsulin = Math.max(0, correctionInsulin);
   }
+
+  // Calculate total before subtracting active insulin
+  const preActiveTotal = adjustedInsulin + correctionInsulin;
+
+  // Subtract active insulin (don't go below 0)
+  const postActiveTotal = Math.max(0, preActiveTotal - activeInsulin);
 
   // Get health factors and calculate final insulin
   const healthMultiplier = calculateHealthFactors(patientConstants, currentTime);
-  const totalInsulin = Math.max(0, (adjustedInsulin + correctionInsulin) * healthMultiplier);
+  const totalInsulin = Math.max(0, postActiveTotal * healthMultiplier);
 
   return {
     total: Math.round(totalInsulin * 10) / 10,
     breakdown: {
-      carbInsulin: Math.round(carbInsulin * 100) / 100,
-      proteinContribution: Math.round(proteinContribution * 100) / 100,
-      fatContribution: Math.round(fatContribution * 100) / 100,
+      carbsActual: Math.round(carbs * 100) / 100,
+      proteinCarbEquiv: Math.round(carbEquivalents.proteinCarbEquiv * 100) / 100,
+      fatCarbEquiv: Math.round(carbEquivalents.fatCarbEquiv * 100) / 100,
+      totalCarbEquiv: Math.round(carbEquivalents.totalCarbEquiv * 100) / 100,
       baseInsulin: Math.round(baseInsulin * 100) / 100,
       adjustedInsulin: Math.round(adjustedInsulin * 100) / 100,
       correctionInsulin: Math.round(correctionInsulin * 100) / 100,
+      preActiveTotal: Math.round(preActiveTotal * 100) / 100,
+      activeInsulin: Math.round(activeInsulin * 100) / 100,
+      postActiveTotal: Math.round(postActiveTotal * 100) / 100,
       healthMultiplier: Math.round(healthMultiplier * 100) / 100,
       absorptionFactor,
       mealTimingFactor,
-      // Removed timeOfDayFactor from breakdown
       activityImpact: Math.round(activityImpact * 100) / 100
     }
   };
 };
 
-export const calculateInsulinNeeds = (selectedFoods, bloodSugar, activities, patientConstants, mealType, currentTime = new Date()) => {
+export const calculateInsulinNeeds = async (selectedFoods, bloodSugar, activities, patientConstants, mealType, currentTime = new Date(), activeInsulinValue = null) => {
   if (selectedFoods.length === 0 || !patientConstants) {
     return {
       suggestedInsulin: '',
@@ -373,13 +443,14 @@ export const calculateInsulinNeeds = (selectedFoods, bloodSugar, activities, pat
 
   try {
     const totalNutrition = calculateTotalNutrients(selectedFoods);
-    const insulinCalculation = calculateInsulinDose({
+    const insulinCalculation = await calculateInsulinDose({
       ...totalNutrition,
       bloodSugar: parseFloat(bloodSugar) || 0,
       activities,
       patientConstants,
       mealType,
-      currentTime
+      currentTime,
+      activeInsulinValue
     });
 
     return {
