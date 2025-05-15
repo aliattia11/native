@@ -11,7 +11,7 @@ from pathlib import Path
 class ConstantConfig:
     """Base configuration for patient-modifiable constants"""
     insulin_to_carb_ratio: float = 10
-    correction_factor: float = 50
+    correction_factor: float = 40
     target_glucose: float = 100
     protein_factor: float = 0.5
     fat_factor: float = 0.2
@@ -99,8 +99,8 @@ class ConstantConfig:
             'factor': 1.0,
             'description': 'Rapid-acting insulin analogue',
             'duration_based': True,
-            'onset_hours': 0.25,  # 15 minutes
-            'peak_hours': 1.5,  # 1-2 hours
+            'onset_hours': 0.15,  # 15 minutes
+            'peak_hours': 1.2,  # 1-2 hours
             'duration_hours': 4.5,  # 4-5 hours
             'type': 'rapid_acting',
             'brand_names': ['Humalog', 'Admelog']

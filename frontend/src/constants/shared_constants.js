@@ -181,7 +181,7 @@
   ],
   "DEFAULT_PATIENT_CONSTANTS": {
     "insulin_to_carb_ratio": 10,
-    "correction_factor": 50,
+    "correction_factor": 40,
     "target_glucose": 100,
     "protein_factor": 0.5,
     "fat_factor": 0.2,
@@ -293,8 +293,8 @@
         "factor": 1.0,
         "description": "Rapid-acting insulin analogue",
         "duration_based": true,
-        "onset_hours": 0.25,
-        "peak_hours": 1.5,
+        "onset_hours": 0.15,
+        "peak_hours": 1.2,
         "duration_hours": 4.5,
         "type": "rapid_acting",
         "brand_names": [

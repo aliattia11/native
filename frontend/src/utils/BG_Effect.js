@@ -53,19 +53,31 @@ function calculateMealEffect(meal, patientConstants, effectDurationHours = 6, Ti
       let impactValue = 0;
 
       // Calculate impact using an enhanced physiological model
-      if (hoursSinceMeal <= peakHour) {
-        // Rising phase with smoother curve (modified bell curve)
-        const normalizedTime = hoursSinceMeal / peakHour;
-        // This formula creates a smoother rise with physiologically plausible acceleration
-        impactValue = totalCarbEquiv * (Math.pow(normalizedTime, 1.2)) * Math.exp(1 - normalizedTime);
-      } else if (hoursSinceMeal <= durationHours) {
-        // Falling phase with gradual decay (more realistic)
-        const decayRate = 0.8 / (durationHours - peakHour); // Slightly slower decay
-        const normalizedTime = hoursSinceMeal - peakHour;
-        // Smoother exponential decay
-        impactValue = totalCarbEquiv * 0.95 * Math.exp(-normalizedTime * decayRate);
-      }
+if (hoursSinceMeal <= peakHour) {
+  // Rising phase with smoother curve (modified bell curve)
+  const normalizedTime = hoursSinceMeal / peakHour;
+  // This formula creates a smoother rise with physiologically plausible acceleration
+  impactValue = totalCarbEquiv * (Math.pow(normalizedTime, 1.1)) * Math.exp(1 - normalizedTime);
+} else if (hoursSinceMeal <= durationHours) {
+  // Falling phase with gradual decay (more realistic)
+  // Calculate fat/protein ratio from nutrition if available
+  let fatProteinRatio = 0.3; // Default value
+  if (meal && meal.nutrition) {
+    const fat = meal.nutrition.fat || 0;
+    const protein = meal.nutrition.protein || 0;
+    const carbs = meal.nutrition.totalCarbs || nutrition.totalCarbs || 1;
+    fatProteinRatio = (fat + protein) / Math.max(1, carbs);
+  }
 
+  // Adjust decay rate based on meal composition
+  const modifiedDecayRate = (0.7 + (fatProteinRatio * 0.4)) / (durationHours - peakHour);
+
+  // Must define normalizedTime for this phase
+  const normalizedTime = hoursSinceMeal - peakHour;
+
+  // Smoother exponential decay with composition-based rate
+  impactValue = totalCarbEquiv * 0.95 * Math.exp(-normalizedTime * modifiedDecayRate);
+}
       // Apply absorption factor
       impactValue *= absorptionFactor;
 
