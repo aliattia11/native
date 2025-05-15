@@ -73,34 +73,35 @@ class TimeManager {
    * @returns {string} System date/time in specified format
    */
   static getSystemDateTime(format = null) {
-    // Use the exact current UTC time provided by the user
-    const systemTime = "2025-05-10 14:47:09"; // Current UTC time
+  // Use the actual current time instead of hardcoded value
+  const now = new Date();
+  const systemTime = now.toISOString().replace('T', ' ').substring(0, 19);
 
-    if (!format) {
-      return systemTime;
-    }
-
-    // Parse the system time string and format it as requested
-    try {
-      const [datePart, timePart] = systemTime.split(' ');
-      const [year, month, day] = datePart.split('-');
-      const [hours, minutes, seconds] = timePart.split(':');
-
-      const date = new Date(Date.UTC(
-        parseInt(year),
-        parseInt(month) - 1,
-        parseInt(day),
-        parseInt(hours),
-        parseInt(minutes),
-        parseInt(seconds || 0)
-      ));
-
-      return this.formatDate(date, format);
-    } catch (e) {
-      console.error('Error parsing system time:', e);
-      return systemTime;
-    }
+  if (!format) {
+    return systemTime;
   }
+
+  // Parse the system time string and format it as requested
+  try {
+    const [datePart, timePart] = systemTime.split(' ');
+    const [year, month, day] = datePart.split('-');
+    const [hours, minutes, seconds] = timePart.split(':');
+
+    const date = new Date(Date.UTC(
+      parseInt(year),
+      parseInt(month) - 1,
+      parseInt(day),
+      parseInt(hours),
+      parseInt(minutes),
+      parseInt(seconds || 0)
+    ));
+
+    return this.formatDate(date, format);
+  } catch (e) {
+    console.error('Error parsing system time:', e);
+    return systemTime;
+  }
+}
 
   /**
    * Get current user login

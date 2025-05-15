@@ -272,6 +272,9 @@ def calculate_suggested_insulin(user_id, nutrition, activities, blood_glucose=No
                 meal_timing_factor = float(calculation_factors.get('mealTimingFactor', 1.0))
                 activity_coefficient = float(calculation_factors.get('activityImpact', 1.0))
 
+                # Get active insulin from calculation factors or default to 0
+                active_insulin = float(calculation_factors.get('activeInsulin', 0.0))
+
                 # Use the provided health multiplier instead of recalculating
                 if 'healthMultiplier' in calculation_factors:
                     health_multiplier = float(calculation_factors['healthMultiplier'])
@@ -297,6 +300,7 @@ def calculate_suggested_insulin(user_id, nutrition, activities, blood_glucose=No
             meal_timing_factor = get_meal_timing_factor(meal_type)
             activity_coefficient = calculate_activity_impact(activities)
             health_multiplier = calculate_health_factors(user_id)
+            active_insulin = 0.0  # Default to 0 if not provided
 
         # Calculate adjusted insulin
         adjusted_insulin = base_insulin * absorption_factor * meal_timing_factor * activity_coefficient
@@ -306,12 +310,25 @@ def calculate_suggested_insulin(user_id, nutrition, activities, blood_glucose=No
         if blood_glucose is not None:
             correction_insulin = (blood_glucose - patient_constants['target_glucose']) / patient_constants[
                 'correction_factor']
+            if correction_insulin < 0:
+                correction_insulin = 0  # Don't provide negative correction
+
+        # Calculate pre-active total (before subtracting active insulin)
+        pre_active_total = adjusted_insulin + correction_insulin
+
+        # Apply active insulin adjustment (don't go below 0)
+        post_active_total = max(0, pre_active_total - active_insulin)
 
         # Calculate final insulin using the health multiplier
-        total_insulin = max(0, (adjusted_insulin + correction_insulin) * health_multiplier)
+        final_insulin = post_active_total * health_multiplier
+
+        # Apply minimum threshold (don't recommend less than 0.5 units if there was insulin needed)
+        total_insulin = max(0, round(final_insulin, 1))
+        if pre_active_total > 0 and total_insulin < 0.5:
+            total_insulin = 0.5
 
         result = {
-            'total': round(total_insulin, 1),
+            'total': total_insulin,
             'breakdown': {
                 # Nutrition data - ensure these are never None
                 'carbs': round(total_carbs, 2) if total_carbs is not None else 0,
@@ -323,9 +340,9 @@ def calculate_suggested_insulin(user_id, nutrition, activities, blood_glucose=No
                 'base_insulin': round(base_insulin, 2),
                 'adjusted_insulin': round(adjusted_insulin, 2),
                 'correction_insulin': round(correction_insulin, 2),
-                'pre_active_total': round(pre_active_insulin_total, 2),
+                'pre_active_total': round(pre_active_total, 2),
                 'active_insulin': round(active_insulin, 2),
-                'post_active_total': round(final_insulin, 2),
+                'post_active_total': round(post_active_total, 2),
 
                 # Adjustment factors
                 'activity_coefficient': round(activity_coefficient, 2),
@@ -341,7 +358,6 @@ def calculate_suggested_insulin(user_id, nutrition, activities, blood_glucose=No
     except Exception as e:
         logger.error(f"Error in calculate_suggested_insulin: {str(e)}")
         raise
-
 
 @meal_insulin_bp.route('/api/meal', methods=['POST'])
 @token_required

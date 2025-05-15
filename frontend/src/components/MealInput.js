@@ -1196,12 +1196,10 @@ useEffect(() => {
           </div>
         )}
 
-
 {backendCalculation && (
   <div className={styles.backendCalculation}>
     <h4>Last Backend Calculation Result</h4>
     <ul>
-      <li>Total Insulin: {backendCalculation.total || 0} units</li>
       <li className={styles.breakdownSection}>
         <strong>Carb Equivalents</strong>
         <div>
@@ -1215,9 +1213,25 @@ useEffect(() => {
       </li>
 
       <li className={styles.breakdownSection}>
-        <strong>Insulin Calculation</strong>
+        <strong>Base Insulin Calculation</strong>
         <div>
           <li>Base insulin: {backendCalculation.breakdown?.base_insulin || 0} units</li>
+        </div>
+      </li>
+
+      <li className={styles.breakdownSection}>
+        <strong>Adjustment Factors</strong>
+        <div>
+          <li>Absorption rate: {(((backendCalculation.breakdown?.absorption_factor || 1) - 1) * 100).toFixed(1)}%</li>
+          <li>Meal timing: {(((backendCalculation.breakdown?.meal_timing_factor || 1) - 1) * 100).toFixed(1)}%</li>
+          <li>Activity impact: {(((backendCalculation.breakdown?.activity_coefficient || 1) - 1) * 100).toFixed(1)}%</li>
+        </div>
+      </li>
+
+      <li className={styles.breakdownSection}>
+        <strong>Insulin Dose Calculation</strong>
+        <div>
+          <li>Adjusted insulin: {backendCalculation.breakdown?.adjusted_insulin || 0} units</li>
           {(backendCalculation.breakdown?.correction_insulin || 0) > 0 && (
             <li>Correction insulin: {backendCalculation.breakdown?.correction_insulin || 0} units</li>
           )}
@@ -1230,25 +1244,16 @@ useEffect(() => {
       </li>
 
       <li className={styles.breakdownSection}>
-        <strong>Adjustment Factors</strong>
+        <strong>Final Calculation</strong>
         <div>
-          <li>Absorption
-            rate: {(((backendCalculation.breakdown?.absorption_factor || 1) - 1) * 100).toFixed(1)}%
+          <li>Health multiplier: ×{backendCalculation.breakdown?.health_multiplier || 1}</li>
+          <li className={styles.summaryLine}>
+            <strong>Final Total: {backendCalculation.total || 0} units</strong>
           </li>
-          <li>Meal
-            timing: {(((backendCalculation.breakdown?.meal_timing_factor || 1) - 1) * 100).toFixed(1)}%
-          </li>
-          <li>Activity
-            impact: {(((backendCalculation.breakdown?.activity_coefficient || 1) - 1) * 100).toFixed(1)}%
-          </li>
-          <li>Health
-            multiplier: {(((backendCalculation.breakdown?.health_multiplier || 1) - 1) * 100).toFixed(1)}%
+          <li className={styles.formulaExplanation}>
+            <small>Formula: ({backendCalculation.breakdown?.post_active_total || 0}) × {backendCalculation.breakdown?.health_multiplier || 1} = {backendCalculation.total || 0} units</small>
           </li>
         </div>
-      </li>
-
-      <li className={styles.summaryLine}>
-        <strong>Final Total: {backendCalculation.total || 0} units</strong>
       </li>
     </ul>
   </div>

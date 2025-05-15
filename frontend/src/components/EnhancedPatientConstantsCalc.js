@@ -410,10 +410,18 @@ export const calculateInsulinDose = async ({
 
   // Get health factors and calculate final insulin
   const healthMultiplier = calculateHealthFactors(patientConstants, currentTime);
-  const totalInsulin = Math.max(0, postActiveTotal * healthMultiplier);
+  let totalInsulin = Math.max(0, postActiveTotal * healthMultiplier);
+
+  // Round to nearest 0.1 units
+  totalInsulin = Math.round(totalInsulin * 10) / 10;
+
+  // Apply safety threshold - minimum 0.5 units if insulin is needed
+  if (preActiveTotal > 0 && totalInsulin < 0.5) {
+    totalInsulin = 0.5;
+  }
 
   return {
-    total: Math.round(totalInsulin * 10) / 10,
+    total: totalInsulin,
     breakdown: {
       carbsActual: Math.round(carbs * 100) / 100,
       proteinCarbEquiv: Math.round(carbEquivalents.proteinCarbEquiv * 100) / 100,
