@@ -42,7 +42,7 @@ const MealInput = () => {
   const [selectedFoods, setSelectedFoods] = useState([]);
   const [activitiesFromRecording, setActivitiesFromRecording] = useState([]);
   const [activityImpactFromRecording, setActivityImpactFromRecording] = useState(1.0);
-  const [activityImpact, setActivityImpact] = useState(1.0);
+  const [ setActivityImpact] = useState(1.0);
   const [bloodSugar, setBloodSugar] = useState('');
   const [bloodSugarTimestamp, setBloodSugarTimestamp] = useState('');
   const [suggestedInsulin, setSuggestedInsulin] = useState('');
