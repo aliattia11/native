@@ -119,16 +119,16 @@ const PatientDashboard = ({ handleLogout }) => {
           <div className={styles.rightColumn}>
             <div className={styles.dashboardCard}>
               <h2 className={styles.cardTitle}>Blood Glucose Input</h2>
-              <BloodSugarInput />
-            </div>
-            <div className={styles.dashboardCard}>
-              <h2 className={styles.cardTitle}>Activity Recording</h2>
-              <ActivityRecording userType="patient" />
+              <BloodSugarInput/>
             </div>
             {/* Add InsulinInput component here */}
             <div className={styles.dashboardCard}>
               <h2 className={styles.cardTitle}>Insulin Recording</h2>
-              <InsulinInput isStandalone={true} />
+              <InsulinInput isStandalone={true}/>
+            </div>
+            <div className={styles.dashboardCard}>
+              <h2 className={styles.cardTitle}>Activity Recording</h2>
+              <ActivityRecording userType="patient"/>
             </div>
           </div>
         </div>
@@ -138,7 +138,7 @@ const PatientDashboard = ({ handleLogout }) => {
       <div className={styles.quickAccess}>
         <h2 className={styles.cardTitle}>Quick Access</h2>
         <div className={styles.quickAccessButtons}>
-          {[
+        {[
             { name: 'MealInput', label: 'Meal Input' },
             { name: 'PatientConstants', label: 'Patient Constants' },
             { name: 'FoodDatabase', label: 'Meal Management' },

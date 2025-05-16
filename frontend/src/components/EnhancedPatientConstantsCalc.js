@@ -309,18 +309,13 @@ export const calculateCarbEquivalents = (nutrition, patientConstants) => {
   const totalCarbs = nutrition.carbs || 0;
   const totalProtein = nutrition.protein || 0;
   const totalFat = nutrition.fat || 0;
-
   const proteinFactor = patientConstants.protein_factor || 0.5;
   const fatFactor = patientConstants.fat_factor || 0.2;
-
   const proteinCarbEquiv = totalProtein * proteinFactor;
   const fatCarbEquiv = totalFat * fatFactor;
 
   return {
-    proteinCarbEquiv,
-    fatCarbEquiv,
-    totalCarbEquiv: totalCarbs + proteinCarbEquiv + fatCarbEquiv
-  };
+    proteinCarbEquiv, fatCarbEquiv,  totalCarbEquiv: totalCarbs + proteinCarbEquiv + fatCarbEquiv  };
 };
 
 // Add this new function to fetch active insulin data
@@ -380,33 +375,25 @@ export const calculateInsulinDose = async ({
 
   // Use total carb equivalents to calculate base insulin
   const baseInsulin = carbEquivalents.totalCarbEquiv / patientConstants.insulin_to_carb_ratio;
-
   // Calculate adjustment factors
   const absorptionFactor = patientConstants.absorption_modifiers[absorptionType] || 1.0;
   const mealTimingFactor = (mealType && patientConstants.meal_timing_factors?.[mealType]) || 1.0;
   const activityImpact = calculateActivityImpact(activities, patientConstants);
-
   // Calculate timing adjusted insulin
   const adjustedInsulin = baseInsulin * absorptionFactor * mealTimingFactor * activityImpact;
-
   // Calculate correction insulin if needed
   let correctionInsulin = 0;
   if (bloodSugar && patientConstants.target_glucose && patientConstants.correction_factor) {
     correctionInsulin = (bloodSugar - patientConstants.target_glucose) / patientConstants.correction_factor;
     // Don't allow negative correction insulin
-    correctionInsulin = Math.max(0, correctionInsulin);
-  }
-
+    correctionInsulin = Math.max(0, correctionInsulin);}
   // Calculate total before subtracting active insulin
   const preActiveTotal = adjustedInsulin + correctionInsulin;
-
   // Subtract active insulin (don't go below 0)
   const postActiveTotal = Math.max(0, preActiveTotal - activeInsulin);
-
   // Get health factors and calculate final insulin
   const healthMultiplier = calculateHealthFactors(patientConstants, currentTime);
   let totalInsulin = Math.max(0, postActiveTotal * healthMultiplier);
-
   // Round to nearest 0.1 units
   totalInsulin = Math.round(totalInsulin * 10) / 10;
 
