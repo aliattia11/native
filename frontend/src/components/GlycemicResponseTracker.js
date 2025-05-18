@@ -20,6 +20,7 @@ import { useBloodSugarData } from '../contexts/BloodSugarDataContext';
 import TimeContext from '../contexts/TimeContext';
 import {
   calculateMealEffect,
+  calculateUnifiedMealImpact,
   generateMealTimelineData,
   prepareChartData,
   calculateCarbEquivalents,
@@ -361,51 +362,64 @@ const calculateNetEffects = useCallback((timelineData, options) => {
   });
 }, []);
 
-  const generateCombinedData = useCallback((mealData, insulinData, bloodGlucoseData) => {
-    // Create options object from component state and context values
-    const options = {
-      timeScale: timeScale || { start: Date.now() - 7 * 24 * 60 * 60 * 1000, end: Date.now(), tickInterval: 3600000 },
-      targetGlucose: targetGlucose || 100,
-      includeFutureEffect: includeFutureEffect || false,
-      futureHours: futureHours || 6,
-      effectDurationHours: effectDurationHours || 6,
-      patientConstants: patientConstants || {}
+ const generateCombinedData = useCallback((mealData, insulinData, bloodGlucoseData) => {
+  // Create options object from component state and context values
+  const options = {
+    timeScale: timeScale || { start: Date.now() - 7 * 24 * 60 * 60 * 1000, end: Date.now(), tickInterval: 3600000 },
+    targetGlucose: targetGlucose || 100,
+    includeFutureEffect: includeFutureEffect || false,
+    futureHours: futureHours || 6,
+    effectDurationHours: effectDurationHours || 6,
+    patientConstants: patientConstants || {}
+  };
+
+  // Create context functions object
+  const contextFunctions = {
+    getBloodSugarAtTime: getBloodSugarAtTime || (() => null),
+    getBloodSugarStatus: getBloodSugarStatus || (() => ({ status: 'normal', color: '#000000' })),
+    getFilteredData: getFilteredData || (data => data || [])
+  };
+
+  // Process meals to add unified calculations
+  const processedMeals = mealData.map(meal => {
+    // Add unified meal impact calculations to each meal
+    const unifiedImpact = calculateUnifiedMealImpact(meal, patientConstants, {
+      includeTimeCurve: false
+    });
+
+    return {
+      ...meal,
+      unifiedImpact
     };
+  });
 
-    // Create context functions object
-    const contextFunctions = {
-      getBloodSugarAtTime: getBloodSugarAtTime || (() => null),
-      getBloodSugarStatus: getBloodSugarStatus || (() => ({ status: 'normal', color: '#000000' })),
-      getFilteredData: getFilteredData || (data => data || [])
-    };
+  // Get meal timeline data
+  const mealTimelineData = generateMealTimelineData(
+    processedMeals, // Use our meals with unified calculations
+    bloodGlucoseData || [],
+    options,
+    contextFunctions,
+    TimeManager
+  );
 
-    // Get meal timeline data
-    const mealTimelineData = generateMealTimelineData(
-      mealData,
-      bloodGlucoseData || [],
-      options,
-      contextFunctions,
-      TimeManager
-    );
+  // Get insulin timeline data
+  const insulinTimelineData = generateInsulinTimelineData(
+    insulinData,
+    options,
+    TimeManager
+  );
 
-    // Get insulin timeline data
-    const insulinTimelineData = generateInsulinTimelineData(
-      insulinData,
-      options,
-      TimeManager
-    );
+  // Merge the two datasets based on timestamp
+  const mergedTimeline = mergeTimelineData(mealTimelineData, insulinTimelineData);
 
-    // Merge the two datasets based on timestamp
-    const mergedTimeline = mergeTimelineData(mealTimelineData, insulinTimelineData);
+  // Calculate net effects of meals and insulin
+  const timelineWithNetEffects = calculateNetEffects(mergedTimeline, options);
 
-    // Calculate net effects of meals and insulin
-    const timelineWithNetEffects = calculateNetEffects(mergedTimeline, options);
-
-    return timelineWithNetEffects;
-  }, [targetGlucose, includeFutureEffect, futureHours,
-      getBloodSugarAtTime, getBloodSugarStatus, getFilteredData, TimeManager,
-      patientConstants, timeScale, effectDurationHours,
-      mergeTimelineData, calculateNetEffects]);
+  return timelineWithNetEffects;
+}, [targetGlucose, includeFutureEffect, futureHours,
+    getBloodSugarAtTime, getBloodSugarStatus, getFilteredData, TimeManager,
+    patientConstants, timeScale, effectDurationHours,
+    mergeTimelineData, calculateNetEffects]);
 
   // Fetch active insulin data
   const fetchActiveInsulin = useCallback(async () => {

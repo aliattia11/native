@@ -161,16 +161,19 @@ export const calculateInsulinActivityPercentage = (hoursSinceDose, params) => {
   const is_peakless = params?.is_peakless === true || params?.peak_hours === null;
   const insulin_type = params?.type || 'rapid_acting';
 
+  // For debugging
+  console.log(`Calculating insulin activity - type: ${insulin_type}, peakless: ${is_peakless}`);
+
   // Return 0 if negative time (future dose)
   if (hoursSinceDose < 0) {
     return 0;
   }
 
   // Special handling for peakless long-acting insulins (like glargine, detemir, degludec)
-  if (insulin_type === 'long_acting' && is_peakless) {
+  if ((insulin_type === 'long_acting' && is_peakless) || is_peakless === true) {
     // Calculate onset phase - gradual ramp up
     if (hoursSinceDose < onset_hours) {
-      return (hoursSinceDose / onset_hours) * 100; // Ramp up to max effect
+      return (hoursSinceDose / onset_hours) * 85; // Ramp up to 85% max effect
     }
 
     // Calculate time left before end of duration
@@ -196,6 +199,7 @@ export const calculateInsulinActivityPercentage = (hoursSinceDose, params) => {
     return tailActivity >= 3.0 ? tailActivity : 0;
   }
 
+  // Rest of the original function for standard insulins remains unchanged
   // BIEXPONENTIAL MODEL FOR STANDARD INSULINS
 
   // Calculate rate constants from insulin parameters
@@ -222,13 +226,17 @@ export const calculateInsulinActivityPercentage = (hoursSinceDose, params) => {
   // This model naturally tapers to zero - no artificial cutoff needed
   return Math.max(0, activityPercent);
 };
-
 /**
  * Calculate the effect of an insulin dose on blood glucose over time
  *
  * @param {Object} dose - The insulin dose data object
  * @param {Object} patientConstants - Patient-specific constants
  * @returns {Array} Array of effect points over time
+ */
+/**
+ * Calculate the effect of an insulin dose on blood glucose over time
+/**
+ * Calculate the effect of an insulin dose on blood glucose over time
  */
 export const calculateInsulinEffect = (dose, patientConstants) => {
   if (!dose || !patientConstants) {
@@ -244,13 +252,19 @@ export const calculateInsulinEffect = (dose, patientConstants) => {
       return [];
     }
 
-    // Get insulin parameters from patient constants
+    // Get insulin parameters from patient constants with improved error handling
     const insulinParams = getInsulinParameters(insulinType, patientConstants);
-    const {
-      onset_hours = 0.5,
-      peak_hours = 2.0,
-      duration_hours = 4.0
-    } = insulinParams;
+
+    // Debug log the parameters to ensure they're being correctly passed
+    console.log(`Insulin parameters for ${insulinType}:`, insulinParams);
+
+    // Ensure the type property is properly set
+    if ((!insulinParams.type && insulinType.includes('glargine')) ||
+        insulinType.includes('detemir') ||
+        insulinType.includes('degludec')) {
+      insulinParams.type = 'long_acting';
+      insulinParams.is_peakless = true;
+    }
 
     // Time of administration
     const administrationTime = dose.administrationTime || dose.taken_at || dose.timestamp;
@@ -261,7 +275,8 @@ export const calculateInsulinEffect = (dose, patientConstants) => {
 
     // Generate the effect curve
     const results = [];
-    const durationMinutes = duration_hours * 60;
+    // FIX: Use insulinParams.duration_hours instead of undefined duration_hours
+    const durationMinutes = insulinParams.duration_hours * 60;
 
     // Generate points at 5-minute intervals for smoother curves
     for (let minute = 0; minute <= durationMinutes; minute += 5) {
@@ -771,7 +786,6 @@ export const calculateBGImpactCurve = (meal, patientFactors, hoursToProject = 6,
 // =====================================
 // VISUALIZATION & TIMELINE FUNCTIONS
 // =====================================
-
 /**
  * Generate timeline data for insulin doses
  * With filtering of <5% active insulin to clean visualization
@@ -860,14 +874,35 @@ export const generateInsulinTimelineData = (insulinDoses, options = {}, TimeMana
 
         // Get insulin parameters
         const insulinType = dose.medication || dose.insulinType;
-        const insulinParams = dose.pharmacokinetics ||
-                            patientConstants.medication_factors?.[insulinType] || {
-                              onset_hours: 0.5,
-                              peak_hours: 2.0,
-                              duration_hours: 4.0
-                            };
+        let insulinParams = dose.pharmacokinetics ||
+                          patientConstants.medication_factors?.[insulinType] || {
+                            onset_hours: 0.5,
+                            peak_hours: 2.0,
+                            duration_hours: 4.0
+                          };
 
-        // Calculate activity percentage using our biexponential model
+        // CRITICAL FIX: Ensure long-acting insulins have proper parameters
+        if (insulinType) {
+          const isLongActing =
+            insulinType.includes('glargine') ||
+            insulinType.includes('detemir') ||
+            insulinType.includes('degludec') ||
+            (insulinParams.type === 'long_acting');
+
+          if (isLongActing) {
+            // Ensure the type and is_peakless properties are set correctly
+            insulinParams = {
+              ...insulinParams,
+              type: 'long_acting',
+              is_peakless: true
+            };
+
+            // Optional debug log
+            console.log(`Processing long-acting insulin ${insulinType} with peakless profile`);
+          }
+        }
+
+        // Calculate activity percentage using our model with enhanced parameters
         const activityPercent = calculateInsulinActivityPercentage(hoursSinceDose, insulinParams);
 
         // ADDED FILTER: Only include if activity is at least 5%
@@ -882,7 +917,15 @@ export const generateInsulinTimelineData = (insulinDoses, options = {}, TimeMana
               doseAmount,
               activeUnits,
               activityPercent,
-              hoursSinceDose
+              hoursSinceDose,
+              // Include insulin parameters for debugging
+              params: {
+                type: insulinParams.type,
+                is_peakless: insulinParams.is_peakless,
+                onset: insulinParams.onset_hours,
+                peak: insulinParams.peak_hours,
+                duration: insulinParams.duration_hours
+              }
             });
 
             // Add to total

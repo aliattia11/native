@@ -344,12 +344,25 @@ def calculate_stacked_insulin_effect(patient_id, target_time=None):
         hours_since_dose = (target_time - taken_at).total_seconds() / 3600
         logger.debug(f"Hours since dose: {hours_since_dose:.2f}")
 
-        # Calculate current activity percentage using a simplified model
-        activity_percent = 0
+        # Check if the dose should be active at this time
+        dose_id = str(dose.get('_id'))
+
+        # Verify this dose falls within its activity window relative to time since dose
         if hours_since_dose < 0:
             # Dose is in the future
-            activity_percent = 0
-        elif is_peakless:
+            logger.debug(f"Dose {dose_id} is in the future, skipping")
+            continue
+
+        if hours_since_dose > duration_hours:
+            # This is a safety check to ensure we don't count doses outside their duration
+            # This can happen if effect_end_time wasn't accurately set when the dose was recorded
+            logger.debug(
+                f"Dose {dose_id} outside duration window ({hours_since_dose:.1f}h > {duration_hours:.1f}h), excluding from calculation")
+            continue
+
+        # Calculate current activity percentage using a tri-phase model
+        activity_percent = 0
+        if is_peakless:
             # Special model for peakless insulins
             if hours_since_dose < onset_hours:
                 # Gradual onset
@@ -381,31 +394,30 @@ def calculate_stacked_insulin_effect(patient_id, target_time=None):
                                               (duration_hours - peak_hours))  # 100-0%
                 else:
                     activity_percent = 50  # Default if peak = duration
-            else:
-                activity_percent = 0
-            logger.warning(f"Dose {dose.get('_id')} outside duration window but returned in query")
 
         # Calculate active insulin units from this dose
         initial_dose = dose.get('dose', 0)
         active_units = (initial_dose * activity_percent) / 100
 
-        insulin_contributions.append({
-            'dose_id': str(dose.get('_id')),
-            'medication': dose.get('medication'),
-            'initial_dose': initial_dose,
-            'taken_at': taken_at.isoformat() if isinstance(taken_at, datetime) else taken_at,
-            'hours_since_dose': round(hours_since_dose, 2),
-            'activity_percent': round(activity_percent, 1),
-            'active_units': round(active_units, 2)
-        })
+        # Only include if activity is above threshold
+        if activity_percent >= 1.0:
+            insulin_contributions.append({
+                'dose_id': dose_id,
+                'medication': dose.get('medication'),
+                'initial_dose': initial_dose,
+                'taken_at': taken_at.isoformat() if isinstance(taken_at, datetime) else taken_at,
+                'hours_since_dose': round(hours_since_dose, 2),
+                'activity_percent': round(activity_percent, 1),
+                'active_units': round(active_units, 2)
+            })
 
-        total_active_insulin += active_units
+            total_active_insulin += active_units
 
     return {
         'total_active_insulin': round(total_active_insulin, 2),
         'calculation_time': target_time.isoformat(),
         'calculation_timezone': 'UTC',  # Explicitly state the timezone used
-        'active_doses': len(active_insulin),
+        'active_doses': len(insulin_contributions),  # Count only the doses that are actually contributing
         'insulin_contributions': insulin_contributions
     }
 

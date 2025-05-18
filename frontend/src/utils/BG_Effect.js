@@ -1,112 +1,25 @@
 /**
  * BG_Effect.js - Utility functions for blood glucose effect calculations
- *
- * This utility provides functions to calculate and visualize the effects of
- * various factors (meals, insulin, activity) on blood glucose levels.
+ * Now includes unified meal impact model for both visualization and insulin calculation systems
  */
 
-/****** MEAL EFFECT CALCULATIONS ******/
+/****** UNIFIED MODEL CORE FUNCTIONS ******/
 
 /**
- * Calculate the effect of a meal on blood glucose levels over time
- *
- * @param {Object} meal - The meal data object
- * @param {Object} patientConstants - Patient-specific constants
- * @param {number} effectDurationHours - Duration of effect in hours
- * @param {Object} TimeManager - TimeManager utility for time calculations
- * @returns {Array} Array of effect points over time
- */
-function calculateMealEffect(meal, patientConstants, effectDurationHours = 6, TimeManager) {
-  if (!meal || !patientConstants) {
-    console.log("Missing meal or patientConstants data");
-    return [];
-  }
-
-  try {
-    // Extract meal nutrition data or use defaults
-    const nutrition = meal.nutrition || {};
-    const totalCarbEquiv = nutrition.totalCarbEquiv || nutrition.totalCarbs || 0;
-    const absorptionType = nutrition.absorptionType || 'medium';
-
-    // Get absorption modifiers from constants
-    const absorptionModifiers = patientConstants.absorption_modifiers || {
-      very_fast: 1.4,
-      fast: 1.2,
-      medium: 1.0,
-      slow: 0.8,
-      very_slow: 0.6
-    };
-
-    // Define peak and duration based on absorption type
-    const absorptionFactor = absorptionModifiers[absorptionType] || 1.0;
-    const peakHour = absorptionType === 'fast' ? 1.0 :
-                    absorptionType === 'slow' ? 2.0 : 1.5;
-    const durationHours = Math.min(effectDurationHours, 10);
-
-    // Generate the effect curve similar to the original implementation
-    const startTime = meal.timestamp;
-    const results = [];
-
-    // Generate points at 5-minute intervals instead of 15 for smoother curves
-    for (let minute = 0; minute <= durationHours * 60; minute += 5) {
-      const hoursSinceMeal = minute / 60;
-      let impactValue = 0;
-
-      // Calculate impact using an enhanced physiological model
-if (hoursSinceMeal <= peakHour) {
-  // Rising phase with smoother curve (modified bell curve)
-  const normalizedTime = hoursSinceMeal / peakHour;
-  // This formula creates a smoother rise with physiologically plausible acceleration
-  impactValue = totalCarbEquiv * (Math.pow(normalizedTime, 1.1)) * Math.exp(1 - normalizedTime);
-} else if (hoursSinceMeal <= durationHours) {
-  // Falling phase with gradual decay (more realistic)
-  // Calculate fat/protein ratio from nutrition if available
-  let fatProteinRatio = 0.3; // Default value
-  if (meal && meal.nutrition) {
-    const fat = meal.nutrition.fat || 0;
-    const protein = meal.nutrition.protein || 0;
-    const carbs = meal.nutrition.totalCarbs || nutrition.totalCarbs || 1;
-    fatProteinRatio = (fat + protein) / Math.max(1, carbs);
-  }
-
-  // Adjust decay rate based on meal composition
-  const modifiedDecayRate = (0.7 + (fatProteinRatio * 0.4)) / (durationHours - peakHour);
-
-  // Must define normalizedTime for this phase
-  const normalizedTime = hoursSinceMeal - peakHour;
-
-  // Smoother exponential decay with composition-based rate
-  impactValue = totalCarbEquiv * 0.95 * Math.exp(-normalizedTime * modifiedDecayRate);
-}
-      // Apply absorption factor
-      impactValue *= absorptionFactor;
-
-      // Timestamp for this point
-      const timestamp = startTime + (minute * 60 * 1000);
-
-      results.push({
-        timestamp,
-        hoursSinceMeal,
-        impactValue: Math.max(0, impactValue)
-      });
-    }
-
-    return results;
-  } catch (error) {
-    console.error("Error calculating meal effect:", error);
-    return [];
-  }
-}
-
-/**
- * Calculate total carbohydrate equivalents from nutrition data
+ * Calculate total carbohydrate equivalents from nutrition data - SHARED CALCULATION
  *
  * @param {Object} nutrition - Nutrition data (carbs, protein, fat)
  * @param {Object} patientConstants - Patient-specific constants
- * @returns {number} - Total carbohydrate equivalents
+ * @returns {Object} - Total carbohydrate equivalents and components
  */
-function calculateCarbEquivalents(nutrition, patientConstants) {
-  if (!nutrition) return 0;
+export function calculateCarbEquivalents(nutrition, patientConstants) {
+  if (!nutrition) return {
+    totalCarbEquiv: 0,
+    carbsActual: 0,
+    proteinCarbEquiv: 0,
+    fatCarbEquiv: 0,
+    fiberReduction: 0
+  };
 
   // Extract nutritional values
   const carbs = nutrition.carbs || nutrition.totalCarbs || 0;
@@ -125,16 +38,229 @@ function calculateCarbEquivalents(nutrition, patientConstants) {
   const fiberReduction = fiber * fiberFactor;
 
   // Calculate total carb equivalents (carbs + protein equiv + fat equiv - fiber reduction)
-  const totalCarbEquiv = carbs + proteinCarbEquiv + fatCarbEquiv - fiberReduction;
+  const totalCarbEquiv = Math.max(0, carbs + proteinCarbEquiv + fatCarbEquiv - fiberReduction);
 
-  // Ensure result is not negative
-  return Math.max(0, totalCarbEquiv);
+  return {
+    totalCarbEquiv,
+    carbsActual: carbs,
+    proteinCarbEquiv,
+    fatCarbEquiv,
+    fiberReduction
+  };
+}
+
+/**
+ * Unified meal impact calculation - Used by BOTH visualization and insulin calculation
+ *
+ * @param {Object} mealData - Meal data with nutrition information
+ * @param {Object} patientConstants - Patient-specific constants
+ * @param {Object} options - Additional calculation options
+ * @returns {Object} - Meal impact data for both visualization and insulin calculation
+ */
+export function calculateUnifiedMealImpact(mealData, patientConstants, options = {}) {
+  const {
+    includeTimeCurve = false,
+    durationHours = 6,
+    timeInterval = 5, // minutes
+    currentTime = new Date()
+  } = options;
+
+  if (!mealData || !patientConstants) {
+    return {
+      carbEquivalents: { totalCarbEquiv: 0 },
+      baseInsulin: 0,
+      peakImpact: 0,
+      bgImpact: 0,
+      timeCurve: []
+    };
+  }
+
+  try {
+    // Extract meal nutrition data or use defaults
+    const nutrition = mealData.nutrition || {};
+    const mealType = mealData.mealType || 'normal';
+    const absorptionType = nutrition.absorptionType || 'medium';
+
+    // Get absorption modifiers from constants
+    const absorptionModifiers = patientConstants.absorption_modifiers || {
+      very_fast: 1.4, fast: 1.2, medium: 1.0, slow: 0.8, very_slow: 0.6
+    };
+
+    // Calculate carb equivalents (shared calculation)
+    const carbEquivalents = calculateCarbEquivalents(nutrition, patientConstants);
+
+    // Get adjustment factors
+    const absorptionFactor = absorptionModifiers[absorptionType] || 1.0;
+    const mealTimingFactor = patientConstants.meal_timing_factors?.[mealType] || 1.0;
+
+    // Calculate base insulin using unified formula - MATCHES INSULIN CALCULATION
+    const baseInsulin = carbEquivalents.totalCarbEquiv / patientConstants.insulin_to_carb_ratio;
+    const adjustedInsulin = baseInsulin * absorptionFactor * mealTimingFactor;
+
+    // Calculate peak BG impact using unified formula - MATCHES VISUALIZATION
+    const carbToBgFactor = patientConstants.carb_to_bg_factor || 4.0;
+    const peakBgImpact = carbEquivalents.totalCarbEquiv * carbToBgFactor * absorptionFactor;
+
+    // Create calculation summary (matches format used in meal-only records)
+    const calculationSummary = {
+      base_insulin: baseInsulin,
+      adjustment_factors: {
+        absorption_rate: absorptionFactor,
+        meal_timing: mealTimingFactor
+      },
+      meal_only_suggested_insulin: adjustedInsulin
+    };
+
+    // If we don't need the time curve, return just the calculations
+    if (!includeTimeCurve) {
+      return {
+        carbEquivalents,
+        baseInsulin,
+        adjustedInsulin,
+        peakBgImpact,
+        calculationSummary
+      };
+    }
+
+    // Generate time curve for visualization (existing functionality from calculateMealEffect)
+    const timeCurve = generateMealImpactCurve(
+      carbEquivalents.totalCarbEquiv,
+      absorptionType,
+      mealData.timestamp || currentTime.getTime(),
+      durationHours,
+      timeInterval,
+      carbToBgFactor,
+      absorptionFactor,
+      patientConstants
+    );
+
+    return {
+      carbEquivalents,
+      baseInsulin,
+      adjustedInsulin,
+      peakBgImpact,
+      calculationSummary,
+      timeCurve
+    };
+  } catch (error) {
+    console.error("Error in unified meal impact calculation:", error);
+    return {
+      carbEquivalents: { totalCarbEquiv: 0 },
+      baseInsulin: 0,
+      peakImpact: 0,
+      bgImpact: 0,
+      timeCurve: [],
+      error: error.message
+    };
+  }
+}
+
+/**
+ * Generate meal impact curve over time - Used by visualization system
+ *
+ * @param {number} totalCarbEquiv - Total carbohydrate equivalents
+ * @param {string} absorptionType - Absorption type (very_fast, fast, medium, slow, very_slow)
+ * @param {number} startTimestamp - Start time of the meal
+ * @param {number} durationHours - Duration to project in hours
+ * @param {number} intervalMinutes - Time interval between data points in minutes
+ * @param {number} carbToBgFactor - Factor to convert carb units to blood glucose impact
+ * @param {number} absorptionFactor - Absorption rate modifier
+ * @param {Object} patientConstants - Patient-specific constants
+ * @returns {Array} Array of time points with impact values
+ */
+function generateMealImpactCurve(
+  totalCarbEquiv,
+  absorptionType = 'medium',
+  startTimestamp = Date.now(),
+  durationHours = 6,
+  intervalMinutes = 5,
+  carbToBgFactor = 4.0,
+  absorptionFactor = 1.0,
+  patientConstants = {}
+) {
+  // Calculate peak and duration based on absorption type
+  const peakHour = absorptionType === 'fast' ? 1.0 :
+                  absorptionType === 'slow' ? 2.0 : 1.5;
+  const duration = Math.min(durationHours, 10);
+
+  const results = [];
+
+  // Generate points at specified intervals
+  for (let minute = 0; minute <= durationHours * 60; minute += intervalMinutes) {
+    const hoursSinceMeal = minute / 60;
+    let impactValue = 0;
+
+    // Calculate impact using the physiological model
+    if (hoursSinceMeal <= peakHour) {
+      // Rising phase with smoother curve
+      const normalizedTime = hoursSinceMeal / peakHour;
+      impactValue = totalCarbEquiv * (Math.pow(normalizedTime, 1.1)) * Math.exp(1 - normalizedTime);
+    } else if (hoursSinceMeal <= duration) {
+      // Falling phase with gradual decay
+      const normalizedTime = hoursSinceMeal - peakHour;
+      const decayRate = (0.7 + 0.3) / (duration - peakHour);
+      impactValue = totalCarbEquiv * 0.95 * Math.exp(-normalizedTime * decayRate);
+    }
+
+    // Apply absorption factor
+    impactValue *= absorptionFactor;
+
+    // Calculate BG impact in mg/dL
+    const bgImpact = impactValue * carbToBgFactor;
+
+    // Timestamp for this point
+    const timestamp = startTimestamp + (minute * 60 * 1000);
+
+    results.push({
+      timestamp,
+      hoursSinceMeal,
+      impactValue: Math.max(0, impactValue),
+      bgImpact: Math.max(0, bgImpact)
+    });
+  }
+
+  return results;
+}
+
+/****** ORIGINAL MEAL EFFECT CALCULATIONS - NOW USING UNIFIED MODEL ******/
+
+/**
+ * Calculate the effect of a meal on blood glucose levels over time
+ * Now enhanced to use the unified meal impact model
+ *
+ * @param {Object} meal - The meal data object
+ * @param {Object} patientConstants - Patient-specific constants
+ * @param {number} effectDurationHours - Duration of effect in hours
+ * @param {Object} TimeManager - TimeManager utility for time calculations
+ * @returns {Array} Array of effect points over time
+ */
+export function calculateMealEffect(meal, patientConstants, effectDurationHours = 6, TimeManager) {
+  if (!meal || !patientConstants) {
+    console.log("Missing meal or patientConstants data");
+    return [];
+  }
+
+  try {
+    // Use the unified model with time curve option enabled
+    const unifiedResult = calculateUnifiedMealImpact(meal, patientConstants, {
+      includeTimeCurve: true,
+      durationHours: effectDurationHours,
+      currentTime: new Date()
+    });
+
+    // Return the time curve for backward compatibility
+    return unifiedResult.timeCurve;
+  } catch (error) {
+    console.error("Error calculating meal effect:", error);
+    return [];
+  }
 }
 
 /****** DATA VISUALIZATION AND TIMELINE GENERATION ******/
 
 /**
  * Generate combined timeline data showing meal impacts on blood glucose
+ * Now uses the unified meal impact model for consistency
  *
  * @param {Array} mealData - Array of meal objects
  * @param {Array} bloodGlucoseData - Array of blood glucose readings
@@ -143,7 +269,7 @@ function calculateCarbEquivalents(nutrition, patientConstants) {
  * @param {Object} TimeManager - TimeManager utility
  * @returns {Array} Combined timeline data with meal effects
  */
-function generateMealTimelineData(
+export function generateMealTimelineData(
   mealData,
   bloodGlucoseData,
   options = {},
@@ -200,36 +326,38 @@ function generateMealTimelineData(
     let contextBloodSugarData = getFilteredData(bloodGlucoseData);
     console.log("Filtered blood sugar readings from context:", contextBloodSugarData.length);
 
-    // Create maps for quick lookups
-    const actualReadingsMap = new Map();
-    const estimatedReadingsMap = new Map();
-
-    // Populate blood glucose readings maps
-    bloodGlucoseData.forEach(reading => {
-      if (reading && reading.isActualReading) {
-        actualReadingsMap.set(reading.readingTime, reading);
-      } else if (reading && (reading.isEstimated || reading.isInterpolated)) {
-        estimatedReadingsMap.set(reading.readingTime, reading);
-      }
-    });
-
-    // Process meal effects for all meals
-    console.log("Processing meal effects for", mealData.length, "meals");
+    // Process meal effects with unified model
+    console.log("Processing meal effects using unified model for", mealData.length, "meals");
     const mealEffects = mealData
       .filter(meal => meal && !isNaN(meal.timestamp) && meal.timestamp > 0)
       .map(meal => {
-        const effects = calculateMealEffect(meal, patientConstants, effectDurationHours, TimeManager);
-        return {
-          meal,
-          effects
-        };
+        try {
+          // Calculate unified impact for this meal
+          const unifiedImpact = calculateUnifiedMealImpact(meal, patientConstants, {
+            includeTimeCurve: true,
+            durationHours: effectDurationHours,
+            currentTime: new Date()
+          });
+
+          return {
+            meal,
+            effects: unifiedImpact.timeCurve,
+            unifiedImpact
+          };
+        } catch (error) {
+          console.error("Error processing meal effect:", error, meal);
+          return {
+            meal,
+            effects: [],
+            unifiedImpact: null
+          };
+        }
       });
 
     // Create a timeline using 15-minute intervals
     const timelineData = [];
     const interval = 15 * 60 * 1000; // 15 minutes in milliseconds
     let currentTime = minTime;
-    let pointsWithEffects = 0;
 
     // Generate the timeline
     while (currentTime <= maxTime) {
@@ -278,7 +406,7 @@ function generateMealTimelineData(
       });
 
       // Calculate combined meal effects at this time point
-      mealEffects.forEach(({ meal, effects }) => {
+      mealEffects.forEach(({ meal, effects, unifiedImpact }) => {
         if (!Array.isArray(effects)) {
           console.warn(`Invalid effects array for meal:`, meal);
           return;
@@ -286,14 +414,19 @@ function generateMealTimelineData(
 
         // Find effect at this time point
         const effect = effects.find(e => Math.abs(e.timestamp - currentTime) < interval / 2);
-        if (effect && !isNaN(effect.impactValue) && effect.impactValue > 0) {
+        if (effect && !isNaN(effect.bgImpact) && effect.bgImpact > 0) {
           const mealId = meal.id;
           if (mealId) {
-            timePoint.mealEffects[mealId] = effect.impactValue;
-            timePoint[`mealEffect.${mealId}`] = effect.impactValue;
+            timePoint.mealEffects[mealId] = effect.bgImpact;
+            timePoint[`mealEffect.${mealId}`] = effect.bgImpact;
 
-            // Track total effect
-            timePoint.totalMealEffect += effect.impactValue;
+            // Store unified calculation data in time point for tooltips
+            if (unifiedImpact?.calculationSummary) {
+              timePoint[`mealInsulin.${mealId}`] = unifiedImpact.calculationSummary.meal_only_suggested_insulin;
+            }
+
+            // Track total effect - now consistently uses bgImpact for conversion
+            timePoint.totalMealEffect += effect.bgImpact;
           }
         }
       });
@@ -306,14 +439,8 @@ function generateMealTimelineData(
 
       // Apply meal effect calculations
       if (timePoint.totalMealEffect > 0) {
-        // Get patient-specific carb-to-glucose factor from constants
-        const carbToBgFactor = patientConstants?.carb_to_bg_factor || 4.0;
-
-        // Calculate meal impact using the patient-specific factor
-        const mealImpact = timePoint.totalMealEffect * carbToBgFactor;
-
-        // Store the raw meal impact without rounding
-        timePoint.mealImpactMgdL = mealImpact;
+        // Store the raw meal impact directly (no need to convert anymore)
+        timePoint.mealImpactMgdL = timePoint.totalMealEffect;
 
         // FIRST CALCULATION: Impact on estimated blood sugar
         if (!timePoint.isActualReading) {
@@ -321,13 +448,12 @@ function generateMealTimelineData(
           timePoint.estimatedBloodSugar = timePoint.bloodSugar;
 
           // Apply meal effect to blood sugar value
-          timePoint.bloodSugar = Math.max(70, timePoint.estimatedBloodSugar + mealImpact);
+          timePoint.bloodSugar = Math.max(70, timePoint.estimatedBloodSugar + timePoint.mealImpactMgdL);
           timePoint.affectedByMeal = true;
-          pointsWithEffects++;
         }
 
         // SECOND CALCULATION: Calculate hypothetical impact on target blood sugar
-        timePoint.targetWithMealEffect = Math.max(70, targetGlucose + mealImpact);
+        timePoint.targetWithMealEffect = Math.max(70, targetGlucose + timePoint.mealImpactMgdL);
 
         // Calculate deviation from target with the meal effect applied
         timePoint.targetDeviation = timePoint.bloodSugar - targetGlucose;
@@ -358,7 +484,7 @@ function generateMealTimelineData(
  * @param {number} targetGlucose - Target blood glucose level
  * @returns {Array} - Processed timeline data
  */
-function prepareTimelineData(timelineData, targetGlucose) {
+export function prepareTimelineData(timelineData, targetGlucose) {
   if (!timelineData || !Array.isArray(timelineData)) return [];
 
   const now = new Date().getTime();
@@ -400,7 +526,7 @@ function prepareTimelineData(timelineData, targetGlucose) {
  * @param {Object} options - Configuration options
  * @returns {Array} - Data ready for chart rendering
  */
-function prepareChartData(data, options = {}) {
+export function prepareChartData(data, options = {}) {
   if (!data || !Array.isArray(data)) return [];
 
   const { targetGlucose = 100 } = options;
@@ -455,8 +581,8 @@ function prepareChartData(data, options = {}) {
  * @param {number} duration - Effect duration in hours
  * @returns {Array} Array of effect points over time
  */
-function calculateInsulinEffect(insulinDose, patientConstants, duration = 6) {
-  // To be implemented for insulin integration
+export function calculateInsulinEffect(insulinDose, patientConstants, duration = 6) {
+  // This is a placeholder - actual implementation is in insulinUtils.js
   return [];
 }
 
@@ -469,7 +595,7 @@ function calculateInsulinEffect(insulinDose, patientConstants, duration = 6) {
  * @param {Object} patientConstants - Patient-specific constants
  * @returns {Object} - Aggregated nutrition data
  */
-function calculateNutritionDistribution(meals, patientConstants) {
+export function calculateNutritionDistribution(meals, patientConstants) {
   if (!meals || !Array.isArray(meals) || meals.length === 0) {
     return {
       avgCarbs: 0,
@@ -485,10 +611,11 @@ function calculateNutritionDistribution(meals, patientConstants) {
   const totalProtein = meals.reduce((sum, meal) => sum + (meal.nutrition?.totalProtein || 0), 0);
   const totalFat = meals.reduce((sum, meal) => sum + (meal.nutrition?.totalFat || 0), 0);
 
-  // Calculate total carb equivalents using our new function
+  // Calculate total carb equivalents using our unified function
   const totalCarbEquiv = meals.reduce((sum, meal) => {
     if (!meal.nutrition) return sum;
-    return sum + calculateCarbEquivalents(meal.nutrition, patientConstants);
+    const carbEquivResult = calculateCarbEquivalents(meal.nutrition, patientConstants);
+    return sum + carbEquivResult.totalCarbEquiv;
   }, 0);
 
   // Calculate estimated peak time based on meal composition
@@ -543,7 +670,7 @@ function calculateNutritionDistribution(meals, patientConstants) {
  * @param {Array} combinedData - Combined data points with meal effects
  * @returns {Object} - Statistical analysis
  */
-function calculateMealStatistics(meals, combinedData) {
+export function calculateMealStatistics(meals, combinedData) {
   if (!meals || !combinedData || meals.length === 0 || combinedData.length === 0) {
     return {
       maxEffect: 0,
@@ -590,7 +717,7 @@ function calculateMealStatistics(meals, combinedData) {
  * @param {number} days - Number of days to include
  * @returns {Object} - Date range object with start and end dates
  */
-function applyDatePreset(days) {
+export function applyDatePreset(days) {
   const now = new Date();
   const start = new Date(now);
   start.setDate(start.getDate() - days);
@@ -633,7 +760,7 @@ function applyDatePreset(days) {
  * @param {Object} TimeManager - TimeManager utility
  * @returns {Array} Combined timeline data with all effects
  */
-function generateCombinedEffectsTimeline(
+export function generateCombinedEffectsTimeline(
   mealData,
   insulinData,
   activityData,
@@ -646,17 +773,3 @@ function generateCombinedEffectsTimeline(
   // For now, just call the meal timeline generator
   return generateMealTimelineData(mealData, bloodGlucoseData, options, contextFunctions, TimeManager);
 }
-
-// Export all functions
-export {
-  calculateMealEffect,
-  generateMealTimelineData,
-  prepareChartData,
-  prepareTimelineData,
-  calculateInsulinEffect,
-  generateCombinedEffectsTimeline,
-  calculateCarbEquivalents,
-  calculateNutritionDistribution,
-  calculateMealStatistics,
-  applyDatePreset
-};

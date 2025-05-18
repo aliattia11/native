@@ -3,6 +3,8 @@ import TimeManager from '../utils/TimeManager';
 import axios from 'axios';
 // Replace TimeEffect import with insulinUtils for medication effect calculation
 import { calculateMedicationEffect } from '../utils/insulinUtils';
+import { calculateUnifiedMealImpact, calculateCarbEquivalents } from '../utils/BG_Effect';
+
 
 import {
   MEASUREMENT_SYSTEMS,
@@ -290,33 +292,37 @@ export const calculateNutrients = (food) => {
 };
 
 export const calculateTotalNutrients = (selectedFoods) => {
-  return selectedFoods.reduce((acc, food) => {
+  // Start with empty nutrition object
+  const totalNutrition = { carbs: 0, protein: 0, fat: 0, absorptionType: 'medium' };
+
+  // Sum up nutrients from all foods
+  selectedFoods.forEach(food => {
     const nutrients = calculateNutrients(food);
-    return {
-      carbs: acc.carbs + nutrients.carbs,
-      protein: acc.protein + nutrients.protein,
-      fat: acc.fat + nutrients.fat,
-      absorptionType: nutrients.absorptionType
-    };
-  }, { carbs: 0, protein: 0, fat: 0, absorptionType: 'medium' });
+    totalNutrition.carbs += nutrients.carbs;
+    totalNutrition.protein += nutrients.protein;
+    totalNutrition.fat += nutrients.fat;
+
+    // For absorption type, use the fastest one as that will drive the meal's absorption
+    if (absorptionRank(nutrients.absorptionType) < absorptionRank(totalNutrition.absorptionType)) {
+      totalNutrition.absorptionType = nutrients.absorptionType;
+    }
+  });
+
+  return totalNutrition;
 };
 
-export const calculateCarbEquivalents = (nutrition, patientConstants) => {
-  if (!nutrition || !patientConstants) {
-    return 0;
-  }
+// Helper function to rank absorption types
+function absorptionRank(type) {
+  const ranks = {
+    'very_fast': 1,
+    'fast': 2,
+    'medium': 3,
+    'slow': 4,
+    'very_slow': 5
+  };
+  return ranks[type] || 3; // Default to medium if not found
+}
 
-  const totalCarbs = nutrition.carbs || 0;
-  const totalProtein = nutrition.protein || 0;
-  const totalFat = nutrition.fat || 0;
-  const proteinFactor = patientConstants.protein_factor || 0.5;
-  const fatFactor = patientConstants.fat_factor || 0.2;
-  const proteinCarbEquiv = totalProtein * proteinFactor;
-  const fatCarbEquiv = totalFat * fatFactor;
-
-  return {
-    proteinCarbEquiv, fatCarbEquiv,  totalCarbEquiv: totalCarbs + proteinCarbEquiv + fatCarbEquiv  };
-};
 
 // Add this new function to fetch active insulin data
 export const fetchActiveInsulin = async () => {
@@ -366,34 +372,50 @@ export const calculateInsulinDose = async ({
     }
   }
 
-  // Calculate carb equivalents
-  const carbEquivalents = calculateCarbEquivalents({
-    carbs,
-    protein,
-    fat
-  }, patientConstants);
+  // Create a meal-like object to use with our unified model
+  const mealData = {
+    mealType,
+    nutrition: {
+      carbs,
+      protein,
+      fat,
+      absorptionType
+    }
+  };
 
-  // Use total carb equivalents to calculate base insulin
-  const baseInsulin = carbEquivalents.totalCarbEquiv / patientConstants.insulin_to_carb_ratio;
-  // Calculate adjustment factors
-  const absorptionFactor = patientConstants.absorption_modifiers[absorptionType] || 1.0;
-  const mealTimingFactor = (mealType && patientConstants.meal_timing_factors?.[mealType]) || 1.0;
+  // Use the unified meal impact model for base calculations
+  const unifiedResult = calculateUnifiedMealImpact(mealData, patientConstants);
+
+  // Extract the unified calculations
+  const { baseInsulin, adjustedInsulin } = unifiedResult;
+  const carbEquivalents = unifiedResult.carbEquivalents;
+  const absorptionFactor = unifiedResult.calculationSummary.adjustment_factors.absorption_rate;
+  const mealTimingFactor = unifiedResult.calculationSummary.adjustment_factors.meal_timing;
+
+  // Calculate activity impact - keeping this from the original function
   const activityImpact = calculateActivityImpact(activities, patientConstants);
-  // Calculate timing adjusted insulin
-  const adjustedInsulin = baseInsulin * absorptionFactor * mealTimingFactor * activityImpact;
+
+  // Apply activity impact to the adjusted insulin
+  const activityAdjustedInsulin = adjustedInsulin * activityImpact;
+
   // Calculate correction insulin if needed
   let correctionInsulin = 0;
   if (bloodSugar && patientConstants.target_glucose && patientConstants.correction_factor) {
     correctionInsulin = (bloodSugar - patientConstants.target_glucose) / patientConstants.correction_factor;
     // Don't allow negative correction insulin
-    correctionInsulin = Math.max(0, correctionInsulin);}
+    correctionInsulin = Math.max(0, correctionInsulin);
+  }
+
   // Calculate total before subtracting active insulin
-  const preActiveTotal = adjustedInsulin + correctionInsulin;
+  const preActiveTotal = activityAdjustedInsulin + correctionInsulin;
+
   // Subtract active insulin (don't go below 0)
   const postActiveTotal = Math.max(0, preActiveTotal - activeInsulin);
+
   // Get health factors and calculate final insulin
   const healthMultiplier = calculateHealthFactors(patientConstants, currentTime);
   let totalInsulin = Math.max(0, postActiveTotal * healthMultiplier);
+
   // Round to nearest 0.1 units
   totalInsulin = Math.round(totalInsulin * 10) / 10;
 
@@ -405,12 +427,12 @@ export const calculateInsulinDose = async ({
   return {
     total: totalInsulin,
     breakdown: {
-      carbsActual: Math.round(carbs * 100) / 100,
+      carbsActual: Math.round(carbEquivalents.carbsActual * 100) / 100,
       proteinCarbEquiv: Math.round(carbEquivalents.proteinCarbEquiv * 100) / 100,
       fatCarbEquiv: Math.round(carbEquivalents.fatCarbEquiv * 100) / 100,
       totalCarbEquiv: Math.round(carbEquivalents.totalCarbEquiv * 100) / 100,
       baseInsulin: Math.round(baseInsulin * 100) / 100,
-      adjustedInsulin: Math.round(adjustedInsulin * 100) / 100,
+      adjustedInsulin: Math.round(activityAdjustedInsulin * 100) / 100,
       correctionInsulin: Math.round(correctionInsulin * 100) / 100,
       preActiveTotal: Math.round(preActiveTotal * 100) / 100,
       activeInsulin: Math.round(activeInsulin * 100) / 100,
@@ -418,7 +440,8 @@ export const calculateInsulinDose = async ({
       healthMultiplier: Math.round(healthMultiplier * 100) / 100,
       absorptionFactor,
       mealTimingFactor,
-      activityImpact: Math.round(activityImpact * 100) / 100
+      activityImpact: Math.round(activityImpact * 100) / 100,
+      timeOfDayFactor: 1.0 // This is now handled in mealTimingFactor
     }
   };
 };

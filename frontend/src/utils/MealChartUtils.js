@@ -115,7 +115,7 @@ export const EnhancedTooltip = ({
         </div>
       )}
 
-      {/* Meal nutritional details section */}
+      {/* Meal nutritional details section - FIXED FOR BOTH OBJECT AND NUMBER FORMATS */}
       {data.meals && data.meals.length > 0 && (
         <div className="tooltip-section tooltip-meal-details">
           <h4>Meal Details:</h4>
@@ -138,7 +138,11 @@ export const EnhancedTooltip = ({
                   </tr>
                   <tr className="total-row">
                     <td>Total equiv:</td>
-                    <td><strong>{meal.totalCarbEquiv.toFixed(1)}g</strong></td>
+                    <td><strong>
+                      {(typeof meal.totalCarbEquiv === 'object' ?
+                        meal.totalCarbEquiv.totalCarbEquiv :
+                        meal.totalCarbEquiv).toFixed(1)}g
+                    </strong></td>
                   </tr>
                 </tbody>
               </table>
@@ -147,6 +151,7 @@ export const EnhancedTooltip = ({
         </div>
       )}
 
+      {/* Rest of the component remains the same */}
       {/* Indicate if showing historical or future data */}
       <p className="tooltip-data-type">
         {isHistorical ?
@@ -230,6 +235,7 @@ export const EnhancedTooltip = ({
     </div>
   );
 };
+
 
 /**
  * Custom dot renderer for blood sugar readings on chart
