@@ -7,7 +7,7 @@ import InsulinVisualization from './InsulinVisualization';
 import CombinedGlucoseInsulinChart from './CombinedGlucoseInsulinChart';
 import ActivityRecording from './ActivityRecording';
 import ActivityVisualization from './ActivityVisualization';
-import SimpleMealEffectChart from './SimpleMealEffectChart';
+import GlycemicResponseTracker from './GlycemicResponseTracker';
 import MealVisualization from './MealVisualization mealsonly';
 
 import FoodDatabase from './FoodDatabase';
@@ -77,7 +77,7 @@ const PatientDashboard = ({ handleLogout }) => {
       case 'InsulinVisualization':
         return <InsulinVisualization key="insulin-visualization" />;
       case 'SimpleMealEffectChart':
-        return <SimpleMealEffectChart key="Meal-Visualization" userType="patient" />;
+        return <GlycemicResponseTracker key="Meal-Visualization" userType="patient" />;
         case 'MealVisualization':
         return <MealVisualization key="Meal-Visualization" userType="patient" />;
               case 'activityRecording':

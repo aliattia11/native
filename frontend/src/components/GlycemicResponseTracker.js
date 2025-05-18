@@ -44,7 +44,7 @@ import {
 
 import './MealVisualization.css';
 
-const SimpleMealEffectChart = ({
+const GlycemicResponseTracker = ({
   isDoctor = false,
   patientId = null,
   showControls = true,
@@ -1330,4 +1330,4 @@ const SimpleMealEffectChart = ({
   );
 };
 
-export default SimpleMealEffectChart;
+export default GlycemicResponseTracker;
