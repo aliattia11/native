@@ -380,11 +380,12 @@
       },
       "insulin_glargine": {
         "factor": 1.0,
-        "description": "Long-acting insulin with 24-hour coverage",
+        "description": "Long-acting insulin with 24-hour flat profile",
         "duration_based": true,
         "onset_hours": 2,
-        "peak_hours": 4,
+        "peak_hours": null,
         "duration_hours": 24,
+        "is_peakless": true,
         "type": "long_acting",
         "brand_names": [
           "Lantus",
@@ -397,8 +398,9 @@
         "description": "Long-acting insulin lasting 18-24 hours",
         "duration_based": true,
         "onset_hours": 1,
-        "peak_hours": 6,
-        "duration_hours": 24,
+        "peak_hours": null,
+        "duration_hours": 22,
+        "is_peakless": true,
         "type": "long_acting",
         "brand_names": [
           "Levemir"
@@ -409,8 +411,9 @@
         "description": "Ultra-long-acting insulin lasting up to 42 hours",
         "duration_based": true,
         "onset_hours": 1,
-        "peak_hours": 12,
+        "peak_hours": null,
         "duration_hours": 42,
+        "is_peakless": true,
         "type": "long_acting",
         "brand_names": [
           "Tresiba"

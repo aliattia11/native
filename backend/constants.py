@@ -173,13 +173,15 @@ class ConstantConfig:
         },
 
         # Long Acting Insulins (new additions)
+        # Long Acting Insulins (updated for accurate pharmacokinetics)
         'insulin_glargine': {
             'factor': 1.0,
-            'description': 'Long-acting insulin with 24-hour coverage',
+            'description': 'Long-acting insulin with 24-hour flat profile',
             'duration_based': True,
             'onset_hours': 2,
-            'peak_hours': 4,
+            'peak_hours': None,  # No pronounced peak
             'duration_hours': 24,
+            'is_peakless': True,  # Added flag for peakless behavior
             'type': 'long_acting',
             'brand_names': ['Lantus', 'Basaglar', 'Toujeo']
         },
@@ -188,8 +190,9 @@ class ConstantConfig:
             'description': 'Long-acting insulin lasting 18-24 hours',
             'duration_based': True,
             'onset_hours': 1,
-            'peak_hours': 6,
-            'duration_hours': 24,
+            'peak_hours': None,  # No pronounced peak
+            'duration_hours': 22,
+            'is_peakless': True,  # Added flag for peakless behavior
             'type': 'long_acting',
             'brand_names': ['Levemir']
         },
@@ -198,8 +201,9 @@ class ConstantConfig:
             'description': 'Ultra-long-acting insulin lasting up to 42 hours',
             'duration_based': True,
             'onset_hours': 1,
-            'peak_hours': 12,
+            'peak_hours': None,  # No pronounced peak
             'duration_hours': 42,
+            'is_peakless': True,  # Added flag for peakless behavior
             'type': 'long_acting',
             'brand_names': ['Tresiba']
         },

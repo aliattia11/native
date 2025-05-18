@@ -333,30 +333,33 @@ const GlycemicResponseTracker = ({
   }, []);
 
   // Calculate net effects of meals and insulin
-  const calculateNetEffects = useCallback((timelineData, options) => {
-    return timelineData.map(point => {
-      // Calculate meal impact on blood glucose (in mg/dL)
-      const mealImpactMgdL = point.mealImpactMgdL || (point.totalMealEffect * (options.patientConstants?.carb_to_bg_factor || 4.0));
+ // Calculate net effects of meals and insulin
+const calculateNetEffects = useCallback((timelineData, options) => {
+  return timelineData.map(point => {
+    // Calculate meal impact on blood glucose (in mg/dL)
+    const mealImpactMgdL = point.mealImpactMgdL || (point.totalMealEffect * (options.patientConstants?.carb_to_bg_factor || 4.0));
 
-      // Get insulin impact (negative value as it lowers blood glucose)
-      const insulinImpactMgdL = point.bgImpact || 0;
+    // Get insulin impact (negative value as it lowers blood glucose)
+    const insulinImpactMgdL = point.bgImpact || 0;
 
-      // Calculate net effect
-      const netEffectMgdL = mealImpactMgdL + insulinImpactMgdL;
+    // Calculate net effect
+    const netEffectMgdL = mealImpactMgdL + insulinImpactMgdL;
 
-      // Calculate expected blood glucose with net effect
-      const estimatedBaseline = point.estimatedBloodSugar || options.targetGlucose;
-      const expectedBloodSugarWithNetEffect = Math.max(70, estimatedBaseline + netEffectMgdL);
+    // Calculate expected blood glucose with net effect
+    // CRITICAL CHANGE: Remove the minimum cap to see full effect
+    const estimatedBaseline = point.estimatedBloodSugar || options.targetGlucose;
+    const expectedBloodSugarWithNetEffect = estimatedBaseline + netEffectMgdL;
+    // Previously: Math.max(70, estimatedBaseline + netEffectMgdL)
 
-      return {
-        ...point,
-        mealImpactMgdL,
-        insulinImpactMgdL,
-        netEffectMgdL,
-        expectedBloodSugarWithNetEffect
-      };
-    });
-  }, []);
+    return {
+      ...point,
+      mealImpactMgdL,
+      insulinImpactMgdL,
+      netEffectMgdL,
+      expectedBloodSugarWithNetEffect
+    };
+  });
+}, []);
 
   const generateCombinedData = useCallback((mealData, insulinData, bloodGlucoseData) => {
     // Create options object from component state and context values
@@ -427,58 +430,68 @@ const GlycemicResponseTracker = ({
     }
   }, [patientId]);
 
-  // Fetch insulin data
-  const fetchInsulinData = useCallback(async (timeSettings) => {
-    try {
-      setLoadingInsulin(true);
-      const token = localStorage.getItem('token');
-      if (!token) {
-        throw new Error('Authentication token not found');
-      }
-
-      console.log("Fetching insulin data for date range:", timeSettings);
-
-      // Validate timeSettings before using
-      if (!timeSettings || !timeSettings.startDate || !timeSettings.endDate) {
-        throw new Error('Invalid time settings for API call');
-      }
-
-      // Construct URL with proper parameter syntax
-      let url = `http://localhost:5000/api/insulin-data?start_date=${encodeURIComponent(timeSettings.startDate)}&end_date=${encodeURIComponent(timeSettings.endDate)}`;
-
-      // Add patient ID if provided
-      if (patientId) {
-        url += `&patient_id=${encodeURIComponent(patientId)}`;
-      }
-
-      console.log("Insulin data URL:", url);
-
-      const insulinResponse = await axios.get(
-        url,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      let processedInsulin = [];
-
-      if (insulinResponse.data && insulinResponse.data.insulin_logs) {
-        processedInsulin = processInsulinData(insulinResponse.data.insulin_logs);
-        console.log("Processed insulin doses:", processedInsulin.length);
-
-        // Set the state
-        setInsulinDoses(processedInsulin);
-        setFilteredInsulinDoses(processedInsulin);
-      } else {
-        console.error('Invalid insulin response structure:', insulinResponse.data);
-      }
-
-      return processedInsulin;
-    } catch (error) {
-      console.error('Error fetching insulin data:', error);
-      return [];
-    } finally {
-      setLoadingInsulin(false);
+  // Fetch insulin data with extended end date to capture full effect duration
+const fetchInsulinData = useCallback(async (timeSettings) => {
+  try {
+    setLoadingInsulin(true);
+    const token = localStorage.getItem('token');
+    if (!token) {
+      throw new Error('Authentication token not found');
     }
-  }, [patientId, processInsulinData]);
+
+    console.log("Fetching insulin data for date range:", timeSettings);
+
+    // Validate timeSettings before using
+    if (!timeSettings || !timeSettings.startDate || !timeSettings.endDate) {
+      throw new Error('Invalid time settings for API call');
+    }
+
+    // CRITICAL CHANGE: Extend the end date to capture full insulin effects
+    // Create a new Date object from the end date string
+    const endDate = new Date(timeSettings.endDate);
+
+    // Add 1 day to ensure we capture full insulin effects
+    endDate.setDate(endDate.getDate() + 1);
+
+    // Format back to string in YYYY-MM-DD format
+    const extendedEndDate = endDate.toISOString().split('T')[0];
+
+    // Construct URL with proper parameter syntax and extended end date
+    let url = `http://localhost:5000/api/insulin-data?start_date=${encodeURIComponent(timeSettings.startDate)}&end_date=${encodeURIComponent(extendedEndDate)}`;
+
+    // Add patient ID if provided
+    if (patientId) {
+      url += `&patient_id=${encodeURIComponent(patientId)}`;
+    }
+
+    console.log("Insulin data URL with extended end date:", url);
+
+    const insulinResponse = await axios.get(
+      url,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+
+    let processedInsulin = [];
+
+    if (insulinResponse.data && insulinResponse.data.insulin_logs) {
+      processedInsulin = processInsulinData(insulinResponse.data.insulin_logs);
+      console.log("Processed insulin doses:", processedInsulin.length);
+
+      // Set the state
+      setInsulinDoses(processedInsulin);
+      setFilteredInsulinDoses(processedInsulin);
+    } else {
+      console.error('Invalid insulin response structure:', insulinResponse.data);
+    }
+
+    return processedInsulin;
+  } catch (error) {
+    console.error('Error fetching insulin data:', error);
+    return [];
+  } finally {
+    setLoadingInsulin(false);
+  }
+}, [patientId, processInsulinData]);
 
   const fetchData = useCallback(async () => {
     try {

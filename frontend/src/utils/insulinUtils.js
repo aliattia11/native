@@ -148,7 +148,7 @@ export const getInsulinParameters = (insulinType, patientConstants) => {
 };
 
 /**
- * Standardized insulin activity model shared across application components
+ * Standardized insulin activity model with proper handling for different types
  * @param {number} hoursSinceDose - Hours since insulin administration
  * @param {Object} params - Insulin pharmacokinetic parameters
  * @returns {number} - Activity percentage (0-100)
@@ -158,41 +158,69 @@ export const calculateInsulinActivityPercentage = (hoursSinceDose, params) => {
   const onset_hours = params?.onset_hours || 0.5;
   const peak_hours = params?.peak_hours || 2.0;
   const duration_hours = params?.duration_hours || 4.0;
+  const is_peakless = params?.is_peakless === true || params?.peak_hours === null;
+  const insulin_type = params?.type || 'rapid_acting';
 
-  // Return 0 if outside valid time range
-  if (hoursSinceDose < 0 || hoursSinceDose > duration_hours) {
+  // Return 0 if negative time (future dose)
+  if (hoursSinceDose < 0) {
     return 0;
   }
 
-  // For peakless insulins like Glargine
-  if (params?.type === 'long_acting' && params?.is_peakless) {
-    // Gradual onset followed by flat effect
+  // Special handling for peakless long-acting insulins (like glargine, detemir, degludec)
+  if (insulin_type === 'long_acting' && is_peakless) {
+    // Calculate onset phase - gradual ramp up
     if (hoursSinceDose < onset_hours) {
-      return (hoursSinceDose / onset_hours) * 80; // Ramp up to 80% effect
+      return (hoursSinceDose / onset_hours) * 100; // Ramp up to max effect
     }
-    // Flat effect with slight decay at end of duration
+
+    // Calculate time left before end of duration
     const timeLeft = duration_hours - hoursSinceDose;
-    const endDecayHours = Math.min(6, duration_hours * 0.15); // Last 15% of duration or 6 hours
 
-    if (timeLeft <= endDecayHours) {
-      return 80 * (timeLeft / endDecayHours);
+    // Define end decay period as 15% of total duration or 6 hours, whichever is less
+    const endDecayHours = Math.min(6, duration_hours * 0.15);
+
+    if (hoursSinceDose <= duration_hours) {
+      // If we're in the end decay phase
+      if (timeLeft <= endDecayHours) {
+        return 85 * (timeLeft / endDecayHours); // Linear decline at end
+      }
+      // Middle plateau - relatively flat activity (characteristic of glargine)
+      return 85; // 85% constant effect for most of duration
     }
-    return 80; // Constant 80% effect for most of duration
+
+    // Activity beyond nominal duration - exponential decay
+    const overage = hoursSinceDose - duration_hours;
+    const tailActivity = 85 * Math.exp(-overage * 0.5); // Exponential decay beyond duration
+
+    // Apply 3% minimum threshold filter
+    return tailActivity >= 3.0 ? tailActivity : 0;
   }
 
-  // Standard insulin with onset, peak, and decay phases
-  // Onset phase (0% to 30%)
-  if (hoursSinceDose < onset_hours) {
-    return 30 * (hoursSinceDose / onset_hours);
+  // BIEXPONENTIAL MODEL FOR STANDARD INSULINS
+
+  // Calculate rate constants from insulin parameters
+  const k1 = 2.3 / onset_hours;  // Absorption rate constant
+  const k2 = 0.8 / duration_hours;  // Elimination rate constant
+
+  // Calculate time of peak activity
+  const t_peak = Math.log(k1/k2) / (k1 - k2);
+
+  // Calculate peak activity value for normalization
+  const peak_activity = Math.exp(-k2 * t_peak) - Math.exp(-k1 * t_peak);
+
+  // Calculate raw activity at current time using biexponential equation
+  const activityRaw = Math.exp(-k2 * hoursSinceDose) - Math.exp(-k1 * hoursSinceDose);
+
+  // Scale raw activity to percentage (0-100), normalized to peak
+  let activityPercent = 100 * (activityRaw / peak_activity);
+
+  // Apply 1% minimum threshold filter
+  if (activityPercent < 3.0) {
+    return 0;
   }
 
-  // Peak phase (30% to 100%)
-  if (hoursSinceDose < peak_hours) {
-    return 30 + (70 * (hoursSinceDose - onset_hours) / (peak_hours - onset_hours));
-  }
-
-  // Decay phase (100% to 0%)
-  return 100 * ((duration_hours - hoursSinceDose) / (duration_hours - peak_hours));
+  // This model naturally tapers to zero - no artificial cutoff needed
+  return Math.max(0, activityPercent);
 };
 
 /**
@@ -746,13 +774,14 @@ export const calculateBGImpactCurve = (meal, patientFactors, hoursToProject = 6,
 
 /**
  * Generate timeline data for insulin doses
+ * With filtering of <5% active insulin to clean visualization
  *
- * @param {Array} insulinDoses - Array of insulin doses
+ * @param {Array} insulinDoses - Array of insulin dose objects
  * @param {Object} options - Configuration options
  * @param {Object} TimeManager - Time management utility
  * @returns {Array} Timeline data with insulin effects
  */
-export const generateInsulinTimelineData = (insulinDoses, options, TimeManager) => {
+export const generateInsulinTimelineData = (insulinDoses, options = {}, TimeManager) => {
   const {
     timeScale = { start: 0, end: 0 },
     patientConstants = {}
@@ -797,7 +826,10 @@ export const generateInsulinTimelineData = (insulinDoses, options, TimeManager) 
           timePoint.insulinDoses[insulinType] = (timePoint.insulinDoses[insulinType] || 0) + doseAmount;
 
           // Add bidirectional value for bar chart
-          timePoint.insulinBars[insulinType] = getBidirectionalValue(timePoint.insulinDoses[insulinType]);
+          if (typeof timePoint.insulinBars !== 'object') {
+            timePoint.insulinBars = {};
+          }
+          timePoint.insulinBars[insulinType] = -doseAmount; // Negative for downward bars
 
           // Add dose details
           if (!timePoint.doseDetails) timePoint.doseDetails = [];
@@ -809,14 +841,67 @@ export const generateInsulinTimelineData = (insulinDoses, options, TimeManager) 
         }
       });
 
-      // Calculate combined insulin effect at this time
-      const insulinEffect = calculateCombinedInsulinEffect(insulinDoses, time, patientConstants);
-      timePoint.activeInsulin = insulinEffect.totalActiveInsulin;
-      timePoint.bgImpact = insulinEffect.bgImpact;
-      timePoint.insulinContributions = insulinEffect.insulinContributions;
+      // Calculate contributions from all insulin doses
+      const insulinContributions = [];
+      let totalActiveInsulin = 0;
 
-      // Add bidirectional value for active insulin visualization
-      timePoint.activeInsulinBidirectional = getBidirectionalValue(timePoint.activeInsulin);
+      insulinDoses.forEach(dose => {
+        const doseTime = dose.administrationTime || dose.taken_at || dose.timestamp;
+        if (!doseTime) return;
+
+        // Convert to timestamp if not already
+        const doseTimestamp = typeof doseTime === 'number' ? doseTime : new Date(doseTime).getTime();
+
+        // Calculate hours since dose
+        const hoursSinceDose = (time - doseTimestamp) / (3600 * 1000);
+
+        // Only process doses administered before this time point
+        if (hoursSinceDose < 0) return;
+
+        // Get insulin parameters
+        const insulinType = dose.medication || dose.insulinType;
+        const insulinParams = dose.pharmacokinetics ||
+                            patientConstants.medication_factors?.[insulinType] || {
+                              onset_hours: 0.5,
+                              peak_hours: 2.0,
+                              duration_hours: 4.0
+                            };
+
+        // Calculate activity percentage using our biexponential model
+        const activityPercent = calculateInsulinActivityPercentage(hoursSinceDose, insulinParams);
+
+        // ADDED FILTER: Only include if activity is at least 5%
+        if (activityPercent >= 5.0) {
+          const doseAmount = dose.dose || 0;
+          const activeUnits = (doseAmount * activityPercent) / 100;
+
+          if (activeUnits > 0) {
+            // Add to contributions
+            insulinContributions.push({
+              insulinType,
+              doseAmount,
+              activeUnits,
+              activityPercent,
+              hoursSinceDose
+            });
+
+            // Add to total
+            totalActiveInsulin += activeUnits;
+          }
+        }
+      });
+
+      // Calculate blood glucose impact
+      const insulinSensitivityFactor = patientConstants.correction_factor || 50;
+      const bgImpact = -1 * totalActiveInsulin * insulinSensitivityFactor;
+
+      // Assign calculated values to the time point
+      timePoint.activeInsulin = totalActiveInsulin;
+      timePoint.bgImpact = bgImpact;
+      timePoint.insulinContributions = insulinContributions;
+
+      // Add bidirectional value for active insulin
+      timePoint.activeInsulinBidirectional = -totalActiveInsulin; // Negative for downward display
 
       timeline.push(timePoint);
     }

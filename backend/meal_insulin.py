@@ -666,8 +666,16 @@ def submit_meal(current_user):
 
                 # Get duration parameters with fallbacks
                 onset_hours = insulin_profile.get('onset_hours', 0.5)  # Default 30 min onset
-                peak_hours = insulin_profile.get('peak_hours', 2.0)  # Default 2 hour peak
                 duration_hours = insulin_profile.get('duration_hours', 4.0)  # Default 4 hour duration
+
+                # Check if this is a peakless insulin and handle specially
+                is_peakless = insulin_profile.get('is_peakless', False)
+                peak_hours = insulin_profile.get('peak_hours')
+
+                # For peakless insulins or when peak_hours is null, use a default calculated value
+                if peak_hours is None or is_peakless:
+                    # Use middle of duration as nominal "peak" for timing calculations
+                    peak_hours = duration_hours / 2
 
                 # Create medication log entry with all necessary fields
                 medication_log = {
@@ -696,7 +704,8 @@ def submit_meal(current_user):
                     'effect_profile': {
                         'onset_hours': onset_hours,
                         'peak_hours': peak_hours,
-                        'duration_hours': duration_hours
+                        'duration_hours': duration_hours,
+                        'is_peakless': is_peakless  # Include the is_peakless flag in the effect profile
                     }
                 }
 
