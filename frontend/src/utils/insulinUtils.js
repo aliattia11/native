@@ -148,7 +148,13 @@ export const getInsulinParameters = (insulinType, patientConstants) => {
 };
 
 /**
- * Standardized insulin activity model with proper handling for different types
+ * Calculates insulin activity percentage with corrected decay behavior
+ * @param {number} hoursSinceDose - Hours since insulin administration
+ * @param {Object} params - Insulin pharmacokinetic parameters
+ * @returns {number} - Activity percentage (0-100)
+ */
+/**
+ * Calculates insulin activity percentage with physiological exponential curves
  * @param {number} hoursSinceDose - Hours since insulin administration
  * @param {Object} params - Insulin pharmacokinetic parameters
  * @returns {number} - Activity percentage (0-100)
@@ -158,11 +164,8 @@ export const calculateInsulinActivityPercentage = (hoursSinceDose, params) => {
   const onset_hours = params?.onset_hours || 0.5;
   const peak_hours = params?.peak_hours || 2.0;
   const duration_hours = params?.duration_hours || 4.0;
-  const is_peakless = params?.is_peakless === true || params?.peak_hours === null;
+  const is_peakless = params?.is_peakless === true || params?.type === 'long_acting' || params?.peak_hours === null;
   const insulin_type = params?.type || 'rapid_acting';
-
-  // For debugging
-  console.log(`Calculating insulin activity - type: ${insulin_type}, peakless: ${is_peakless}`);
 
   // Return 0 if negative time (future dose)
   if (hoursSinceDose < 0) {
@@ -170,41 +173,64 @@ export const calculateInsulinActivityPercentage = (hoursSinceDose, params) => {
   }
 
   // Special handling for peakless long-acting insulins (like glargine, detemir, degludec)
-  if ((insulin_type === 'long_acting' && is_peakless) || is_peakless === true) {
-    // Calculate onset phase - gradual ramp up
-    if (hoursSinceDose < onset_hours) {
-      return (hoursSinceDose / onset_hours) * 85; // Ramp up to 85% max effect
+  if ((insulin_type === 'long_acting' || is_peakless)) {
+    const plateau = 85; // Maximum activity level (%)
+
+    // Calculate phase times
+    const rampUpEndTime = onset_hours * 1.2;  // Extend ramp slightly beyond onset
+    const decayStartTime = duration_hours * 0.75;  // Start decay at 75% of duration
+
+    // EXPONENTIAL RAMP UP PHASE
+    if (hoursSinceDose <= rampUpEndTime) {
+      // Exponential approach to plateau: A * (1 - e^(-k*t))
+      // where k controls how quickly we approach the plateau
+      const k = 3.5; // Rate constant for approach to plateau
+      const normalizedTime = hoursSinceDose / onset_hours;
+      return plateau * (1 - Math.exp(-k * normalizedTime));
     }
 
-    // Calculate time left before end of duration
-    const timeLeft = duration_hours - hoursSinceDose;
-
-    // Define end decay period as 15% of total duration or 6 hours, whichever is less
-    const endDecayHours = Math.min(6, duration_hours * 0.15);
-
-    if (hoursSinceDose <= duration_hours) {
-      // If we're in the end decay phase
-      if (timeLeft <= endDecayHours) {
-        return 85 * (timeLeft / endDecayHours); // Linear decline at end
-      }
-      // Middle plateau - relatively flat activity (characteristic of glargine)
-      return 85; // 85% constant effect for most of duration
+    // PLATEAU PHASE
+    else if (hoursSinceDose <= decayStartTime) {
+      return plateau; // Flat plateau at 85% activity
     }
 
-    // Activity beyond nominal duration - exponential decay
-    const overage = hoursSinceDose - duration_hours;
-    const tailActivity = 85 * Math.exp(-overage * 0.5); // Exponential decay beyond duration
+    // EXPONENTIAL DECAY PHASE
+    else if (hoursSinceDose <= duration_hours) {
+      // Exponential decay from plateau to near zero
+      const decayTimeRemaining = duration_hours - hoursSinceDose;
+      const totalDecayTime = duration_hours - decayStartTime;
 
-    // Apply 3% minimum threshold filter
-    return tailActivity >= 3.0 ? tailActivity : 0;
+      // Calculate decay rate to ensure we hit ~1% at duration_hours
+      const k = 4.6 / totalDecayTime; // ln(100) ≈ 4.6, ensures 99% decay
+
+      return plateau * Math.exp(-k * (hoursSinceDose - decayStartTime));
+    }
+
+    // TERMINAL DECAY (beyond nominal duration)
+    else {
+      // Continued exponential decay beyond duration, starting from a very low value
+      const overageFactor = hoursSinceDose - duration_hours;
+      const terminalDecayRate = 1.8; // Faster decay rate for terminal phase
+
+      // Start from 1% and decay further
+      const terminalActivity = 1.0 * Math.exp(-terminalDecayRate * overageFactor);
+
+      // Apply cutoff threshold to prevent lingering effects
+      return terminalActivity < 0.5 ? 0 : terminalActivity;
+    }
   }
 
-  // Rest of the original function for standard insulins remains unchanged
   // BIEXPONENTIAL MODEL FOR STANDARD INSULINS
-
-  // Calculate rate constants from insulin parameters
+  // For non-long-acting insulin, use biexponential model (absorption and elimination)
   const k1 = 2.3 / onset_hours;  // Absorption rate constant
   const k2 = 0.8 / duration_hours;  // Elimination rate constant
+
+  // Handle special case where k1 = k2 (avoid division by zero)
+  if (Math.abs(k1 - k2) < 0.001) {
+    // Use alternative formulation for approximately equal rate constants
+    const activityPercent = 100 * (hoursSinceDose * Math.exp(-k1 * hoursSinceDose));
+    return Math.max(0, Math.min(100, activityPercent));
+  }
 
   // Calculate time of peak activity
   const t_peak = Math.log(k1/k2) / (k1 - k2);
@@ -218,14 +244,15 @@ export const calculateInsulinActivityPercentage = (hoursSinceDose, params) => {
   // Scale raw activity to percentage (0-100), normalized to peak
   let activityPercent = 100 * (activityRaw / peak_activity);
 
-  // Apply 1% minimum threshold filter
-  if (activityPercent < 3.0) {
+  // Apply minimum threshold filter
+  if (activityPercent < 3) {
     return 0;
   }
 
-  // This model naturally tapers to zero - no artificial cutoff needed
-  return Math.max(0, activityPercent);
+  return Math.min(100, Math.max(0, activityPercent));
 };
+
+
 /**
  * Calculate the effect of an insulin dose on blood glucose over time
  *

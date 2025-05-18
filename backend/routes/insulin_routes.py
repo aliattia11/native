@@ -275,6 +275,81 @@ def get_insulin_analytics(current_user):
         return jsonify({'error': str(e)}), 500
 
 
+def calculate_insulin_activity(hours_since_dose, params):
+    """
+    Calculate insulin activity percentage with corrected decay behavior.
+
+    Args:
+        hours_since_dose (float): Hours since insulin administration
+        params (dict): Insulin pharmacokinetic parameters
+            - onset_hours: Time to start of insulin effect
+            - peak_hours: Time to peak insulin effect (None for peakless insulin)
+            - duration_hours: Total duration of insulin effect
+            - is_peakless: Whether this is a peakless insulin type
+            - type: Type of insulin (e.g., 'long_acting', 'rapid_acting')
+
+    Returns:
+        float: Activity percentage (0-100)
+    """
+    import math
+
+    # Extract parameters with defaults
+    onset_hours = params.get('onset_hours', 0.5)
+    peak_hours = params.get('peak_hours', 2.0)
+    duration_hours = params.get('duration_hours', 4.0)
+    is_peakless = params.get('is_peakless', False) or params.get('type') == 'long_acting'
+
+    # Return 0 if negative time (future dose)
+    if hours_since_dose < 0:
+        return 0
+
+    # Handle beyond-duration calculations first to prevent the second peak
+    if hours_since_dose > duration_hours:
+        # Strict exponential decay with no rebounds
+        overage = hours_since_dose - duration_hours
+        # Faster decay rate to prevent long tails
+        decay_rate = 1.2
+        tail_activity = 20 * math.exp(-overage * decay_rate)
+
+        # Apply strict cutoff to prevent lingering effects
+        return 0 if tail_activity < 2.0 else tail_activity
+
+    # Special handling for peakless long-acting insulins
+    if is_peakless:
+        # Calculate onset phase - gradual ramp up
+        if hours_since_dose < onset_hours:
+            # Linear ramp during onset
+            return 85 * (hours_since_dose / onset_hours)
+
+        # Calculate time left before end of duration
+        time_left = duration_hours - hours_since_dose
+
+        # Define end decay period as 20% of total duration
+        end_decay_start = duration_hours * 0.8
+
+        # If we're in the end decay phase
+        if hours_since_dose > end_decay_start:
+            decay_period = duration_hours - end_decay_start
+            return 85 * (time_left / decay_period)
+
+        # Middle plateau - relatively flat activity (characteristic of long-acting insulin)
+        return 85  # 85% constant effect for most duration
+
+    # Regular insulin with standard peak
+    if hours_since_dose < onset_hours:
+        # Linear ramp up to onset
+        return (hours_since_dose / onset_hours) * 30  # 0-30%
+    elif hours_since_dose < peak_hours:
+        # Rise to peak
+        return 30 + ((hours_since_dose - onset_hours) / (peak_hours - onset_hours)) * 70  # 30-100%
+    else:
+        # Decay from peak
+        if peak_hours < duration_hours:  # Prevent division by zero
+            return 100 * ((duration_hours - hours_since_dose) / (duration_hours - peak_hours))  # 100-0%
+        else:
+            return 50  # Default if peak = duration
+
+
 def calculate_stacked_insulin_effect(patient_id, target_time=None):
     """
     Calculate stacked insulin effect at a specific time
@@ -289,6 +364,7 @@ def calculate_stacked_insulin_effect(patient_id, target_time=None):
     from config import mongo
     from datetime import datetime, timedelta
     import logging
+    import math  # Add math import for exponential functions
 
     logger = logging.getLogger(__name__)
 
@@ -317,10 +393,6 @@ def calculate_stacked_insulin_effect(patient_id, target_time=None):
     for dose in active_insulin:
         # Get the effect profile for this dose
         profile = dose.get('effect_profile', {})
-        onset_hours = profile.get('onset_hours', 0.5)
-        peak_hours = profile.get('peak_hours', 2.0)
-        duration_hours = profile.get('duration_hours', 4.0)
-        is_peakless = profile.get('is_peakless', False)
 
         # Calculate time since dose in hours, ensuring consistent timezone handling
         taken_at = dose.get('taken_at')
@@ -344,80 +416,30 @@ def calculate_stacked_insulin_effect(patient_id, target_time=None):
         hours_since_dose = (target_time - taken_at).total_seconds() / 3600
         logger.debug(f"Hours since dose: {hours_since_dose:.2f}")
 
-        # Check if the dose should be active at this time
-        dose_id = str(dose.get('_id'))
-
-        # Verify this dose falls within its activity window relative to time since dose
-        if hours_since_dose < 0:
-            # Dose is in the future
-            logger.debug(f"Dose {dose_id} is in the future, skipping")
-            continue
-
-        if hours_since_dose > duration_hours:
-            # This is a safety check to ensure we don't count doses outside their duration
-            # This can happen if effect_end_time wasn't accurately set when the dose was recorded
-            logger.debug(
-                f"Dose {dose_id} outside duration window ({hours_since_dose:.1f}h > {duration_hours:.1f}h), excluding from calculation")
-            continue
-
-        # Calculate current activity percentage using a tri-phase model
-        activity_percent = 0
-        if is_peakless:
-            # Special model for peakless insulins
-            if hours_since_dose < onset_hours:
-                # Gradual onset
-                activity_percent = (hours_since_dose / onset_hours) * 85
-            elif hours_since_dose <= duration_hours * 0.85:
-                # Flat plateau around 85% for most duration
-                activity_percent = 85
-            else:
-                # Gradual decay in last 15% of duration
-                time_left = duration_hours - hours_since_dose
-                end_decay = duration_hours * 0.15
-                if time_left > 0:
-                    activity_percent = 85 * (time_left / end_decay)
-                else:
-                    activity_percent = 0
-        else:
-            # Standard insulin model with peak
-            if hours_since_dose < onset_hours:
-                # Linear ramp up to onset
-                activity_percent = (hours_since_dose / onset_hours) * 30  # 0-30%
-            elif hours_since_dose < peak_hours:
-                # Rise to peak
-                activity_percent = 30 + ((hours_since_dose - onset_hours) /
-                                         (peak_hours - onset_hours)) * 70  # 30-100%
-            elif hours_since_dose <= duration_hours:
-                # Decay from peak
-                if peak_hours < duration_hours:  # Prevent division by zero
-                    activity_percent = 100 * ((duration_hours - hours_since_dose) /
-                                              (duration_hours - peak_hours))  # 100-0%
-                else:
-                    activity_percent = 50  # Default if peak = duration
+        # Calculate current activity percentage using our improved function
+        activity_percent = calculate_insulin_activity(hours_since_dose, profile)
 
         # Calculate active insulin units from this dose
         initial_dose = dose.get('dose', 0)
         active_units = (initial_dose * activity_percent) / 100
 
-        # Only include if activity is above threshold
-        if activity_percent >= 1.0:
-            insulin_contributions.append({
-                'dose_id': dose_id,
-                'medication': dose.get('medication'),
-                'initial_dose': initial_dose,
-                'taken_at': taken_at.isoformat() if isinstance(taken_at, datetime) else taken_at,
-                'hours_since_dose': round(hours_since_dose, 2),
-                'activity_percent': round(activity_percent, 1),
-                'active_units': round(active_units, 2)
-            })
+        insulin_contributions.append({
+            'dose_id': str(dose.get('_id')),
+            'medication': dose.get('medication'),
+            'initial_dose': initial_dose,
+            'taken_at': taken_at.isoformat() if isinstance(taken_at, datetime) else taken_at,
+            'hours_since_dose': round(hours_since_dose, 2),
+            'activity_percent': round(activity_percent, 1),
+            'active_units': round(active_units, 2)
+        })
 
-            total_active_insulin += active_units
+        total_active_insulin += active_units
 
     return {
         'total_active_insulin': round(total_active_insulin, 2),
         'calculation_time': target_time.isoformat(),
         'calculation_timezone': 'UTC',  # Explicitly state the timezone used
-        'active_doses': len(insulin_contributions),  # Count only the doses that are actually contributing
+        'active_doses': len(active_insulin),
         'insulin_contributions': insulin_contributions
     }
 
